@@ -20,7 +20,13 @@ import {
   ArrowRight,
   Clock,
   Sparkle,
-  Download
+  Download,
+  Share2,
+  Copy,
+  Send,
+  FolderDown,
+  Smartphone,
+  Mail
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -141,15 +147,97 @@ export default function Explore({ onOpenAuth }) {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [confirmedBookingDetails, setConfirmedBookingDetails] = useState(null);
 
-  // 📄 Official PDF Tax Invoice & Stay Pass Receipt Generator
-  const handleDownloadPDFReceipt = (bk) => {
+  // Active Share / Save Stay Pass Modal State
+  const [shareModalBooking, setShareModalBooking] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState(false);
+
+  // 📝 Generate Formatted Stay Pass Share Text
+  const getShareMessage = (bk) => {
+    if (!bk) return '';
+    const bkId = bk.bookingId || bk.id || 'ETN-BK-REF';
+    const bkTitle = bk.itemTitle || bk.propertyTitle || bk.title || 'Verified Luxury Stay';
+    const bkLocation = bk.destination || bk.location || 'Tamil Nadu';
+    const checkIn = bk.checkIn || bk.checkInDate || '2026-08-25';
+    const checkOut = bk.checkOut || bk.checkOutDate || '2026-08-28';
+    const nights = bk.nights || 1;
+    const guests = bk.guests || 2;
+    const guestType = bk.guestType || 'Stay';
+    const totalAmount = Number(bk.totalAmount || bk.amount || 0).toLocaleString('en-IN');
+    const guestName = bk.customerName || bk.userName || bookingGuestName || 'Tourist Guest';
+
+    return `✨ *EXPLORE TAMIL NADU - OFFICIAL STAY PASS* ✨
+
+🏨 *Property:* ${bkTitle}
+📍 *Location:* ${bkLocation}
+👤 *Primary Guest:* ${guestName}
+👥 *Party:* ${guests} Guests (${guestType})
+📅 *Check-In:* ${checkIn} (From 12:00 PM)
+📅 *Check-Out:* ${checkOut} (Until 11:00 AM)
+⏳ *Duration:* ${nights} Night(s)
+🆔 *Booking Reference ID:* ${bkId}
+💳 *Total Paid:* ₹${totalAmount} (Verified via Razorpay)
+
+🛎️ *Check-In Instructions:* Please present this Booking ID (${bkId}) or your digital stay pass at hotel reception. Valid government ID proof is mandatory.
+
+🌐 *Explore More Tamil Nadu Destinations:*
+https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
+
+📞 24/7 Helpline: +91 78717 79134 | support@exploretamilnadu.com`;
+  };
+
+  // 💾 Save Stay Pass directly to File Explorer / Device Files
+  const handleSaveToFileExplorer = async (bk) => {
     if (!bk) return;
-    try {
-      downloadBookingReceiptPDF(bk);
-    } catch (err) {
-      console.error('Receipt PDF download error:', err);
-      alert('Error downloading PDF receipt. Please try again.');
+    const bkId = bk.bookingId || bk.id || 'ETN-BK-REF';
+    const content = getShareMessage(bk);
+    const fileName = `Explore_TamilNadu_StayPass_${bkId}.txt`;
+
+    // 1. Native File System Access API (Opens Windows/Mac File Explorer save dialog!)
+    if ('showSaveFilePicker' in window) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{
+            description: 'Explore Tamil Nadu Stay Pass Document',
+            accept: { 'text/plain': ['.txt'] }
+          }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(content);
+        await writable.close();
+        alert('Stay pass successfully saved to your File Explorer folder!');
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+      }
     }
+
+    // 2. Direct Device File Download Fallback
+    try {
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1000);
+      alert('Stay pass saved to your Downloads/Files folder!');
+    } catch (e) {
+      alert('Error saving stay pass file.');
+    }
+  };
+
+  // 📋 Copy Stay Pass to Clipboard
+  const handleCopyShareText = (bk) => {
+    const text = getShareMessage(bk);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2500);
+    });
   };
 
   const destinationOptions = [
@@ -687,10 +775,10 @@ export default function Explore({ onOpenAuth }) {
                 <div className="space-y-2 pt-2">
                   <button
                     type="button"
-                    onClick={() => handleDownloadPDFReceipt(confirmedBookingDetails)}
-                    className="w-full py-3 rounded-2xl bg-emerald-700 text-white text-xs font-bold font-editorial hover:bg-emerald-800 shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    onClick={() => setShareModalBooking(confirmedBookingDetails)}
+                    className="w-full py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold font-editorial hover:from-blue-700 hover:to-indigo-700 shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all"
                   >
-                    <Download size={15} /> Download PDF Receipt & Voucher
+                    <Share2 size={15} /> Share / Save Stay Pass (WhatsApp, SMS, Files)
                   </button>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -948,6 +1036,181 @@ export default function Explore({ onOpenAuth }) {
           </div>
         </div>
       )}
+
+      {/* 📤 SHARE & SAVE STAY PASS MODAL */}
+      {shareModalBooking && (() => {
+        const bk = shareModalBooking;
+        const bkId = bk.bookingId || bk.id || 'ETN-BK-REF';
+        const bkTitle = bk.itemTitle || bk.propertyTitle || bk.title || 'Verified Luxury Stay';
+        const bkLocation = bk.destination || bk.location || 'Tamil Nadu';
+        const bkAmount = Number(bk.totalAmount || bk.amount || 0).toLocaleString('en-IN');
+        const checkIn = bk.checkIn || bk.checkInDate || '2026-08-25';
+        const checkOut = bk.checkOut || bk.checkOutDate || '2026-08-28';
+        const nights = bk.nights || 1;
+        const guests = bk.guests || 2;
+        const shareMsg = getShareMessage(bk);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+            <div className="bg-white rounded-3xl max-w-lg w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-fade-in my-auto">
+              
+              {/* Header */}
+              <div className="bg-[#061833] text-white p-4 sm:p-5 flex items-center justify-between flex-shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold">
+                    <Share2 size={18} />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm sm:text-base text-white">Share Stay Reservation Pass</h3>
+                    <p className="text-[11px] text-slate-300 font-mono">Reference: {bkId}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShareModalBooking(null)}
+                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Body Content */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-slate-800 text-xs sm:text-sm">
+                
+                {/* Stay Card Preview */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="font-mono text-xs font-black text-blue-600 px-2 py-0.5 bg-blue-50 border border-blue-200 rounded-lg">{bkId}</span>
+                    <span className="text-xs font-bold text-emerald-700 font-mono">₹{bkAmount} Paid</span>
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-sm mt-1">{bkTitle}</h4>
+                  <p className="text-slate-500 text-xs font-mono">📍 {bkLocation} • 👥 {guests} Guests • 📅 {checkIn} → {checkOut} ({nights}N)</p>
+                </div>
+
+                {/* Instant Share Channels Grid */}
+                <div>
+                  <label className="block text-[11px] font-bold font-mono text-slate-500 uppercase tracking-wider mb-2.5">
+                    Select Share Channel:
+                  </label>
+                  
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    
+                    {/* 1. WhatsApp */}
+                    <a
+                      href={`https://api.whatsapp.com/send?text=${encodeURIComponent(shareMsg)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-3 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 flex flex-col items-center justify-center text-center gap-1.5 transition-all text-emerald-900 group shadow-2xs"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center text-base font-bold shadow-xs">
+                        💬
+                      </div>
+                      <span className="font-bold text-xs">WhatsApp</span>
+                      <span className="text-[10px] text-emerald-700 font-mono">Instant Chat</span>
+                    </a>
+
+                    {/* 2. Normal SMS / Messages */}
+                    <a
+                      href={`sms:?body=${encodeURIComponent(shareMsg)}`}
+                      className="p-3 rounded-2xl bg-blue-50 hover:bg-blue-100 border border-blue-200 flex flex-col items-center justify-center text-center gap-1.5 transition-all text-blue-900 group shadow-2xs"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-base font-bold shadow-xs">
+                        <Smartphone size={16} />
+                      </div>
+                      <span className="font-bold text-xs">SMS / Text</span>
+                      <span className="text-[10px] text-blue-700 font-mono">Direct Phone</span>
+                    </a>
+
+                    {/* 3. Instagram */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleCopyShareText(bk);
+                        alert('Stay Pass copied! Ready to paste in Instagram DM or Story.');
+                      }}
+                      className="p-3 rounded-2xl bg-gradient-to-br from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 border border-pink-200 flex flex-col items-center justify-center text-center gap-1.5 transition-all text-pink-950 group shadow-2xs cursor-pointer"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 text-white flex items-center justify-center text-base font-bold shadow-xs">
+                        📸
+                      </div>
+                      <span className="font-bold text-xs">Instagram</span>
+                      <span className="text-[10px] text-pink-700 font-mono">Copy for DM/Story</span>
+                    </button>
+
+                    {/* 4. Telegram */}
+                    <a
+                      href={`https://t.me/share/url?url=${encodeURIComponent('https://frontend-blond-iota-kzel6q4tzd.vercel.app')}&text=${encodeURIComponent(shareMsg)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-3 rounded-2xl bg-sky-50 hover:bg-sky-100 border border-sky-200 flex flex-col items-center justify-center text-center gap-1.5 transition-all text-sky-900 group shadow-2xs"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-sky-500 text-white flex items-center justify-center text-base font-bold shadow-xs">
+                        <Send size={15} />
+                      </div>
+                      <span className="font-bold text-xs">Telegram</span>
+                      <span className="text-[10px] text-sky-700 font-mono">Direct Share</span>
+                    </a>
+
+                    {/* 5. Mail Desk */}
+                    <a
+                      href={`mailto:?subject=${encodeURIComponent(`Explore Tamil Nadu Stay Pass - ${bkTitle} (${bkId})`)}&body=${encodeURIComponent(shareMsg)}`}
+                      className="p-3 rounded-2xl bg-amber-50 hover:bg-amber-100 border border-amber-200 flex flex-col items-center justify-center text-center gap-1.5 transition-all text-amber-950 group shadow-2xs"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center text-base font-bold shadow-xs">
+                        <Mail size={15} />
+                      </div>
+                      <span className="font-bold text-xs">Email Desk</span>
+                      <span className="text-[10px] text-amber-800 font-mono">Send Email</span>
+                    </a>
+
+                    {/* 6. Save to File Explorer */}
+                    <button
+                      type="button"
+                      onClick={() => handleSaveToFileExplorer(bk)}
+                      className="p-3 rounded-2xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 flex flex-col items-center justify-center text-center gap-1.5 transition-all text-indigo-950 group shadow-2xs cursor-pointer"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center text-base font-bold shadow-xs">
+                        <FolderDown size={16} />
+                      </div>
+                      <span className="font-bold text-xs">File Explorer</span>
+                      <span className="text-[10px] text-indigo-700 font-mono">Save to Device</span>
+                    </button>
+
+                  </div>
+                </div>
+
+                {/* Direct Copy Section */}
+                <div className="pt-2">
+                  <div className="p-3 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-between gap-3">
+                    <div className="truncate text-xs font-mono text-slate-600">
+                      Pass ID: {bkId} • {bkTitle} ({bkLocation})
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyShareText(bk)}
+                      className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white font-bold text-xs flex items-center gap-1.5 flex-shrink-0 cursor-pointer shadow-xs transition-all"
+                    >
+                      <Copy size={13} /> {copyFeedback ? 'Copied!' : 'Copy Pass'}
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShareModalBooking(null)}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-200 text-slate-800 font-bold text-xs hover:bg-slate-300 cursor-pointer transition-all"
+                >
+                  Close
+                </button>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

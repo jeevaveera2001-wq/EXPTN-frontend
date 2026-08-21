@@ -153,14 +153,18 @@ export default function VendorDashboard() {
   const [ticketCategory, setTicketCategory] = useState('Property Host Settlement');
   const [ticketMessage, setTicketMessage] = useState('');
 
-  const apiFetch = async (endpoint, options) => {
+  const apiFetch = async (endpoint, options = {}) => {
+    const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
+    const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
     try {
-      const res = await fetch(endpoint, options);
-      if (res.ok || res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404) {
+      const res = await fetch(url, options);
+      if (res.ok || res.status === 400 || res.status === 401 || res.status === 403) {
         return res;
       }
-    } catch (e) {}
-    return await fetch(`${BACKEND_API}${endpoint.replace('/api', '')}`, options);
+    } catch (e) {
+      console.warn('Direct backend API fetch error:', e.message);
+    }
+    return await fetch(endpoint, options);
   };
 
   const fetchVendorData = async () => {

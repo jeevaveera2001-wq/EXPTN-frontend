@@ -134,15 +134,17 @@ export default function SuperAdminControlCenter() {
     }
     if (token) headers.set('Authorization', `Bearer ${token}`);
 
+    const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
+    const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
     try {
-      const res = await fetch(endpoint, { ...options, headers, cache: 'no-store' });
-      if (res.ok || res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404) {
+      const res = await fetch(url, { ...options, headers, cache: 'no-store' });
+      if (res.ok || res.status === 400 || res.status === 401 || res.status === 403) {
         return res;
       }
-    } catch (e) {}
-
-    const clean = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    return await fetch(`${BACKEND_API}${clean.replace('/api', '')}`, { ...options, headers, cache: 'no-store' });
+    } catch (e) {
+      console.warn('Direct backend API fetch error:', e.message);
+    }
+    return await fetch(endpoint, { ...options, headers, cache: 'no-store' });
   }, []);
 
   // Fetch all live collections from database in parallel

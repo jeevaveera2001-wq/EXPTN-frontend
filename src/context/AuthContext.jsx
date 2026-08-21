@@ -96,10 +96,10 @@ export const AuthProvider = ({ children }) => {
     try {
       let res;
       try {
-        res = await fetch(`/api/auth/me?email=${encodeURIComponent(currentUser.email)}`);
+        res = await fetch(`${BACKEND_API}/auth/me?email=${encodeURIComponent(currentUser.email)}`);
         if (!res.ok) throw new Error();
       } catch (e) {
-        res = await fetch(`${BACKEND_API}/auth/me?email=${encodeURIComponent(currentUser.email)}`);
+        res = await fetch(`/api/auth/me?email=${encodeURIComponent(currentUser.email)}`);
       }
 
       if (res && res.ok) {

@@ -165,13 +165,17 @@ export default function Explore({ onOpenAuth }) {
   ];
 
   const apiFetch = useCallback(async (endpoint, options = {}) => {
+    const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
+    const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
     try {
-      const res = await fetch(endpoint, options);
-      if (res.ok || res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404) {
+      const res = await fetch(url, options);
+      if (res.ok || res.status === 400 || res.status === 401 || res.status === 403) {
         return res;
       }
-    } catch (e) {}
-    return await fetch(`${BACKEND_API}${endpoint.replace('/api', '')}`, options);
+    } catch (e) {
+      console.warn('Direct backend API fetch error:', e.message);
+    }
+    return await fetch(endpoint, options);
   }, []);
 
   // Fetch approved properties from MongoDB Atlas
@@ -303,11 +307,11 @@ export default function Explore({ onOpenAuth }) {
       paymentId: paymentId,
       paymentMethod: 'Razorpay Payment Gateway (UPI / Cards)',
       paymentStatus: 'Paid',
-      status: 'Pending Verification'
+      status: 'Pending Approval'
     };
 
     try {
-      // 1. Submit Booking to Backend with 'Pending Verification' status
+      // 1. Submit Booking to Backend with 'Pending Approval' status
       await apiFetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

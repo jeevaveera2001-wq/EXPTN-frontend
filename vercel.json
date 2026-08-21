@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://backend-liard-tau-33.vercel.app/api/:path*"
+      "destination": "https://exptn-backend.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",

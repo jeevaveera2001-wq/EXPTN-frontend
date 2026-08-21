@@ -521,7 +521,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
     };
 
     // 1. Fetch Razorpay Test Key from Environment or Backend
-    let razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_5173exploreTN';
+    let razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TSUXQsWdKXG6jc';
     let rzpOrderId = '';
 
     try {

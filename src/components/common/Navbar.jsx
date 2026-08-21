@@ -19,7 +19,14 @@ import {
   ExternalLink,
   ChevronRight,
   Menu,
-  X
+  X,
+  Calendar,
+  Heart,
+  Ticket,
+  HelpCircle,
+  Plus,
+  CreditCard,
+  Lock
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -382,51 +389,276 @@ export default function Navbar({ onOpenAuth }) {
                     {!showNotificationsView ? (
                       <div className="py-1 space-y-1">
                         
-                        {/* Dashboard Option */}
-                        <button
-                          type="button"
-                          onClick={() => handleNavigate(getDashboardPath(currentUser.role))}
-                          className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
-                              <LayoutDashboard size={16} />
+                        {/* 🖥️ DESKTOP VIEW OPTIONS (Hidden on Mobile) */}
+                        <div className="hidden md:block space-y-1">
+                          {/* Desktop Dashboard Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleNavigate(getDashboardPath(currentUser.role))}
+                            className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                <LayoutDashboard size={16} />
+                              </div>
+                              <div>
+                                <span className="text-xs font-extrabold text-[#18181b] block font-editorial">
+                                  Dashboard Portal
+                                </span>
+                                <span className="text-[10px] text-[#71717a] block font-mono truncate max-w-[170px]">
+                                  {currentUser.role === 'super_admin' ? 'Super Admin Control Center' : ['owner', 'vendor', 'owner_and_vendor'].includes(currentUser.role) ? 'Host & Listings Portal' : 'My Travel Bookings'}
+                                </span>
+                              </div>
                             </div>
-                            <div>
-                              <span className="text-xs font-extrabold text-[#18181b] block font-editorial">
-                                Dashboard Portal
-                              </span>
-                              <span className="text-[10px] text-[#71717a] block font-mono truncate max-w-[170px]">
-                                {currentUser.role === 'super_admin' ? 'Super Admin Control Center' : currentUser.role === 'owner' ? 'Host & Listings Portal' : 'My Travel Bookings'}
-                              </span>
-                            </div>
-                          </div>
-                          <ChevronRight size={15} className="text-[#a1a1aa] group-hover:text-black group-hover:translate-x-0.5 transition-all" />
-                        </button>
+                            <ChevronRight size={15} className="text-[#a1a1aa] group-hover:text-black group-hover:translate-x-0.5 transition-all" />
+                          </button>
 
-                        {/* Profile Option */}
-                        <button
-                          type="button"
-                          onClick={handleOpenProfileModal}
-                          className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 border border-purple-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
-                              <User size={16} />
+                          {/* Desktop Profile Option */}
+                          <button
+                            type="button"
+                            onClick={handleOpenProfileModal}
+                            className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 border border-purple-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                <User size={16} />
+                              </div>
+                              <div>
+                                <span className="text-xs font-extrabold text-[#18181b] block font-editorial">
+                                  My Profile & Security
+                                </span>
+                                <span className="text-[10px] text-[#71717a] block font-mono">
+                                  Photo upload & password reset
+                                </span>
+                              </div>
                             </div>
-                            <div>
-                              <span className="text-xs font-extrabold text-[#18181b] block font-editorial">
-                                My Profile & Security
-                              </span>
-                              <span className="text-[10px] text-[#71717a] block font-mono">
-                                Photo upload & password reset
-                              </span>
-                            </div>
-                          </div>
-                          <ChevronRight size={15} className="text-[#a1a1aa] group-hover:text-black group-hover:translate-x-0.5 transition-all" />
-                        </button>
+                            <ChevronRight size={15} className="text-[#a1a1aa] group-hover:text-black group-hover:translate-x-0.5 transition-all" />
+                          </button>
+                        </div>
 
-                        {/* Notifications Option */}
+                        {/* 📱 MOBILE VIEW OPTIONS (Only on Mobile UI - Direct Dashboard Sub-options) */}
+                        <div className="md:hidden space-y-1">
+                          
+                          {/* 🌴 GUEST / TOURIST MOBILE OPTIONS */}
+                          {(!currentUser.role || currentUser.role === 'user' || currentUser.role === 'guest') && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/user?tab=bookings')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <Calendar size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">My Bookings</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">View stay passes & receipts</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/user?tab=wishlist')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 border border-rose-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <Heart size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Saved Stays</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Your favorite wishlisted stays</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/user?tab=tickets')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <Ticket size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Support Tickets</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Raise or track inquiries</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/user?tab=help')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <HelpCircle size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Help & FAQs</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">24/7 Helpline & guidance</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/user?tab=profile')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 border border-purple-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <User size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Profile & Password</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Account security settings</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+                            </>
+                          )}
+
+                          {/* 🏡 PROPERTY OWNER / VENDOR MOBILE OPTIONS */}
+                          {['owner', 'vendor', 'owner_and_vendor'].includes(currentUser.role) && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/vendor?tab=properties_vehicles')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <Building2 size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">My Properties & Fleets</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Manage active listings</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/vendor?tab=properties_vehicles&action=add')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <Plus size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Add New Property / Cab</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Upload photos & details</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/vendor?tab=bank_payouts')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 border border-purple-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <CreditCard size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Bank Accounts & Payouts</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Earnings & settlements</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/vendor?tab=bookings_calendar')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <Calendar size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Booking Requests & Calendar</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Guest check-in dates</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/vendor?tab=vendor_tickets')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <Ticket size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Host Support & Tickets</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Direct super admin help</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/vendor?tab=vendor_profile')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 border border-teal-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <User size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Host Profile & Security</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Password & business info</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+                            </>
+                          )}
+
+                          {/* 👑 SUPER ADMIN / STAFF MOBILE SHORTCUT */}
+                          {(currentUser.role === 'super_admin' || currentUser.role === 'admin' || (isInternalRole && !['owner', 'vendor', 'owner_and_vendor'].includes(currentUser.role))) && (
+                            <button
+                              type="button"
+                              onClick={() => handleNavigate(getDashboardPath(currentUser.role))}
+                              className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                  <Shield size={15} />
+                                </div>
+                                <div>
+                                  <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Control Dashboard</span>
+                                  <span className="text-[10px] text-[#71717a] block font-mono">{getRoleLabel(currentUser.role)}</span>
+                                </div>
+                              </div>
+                              <ChevronRight size={14} className="text-[#a1a1aa]" />
+                            </button>
+                          )}
+
+                        </div>
+
+                        {/* Notifications Option (Common) */}
                         <button
                           type="button"
                           onClick={() => setShowNotificationsView(true)}

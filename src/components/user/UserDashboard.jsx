@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   ExternalLink
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { BACKEND_API } from '../../config/api';
@@ -39,10 +40,18 @@ import { BACKEND_API } from '../../config/api';
 export default function UserDashboard() {
   const { currentUser, logout } = useAuth();
   const { socket, isConnected } = useSocket();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
 
-  // Active Tab State (Combined Profile & Security into single tab)
-  const [activeTab, setActiveTab] = useState('bookings');
+  // Active Tab State (Synced with URL search params)
+  const [activeTab, setActiveTab] = useState(tabFromUrl || 'bookings');
   const [actionSuccess, setActionSuccess] = useState('');
+
+  useEffect(() => {
+    if (tabFromUrl && ['bookings', 'wishlist', 'profile', 'tickets', 'help'].includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   // Profile Form State
   const getInitialAvatar = () => {
@@ -391,15 +400,15 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
   return (
     <div className="w-full min-h-screen bg-slate-100 flex overflow-hidden m-0">
       
-      {/* 📌 TOURIST GUEST SIDEBAR (Icons only on mobile, full text on PC & Tab) */}
-      <aside className="w-16 sm:w-20 md:w-64 bg-[#061833] text-white flex flex-col justify-between p-3 sm:p-4 md:p-6 border-r border-[#0d2a58] flex-shrink-0 min-h-screen transition-all">
+      {/* 📌 TOURIST GUEST SIDEBAR (Hidden on mobile UI, full text on PC & Tab) */}
+      <aside className="hidden md:flex md:w-64 bg-[#061833] text-white flex-col justify-between p-4 md:p-6 border-r border-[#0d2a58] flex-shrink-0 min-h-screen transition-all">
         <div>
           {/* Brand & User Profile Header */}
-          <div className="flex items-center justify-center md:justify-start gap-3 mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[#0d2a58]">
+          <div className="flex items-center justify-start gap-3 mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[#0d2a58]">
             <div className="relative w-10 h-10 md:w-12 md:h-12 rounded-2xl overflow-hidden border-2 border-blue-400 shadow-md shrink-0">
               <img src={profileAvatar} alt={profileName} className="w-full h-full object-cover" />
             </div>
-            <div className="hidden md:block">
+            <div>
               <span className="text-sm font-extrabold text-white block leading-tight truncate max-w-[130px]">{profileName}</span>
               <span className="text-[10px] font-mono text-cyan-400 block font-bold mt-0.5">Tourist Member</span>
             </div>
@@ -410,9 +419,12 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
             {navMenuItems.map((item) => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setSearchParams({ tab: item.id });
+                }}
                 title={item.label}
-                className={`w-full flex items-center justify-center md:justify-between p-3 md:px-3.5 md:py-3 rounded-2xl text-xs font-bold transition-all ${
+                className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
                   activeTab === item.id 
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
                     : 'text-slate-300 hover:bg-[#0b2754] hover:text-white'
@@ -420,11 +432,10 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
               >
                 <div className="flex items-center gap-3">
                   {item.icon}
-                  {/* Icons only on mobile UI, letters on PC & Tab */}
-                  <span className="hidden md:inline">{item.label}</span>
+                  <span>{item.label}</span>
                 </div>
                 {item.badge !== undefined && (
-                  <span className={`hidden md:inline px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold ${
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold ${
                     activeTab === item.id ? 'bg-white/20 text-white' : 'bg-[#123875] text-cyan-300'
                   }`}>
                     {item.badge}
@@ -435,7 +446,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
           </nav>
         </div>
 
-        {/* Sidebar Footer Controls (No logout here, available in top user menu) */}
+        {/* Sidebar Footer Controls */}
         <div className="pt-6 border-t border-[#0d2a58]">
           <div className="flex items-center gap-2 text-[11px] font-mono text-emerald-400">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -444,13 +455,13 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
         </div>
       </aside>
 
-      {/* 💻 MAIN CONTENT AREA */}
-      <main className="flex-1 p-6 lg:p-10 bg-slate-50 overflow-y-auto min-h-screen">
+      {/* 💻 MAIN CONTENT AREA (100% Full Width on Mobile with zero sidebars) */}
+      <main className="flex-1 p-3.5 sm:p-6 lg:p-10 bg-slate-50 overflow-y-auto min-h-screen">
         
         {/* Header Status Bar */}
-        <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-200">
+        <div className="flex justify-between items-center mb-4 sm:mb-8 pb-3 sm:pb-4 border-b border-slate-200">
           <div>
-            <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-blue-50 text-blue-700 border border-blue-200 font-mono">
+            <span className="px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-extrabold bg-blue-50 text-blue-700 border border-blue-200 font-mono">
               👤 Tourist Member Portal
             </span>
             <h2 className="text-2xl font-black text-slate-900 mt-2 capitalize">

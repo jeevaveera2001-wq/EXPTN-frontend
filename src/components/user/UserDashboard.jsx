@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Calendar, 
   Heart, 
@@ -25,18 +25,21 @@ import {
   FileText
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
+import { BACKEND_API } from '../../config/api';
 
 export default function UserDashboard() {
   const { currentUser, logout } = useAuth();
+  const { socket, isConnected } = useSocket();
 
   // Active Tab State (Combined Profile & Security into single tab)
   const [activeTab, setActiveTab] = useState('bookings');
   const [actionSuccess, setActionSuccess] = useState('');
 
   // Profile Form State
-  const [profileName, setProfileName] = useState(currentUser?.name || 'Anitha Selvan');
-  const [profileEmail, setProfileEmail] = useState(currentUser?.email || 'anitha.user@exploretamilnadu.com');
-  const [profilePhone, setProfilePhone] = useState('9842177300');
+  const [profileName, setProfileName] = useState(currentUser?.name || '');
+  const [profileEmail, setProfileEmail] = useState(currentUser?.email || '');
+  const [profilePhone, setProfilePhone] = useState(currentUser?.phone || '');
   const [profileAvatar, setProfileAvatar] = useState('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150');
 
   // Password Form State
@@ -53,69 +56,73 @@ export default function UserDashboard() {
   // Help Accordion State
   const [openFaq, setOpenFaq] = useState(null);
 
-  // Mock Bookings
-  const [bookingsList, setBookingsList] = useState([
-    {
-      id: 'ETN-BK-9001',
-      title: 'Ooty Lakeview Grand Resort',
-      location: 'Ooty Lake Road, Nilgiris',
-      checkIn: '15 Aug 2026',
-      checkOut: '18 Aug 2026',
-      guests: '2 Adults, 1 Child',
-      amount: 14400,
-      status: 'Confirmed',
-      paymentStatus: 'Paid via Razorpay UPI'
-    },
-    {
-      id: 'ETN-BK-8420',
-      title: 'Kodaikanal Heritage Pine Cottage',
-      location: 'Coaker Walk, Kodaikanal',
-      checkIn: '02 Jul 2026',
-      checkOut: '04 Jul 2026',
-      guests: '2 Adults',
-      amount: 6400,
-      status: 'Completed',
-      paymentStatus: 'Paid via Razorpay UPI'
-    }
-  ]);
+  // Live Bookings (Starts strictly at 0 / empty)
+  const [bookingsList, setBookingsList] = useState([]);
 
-  // Mock Saved Wishlist
-  const [savedWishlist, setSavedWishlist] = useState([
-    {
-      id: 'prop-1',
-      title: 'Ooty Lakeview Grand Resort',
-      location: 'Ooty Lake Road',
-      price: 4800,
-      rating: 4.9,
-      image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945'
-    },
-    {
-      id: 'prop-3',
-      title: 'Doddabetta Cloud Mountain Villa',
-      location: 'Doddabetta Peak',
-      price: 6500,
-      rating: 4.8,
-      image: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb'
-    }
-  ]);
+  // Live Saved Wishlist (Starts strictly at 0 / empty)
+  const [savedWishlist, setSavedWishlist] = useState([]);
 
-  // Mock Support Tickets
-  const [ticketsList, setTicketsList] = useState([
-    {
-      id: 'TCK-108',
-      subject: 'Ooty Cab Driver Contact Inquiry',
-      category: 'Transport & Cabs',
-      date: '06 Aug 2026',
-      status: 'Resolved'
-    },
-    {
-      id: 'TCK-109',
-      subject: 'Request for Extra Bed in Ooty Resort',
-      category: 'Stay Accommodation',
-      date: '07 Aug 2026',
-      status: 'In Progress'
+  // Live Support Tickets (Starts strictly at 0 / empty)
+  const [ticketsList, setTicketsList] = useState([]);
+
+  const apiFetch = async (endpoint, options) => {
+    try {
+      const res = await fetch(endpoint, options);
+      if (res.ok || res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404) {
+        return res;
+      }
+    } catch (e) {}
+    return await fetch(`${BACKEND_API}${endpoint.replace('/api', '')}`, options);
+  };
+
+  const fetchUserData = async () => {
+    try {
+      const res = await apiFetch('/api/bookings');
+      if (res.ok) {
+        const allBookings = await res.json();
+        if (Array.isArray(allBookings)) {
+          const myBookings = allBookings.filter(b => b.userEmail === currentUser?.email || b.email === currentUser?.email);
+          setBookingsList(myBookings);
+        }
+      }
+      const tckRes = await apiFetch('/api/tickets');
+      if (tckRes.ok) {
+        const allTickets = await tckRes.json();
+        if (Array.isArray(allTickets)) {
+          const myTickets = allTickets.filter(t => t.senderEmail === currentUser?.email);
+          setTicketsList(myTickets);
+        }
+      }
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchUserData();
+
+    if (socket) {
+      socket.on('new_booking', fetchUserData);
+      socket.on('stats_updated', fetchUserData);
+      socket.on('new_ticket', fetchUserData);
+      socket.on('ticket_updated', fetchUserData);
+      socket.on('database_reset_zero', () => {
+        setBookingsList([]);
+        setTicketsList([]);
+      });
     }
-  ]);
+
+    const interval = setInterval(fetchUserData, 4000);
+
+    return () => {
+      clearInterval(interval);
+      if (socket) {
+        socket.off('new_booking');
+        socket.off('stats_updated');
+        socket.off('new_ticket');
+        socket.off('ticket_updated');
+        socket.off('database_reset_zero');
+      }
+    };
+  }, [socket, currentUser]);
 
   const triggerSuccess = (msg) => {
     setActionSuccess(msg);

@@ -10,6 +10,19 @@ export default function Home({ onOpenAuth }) {
   const [district, setDistrict] = useState('All');
   const [selectedPlaceCategory, setSelectedPlaceCategory] = useState('top15');
 
+  const destinationOptions = [
+    'Ooty (Nilgiris)',
+    'Kodaikanal (Princess of Hills)',
+    'Kanyakumari',
+    'Rameswaram (Pamban Island)',
+    'Madurai (Meenakshi Amman City)',
+    'Mahabalipuram (Mamallapuram)',
+    'Yercaud (Jewel of Shevaroy Hills)',
+    'Hogenakkal Falls',
+    'Courtallam',
+    'Thanjavur (Tanjore)'
+  ];
+
   const stayCategories = [
     { name: 'Resort', icon: '🏰' },
     { name: 'Home stay', icon: '🏡' },
@@ -107,10 +120,9 @@ export default function Home({ onOpenAuth }) {
               <label className="block font-fira-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#919191] mb-1.5">Destination Circuit</label>
               <select className="glass-input text-xs font-fira-mono" value={district} onChange={e => setDistrict(e.target.value)}>
                 <option value="All">All Tamil Nadu</option>
-                <option value="Nilgiris">Nilgiris (Ooty)</option>
-                <option value="Dindigul">Dindigul (Kodaikanal)</option>
-                <option value="Thanjavur">Thanjavur (Cauvery River)</option>
-                <option value="Madurai">Madurai (Vaigai River)</option>
+                {destinationOptions.map(dest => (
+                  <option key={dest} value={dest}>{dest}</option>
+                ))}
               </select>
             </div>
 
@@ -174,7 +186,8 @@ export default function Home({ onOpenAuth }) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {featuredStays
-              .filter(s => (stayType === 'All' || s.type.toLowerCase().includes(stayType.toLowerCase())) && (district === 'All' || s.district === district))
+              .filter(s => (stayType === 'All' || s.type.toLowerCase().includes(stayType.toLowerCase())) && 
+                           (district === 'All' || s.district === district || district.includes(s.district)))
               .map(stay => (
                 <div key={stay.id} className="glass-panel glass-panel-hover overflow-hidden rounded-2xl bg-[#ffffff] border border-[#242429]/20 shadow-md">
                   <div className="h-52 overflow-hidden relative">

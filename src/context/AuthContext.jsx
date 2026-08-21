@@ -7,13 +7,32 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const saved = localStorage.getItem('ETN_USER');
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+      const user = JSON.parse(saved);
+      if (user?.email) {
+        const savedAvatar = localStorage.getItem(`etn_user_avatar_${user.email.toLowerCase()}`);
+        if (savedAvatar) {
+          user.avatar = savedAvatar;
+        }
+      }
+      return user;
     } catch (e) {
       return null;
     }
   });
 
   const login = (userObj) => {
+    if (userObj?.email) {
+      const savedAvatar = localStorage.getItem(`etn_user_avatar_${userObj.email.toLowerCase()}`);
+      if (savedAvatar && !userObj.avatar) {
+        userObj.avatar = savedAvatar;
+      } else if (userObj.avatar) {
+        try {
+          localStorage.setItem(`etn_user_avatar_${userObj.email.toLowerCase()}`, userObj.avatar);
+        } catch (e) {}
+      }
+    }
+
     setCurrentUser(userObj);
     try {
       localStorage.setItem('ETN_USER', JSON.stringify(userObj));
@@ -52,6 +71,9 @@ export const AuthProvider = ({ children }) => {
       const merged = { ...prev, ...updatedFields };
       try {
         localStorage.setItem('ETN_USER', JSON.stringify(merged));
+        if (merged.email && merged.avatar) {
+          localStorage.setItem(`etn_user_avatar_${merged.email.toLowerCase()}`, merged.avatar);
+        }
       } catch (e) {}
       return merged;
     });
@@ -84,9 +106,19 @@ export const AuthProvider = ({ children }) => {
         const freshUser = await res.json();
         if (freshUser) {
           setCurrentUser((prev) => {
-            const merged = { ...prev, ...freshUser };
+            if (!prev) return freshUser;
+            const emailKey = prev.email ? prev.email.toLowerCase() : '';
+            const localSavedAvatar = emailKey ? localStorage.getItem(`etn_user_avatar_${emailKey}`) : null;
+            
+            // Retain local uploaded avatar if backend avatar is empty or default
+            const finalAvatar = freshUser.avatar || localSavedAvatar || prev.avatar || '';
+            const merged = { ...prev, ...freshUser, avatar: finalAvatar };
+
             try {
               localStorage.setItem('ETN_USER', JSON.stringify(merged));
+              if (emailKey && finalAvatar) {
+                localStorage.setItem(`etn_user_avatar_${emailKey}`, finalAvatar);
+              }
             } catch (e) {}
             return merged;
           });

@@ -37,10 +37,32 @@ export default function UserDashboard() {
   const [actionSuccess, setActionSuccess] = useState('');
 
   // Profile Form State
+  const getInitialAvatar = () => {
+    if (currentUser?.email) {
+      const saved = localStorage.getItem(`etn_user_avatar_${currentUser.email.toLowerCase()}`);
+      if (saved) return saved;
+    }
+    return currentUser?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
+  };
+
   const [profileName, setProfileName] = useState(currentUser?.name || '');
   const [profileEmail, setProfileEmail] = useState(currentUser?.email || '');
   const [profilePhone, setProfilePhone] = useState(currentUser?.phone || '');
-  const [profileAvatar, setProfileAvatar] = useState('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150');
+  const [profileAvatar, setProfileAvatar] = useState(getInitialAvatar);
+
+  useEffect(() => {
+    if (currentUser) {
+      setProfileName(currentUser.name || '');
+      setProfileEmail(currentUser.email || '');
+      setProfilePhone(currentUser.phone || '');
+      const saved = currentUser.email ? localStorage.getItem(`etn_user_avatar_${currentUser.email.toLowerCase()}`) : null;
+      if (saved) {
+        setProfileAvatar(saved);
+      } else if (currentUser.avatar) {
+        setProfileAvatar(currentUser.avatar);
+      }
+    }
+  }, [currentUser]);
 
   // Password Form State
   const [currentPassword, setCurrentPassword] = useState('');

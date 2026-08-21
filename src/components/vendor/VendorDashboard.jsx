@@ -68,10 +68,32 @@ export default function VendorDashboard() {
   const [actionSuccess, setActionSuccess] = useState('');
 
   // Profile Form State
+  const getInitialAvatar = () => {
+    if (currentUser?.email) {
+      const saved = localStorage.getItem(`etn_user_avatar_${currentUser.email.toLowerCase()}`);
+      if (saved) return saved;
+    }
+    return currentUser?.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150';
+  };
+
   const [vendorName, setVendorName] = useState(currentUser?.name || '');
   const [vendorEmail, setVendorEmail] = useState(currentUser?.email || '');
   const [vendorPhone, setVendorPhone] = useState(currentUser?.phone || '');
-  const [vendorAvatar, setVendorAvatar] = useState('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150');
+  const [vendorAvatar, setVendorAvatar] = useState(getInitialAvatar);
+
+  useEffect(() => {
+    if (currentUser) {
+      setVendorName(currentUser.name || '');
+      setVendorEmail(currentUser.email || '');
+      setVendorPhone(currentUser.phone || '');
+      const saved = currentUser.email ? localStorage.getItem(`etn_user_avatar_${currentUser.email.toLowerCase()}`) : null;
+      if (saved) {
+        setVendorAvatar(saved);
+      } else if (currentUser.avatar) {
+        setVendorAvatar(currentUser.avatar);
+      }
+    }
+  }, [currentUser]);
 
   // Password Reset State
   const [currentPassword, setCurrentPassword] = useState('');

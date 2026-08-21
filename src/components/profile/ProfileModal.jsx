@@ -59,7 +59,8 @@ export default function ProfileModal({ isOpen, onClose }) {
     if (currentUser) {
       setName(currentUser.name || '');
       setPhone(currentUser.phone ? currentUser.phone.replace(/^\+91\s*/, '') : '');
-      setAvatar(currentUser.avatar || '');
+      const localSavedAvatar = currentUser.email ? localStorage.getItem(`etn_user_avatar_${currentUser.email.toLowerCase()}`) : null;
+      setAvatar(localSavedAvatar || currentUser.avatar || '');
       loadNotifications();
     }
   }, [currentUser, isOpen]);

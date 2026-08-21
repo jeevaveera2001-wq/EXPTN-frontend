@@ -88,6 +88,9 @@ export default function UserDashboard() {
   // Live Support Tickets (Starts strictly at 0 / empty)
   const [ticketsList, setTicketsList] = useState([]);
 
+  // Active Receipt Preview Modal State
+  const [viewReceiptModalBooking, setViewReceiptModalBooking] = useState(null);
+
   const apiFetch = async (endpoint, options = {}) => {
     const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
     const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
@@ -214,13 +217,13 @@ export default function UserDashboard() {
 
   // 📄 Official PDF Tax Invoice & Stay Pass Receipt Generator
   const handleDownloadPDFReceipt = (bk) => {
+    setViewReceiptModalBooking(bk);
     try {
       downloadBookingReceiptPDF(bk);
       const bkId = bk.bookingId || bk.id || 'ETN-BK-REF';
-      triggerSuccess(`Official PDF Receipt for ${bkId} downloaded successfully!`);
+      triggerSuccess(`Official PDF Receipt for ${bkId} opened!`);
     } catch (err) {
-      console.error('PDF download error:', err);
-      alert('Error generating PDF receipt. Please try again.');
+      console.warn('PDF direct stream note:', err);
     }
   };
 
@@ -755,6 +758,181 @@ export default function UserDashboard() {
         )}
 
       </main>
+
+      {/* 📄 OFFICIAL STAY PASS & TAX INVOICE RECEIPT MODAL */}
+      {viewReceiptModalBooking && (() => {
+        const bk = viewReceiptModalBooking;
+        const bkId = bk.bookingId || bk.id || 'ETN-BK-REF';
+        const bkTitle = bk.itemTitle || bk.propertyTitle || bk.title || 'Verified Luxury Stay';
+        const bkLocation = bk.destination || bk.location || 'Tamil Nadu';
+        const bkAmount = Number(bk.totalAmount || bk.amount || 0);
+        const baseRate = Number(bk.baseRate || Math.round(bkAmount / 1.23) || bkAmount);
+        const gstAmount = Number(bk.gstAmount || Math.round(baseRate * 0.18) || 0);
+        const serviceFee = Number(bk.serviceFee || Math.round(baseRate * 0.05) || (bkAmount - baseRate - gstAmount));
+        const guestName = bk.customerName || bk.userName || currentUser?.name || 'Tourist Guest';
+        const guestEmail = bk.customerEmail || bk.userEmail || currentUser?.email || 'guest@exploretamilnadu.com';
+        const guestPhone = bk.customerPhone || bk.userPhone || currentUser?.phone || '+91 78717 79134';
+        const checkIn = bk.checkIn || bk.checkInDate || '2026-08-25';
+        const checkOut = bk.checkOut || bk.checkOutDate || '2026-08-28';
+        const nights = bk.nights || 1;
+        const guests = bk.guests || 2;
+        const guestType = bk.guestType || 'Stay';
+        const paymentId = bk.paymentId || 'pay_rzp_captured';
+        const issueDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+            <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-fade-in my-auto">
+              
+              {/* Header Action Bar */}
+              <div className="bg-[#061833] text-white p-4 sm:p-5 flex items-center justify-between flex-shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold">
+                    📄
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm sm:text-base text-white">Official Stay Voucher & Tax Invoice</h3>
+                    <p className="text-[11px] text-slate-300 font-mono">Reference: {bkId}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => downloadBookingReceiptPDF(bk)}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all cursor-pointer"
+                  >
+                    <Download size={13} /> Save PDF
+                  </button>
+                  <button
+                    onClick={() => window.print()}
+                    className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-bold text-xs flex items-center gap-1 transition-all cursor-pointer hidden sm:flex"
+                  >
+                    🖨️ Print
+                  </button>
+                  <button
+                    onClick={() => setViewReceiptModalBooking(null)}
+                    className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrollable Printable Document Body */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-slate-800 text-xs sm:text-sm">
+                
+                {/* Official Voucher Top Banner */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b border-slate-200 gap-2">
+                  <div>
+                    <h2 className="text-lg sm:text-xl font-black text-slate-900">Explore Tamil Nadu</h2>
+                    <p className="text-[10px] sm:text-[11px] font-mono text-slate-500 uppercase tracking-wider">Official Tourism Tax Invoice & Stay Pass</p>
+                    <p className="text-[10px] text-slate-400 font-mono">GSTIN: 33AAACE2026TN1Z8 · Helpline: +91 78717 79134</p>
+                  </div>
+                  <div className="sm:text-right">
+                    <span className="inline-block px-3 py-1 rounded-full text-[11px] font-extrabold font-mono bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      ✓ PAID VIA RAZORPAY
+                    </span>
+                    <p className="text-[11px] font-mono text-slate-500 mt-1">Date: {issueDate}</p>
+                  </div>
+                </div>
+
+                {/* 2-Column Info Boxes */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                    <h4 className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">Guest / Customer Details</h4>
+                    <p className="font-bold text-slate-900">{guestName}</p>
+                    <p className="text-slate-600 font-mono">{guestEmail}</p>
+                    <p className="text-slate-600 font-mono">{guestPhone}</p>
+                    <p className="text-slate-700 font-semibold">{guests} Guests ({guestType})</p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                    <h4 className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">Stay & Schedule Details</h4>
+                    <p className="font-bold text-slate-900">{bkTitle}</p>
+                    <p className="text-slate-600">📍 {bkLocation}</p>
+                    <p className="text-slate-600 font-semibold">📅 {checkIn} (12:00 PM) → {checkOut} (11:00 AM)</p>
+                    <p className="text-slate-700 font-mono">Duration: {nights} Night(s)</p>
+                  </div>
+                </div>
+
+                {/* Itemized Price Table */}
+                <div className="rounded-2xl border border-slate-200 overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#061833] text-white text-[11px] uppercase font-mono">
+                      <tr>
+                        <th className="p-3">Description</th>
+                        <th className="p-3 text-center">Duration</th>
+                        <th className="p-3 text-right">Rate</th>
+                        <th className="p-3 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      <tr>
+                        <td className="p-3 font-semibold text-slate-900">{bkTitle} ({bkLocation})</td>
+                        <td className="p-3 text-center font-mono">{nights} Night(s)</td>
+                        <td className="p-3 text-right font-mono">₹{Math.round(baseRate / nights).toLocaleString()}</td>
+                        <td className="p-3 text-right font-mono font-bold">₹{baseRate.toLocaleString()}</td>
+                      </tr>
+                      <tr className="bg-slate-50/50">
+                        <td className="p-3 text-slate-600">Goods & Services Tax (GST 18%)</td>
+                        <td className="p-3 text-center font-mono">18%</td>
+                        <td className="p-3 text-right font-mono">-</td>
+                        <td className="p-3 text-right font-mono text-slate-700">+ ₹{gstAmount.toLocaleString()}</td>
+                      </tr>
+                      <tr>
+                        <td className="p-3 text-slate-600">Platform & Facilitation Fee (5%)</td>
+                        <td className="p-3 text-center font-mono">5%</td>
+                        <td className="p-3 text-right font-mono">-</td>
+                        <td className="p-3 text-right font-mono text-slate-700">+ ₹{serviceFee.toLocaleString()}</td>
+                      </tr>
+                      <tr className="bg-emerald-50 text-emerald-950 font-black text-sm">
+                        <td colSpan="3" className="p-3.5">Total Amount Paid (INR)</td>
+                        <td className="p-3.5 text-right font-mono text-emerald-700 text-base">₹{bkAmount.toLocaleString()}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Instructions Box */}
+                <div className="p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-200 text-emerald-900 space-y-1 text-xs">
+                  <p className="font-bold">✓ Payment Verified (ID: {paymentId})</p>
+                  <p className="text-[11px] leading-relaxed">
+                    Please present this official voucher or your Booking Reference ID <strong>({bkId})</strong> at hotel reception during check-in. Valid Government ID proof is mandatory for all adult guests.
+                  </p>
+                </div>
+
+              </div>
+
+              {/* Modal Footer Buttons */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row gap-2 justify-between items-center flex-shrink-0">
+                <a
+                  href={`${BACKEND_API}/bookings/${bkId}/receipt?download=1`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 font-mono flex items-center gap-1"
+                >
+                  🌐 Open Direct HTML Voucher Link
+                </a>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={() => downloadBookingReceiptPDF(bk)}
+                    className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Download size={14} /> Download PDF File
+                  </button>
+                  <button
+                    onClick={() => setViewReceiptModalBooking(null)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-200 text-slate-800 font-bold text-xs hover:bg-slate-300 cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

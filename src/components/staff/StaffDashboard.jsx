@@ -561,10 +561,10 @@ export default function StaffDashboard({ overrideRole }) {
                   const tckId = tck.ticketId || tck._id;
                   const isSelected = selectedSupportTicket?.ticketId === tckId || selectedSupportTicket?._id === tck._id;
                   return (
-                    <div key={tck._id || tckId} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-indigo-300 transition-all space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full text-xs">
+                    <div key={tck._id || tckId} className="p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-indigo-300 transition-all space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md text-[11px]">
                             {tckId}
                           </span>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
@@ -574,26 +574,26 @@ export default function StaffDashboard({ overrideRole }) {
                           }`}>
                             ● {tck.status}
                           </span>
-                          <span className="text-[11px] font-mono font-bold text-slate-500">
+                          <span className="text-[10px] font-mono font-bold text-slate-500">
                             [{tck.category || 'General'}]
                           </span>
                         </div>
-                        <span className="text-[10px] font-mono text-slate-400">
-                          {tck.createdAt ? new Date(tck.createdAt).toLocaleString('en-IN') : 'Recent'}
+                        <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                          {tck.createdAt ? new Date(tck.createdAt).toLocaleDateString('en-IN') : 'Recent'}
                         </span>
                       </div>
 
                       <div>
-                        <h4 className="font-bold text-slate-900 text-sm">{tck.subject}</h4>
+                        <h4 className="font-bold text-slate-900 text-xs sm:text-sm">{tck.subject}</h4>
                         {tck.message && (
-                          <p className="text-xs text-slate-600 mt-1 bg-white p-3 rounded-xl border border-slate-200 font-editorial">
+                          <p className="text-xs text-slate-600 mt-1 bg-white p-2.5 sm:p-3 rounded-xl border border-slate-200 font-editorial">
                             "{tck.message}"
                           </p>
                         )}
                       </div>
 
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-500 pt-1">
-                        <div>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono text-slate-500 pt-1 border-t border-slate-200/60">
+                        <div className="truncate">
                           <strong>From:</strong> {tck.senderName} ({tck.senderEmail}) · <span className="uppercase text-indigo-600 font-bold">{tck.senderRole || 'user'}</span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -604,7 +604,7 @@ export default function StaffDashboard({ overrideRole }) {
                                 setSelectedSupportTicket(isSelected ? null : tck);
                                 setSupportReplyText(tck.adminReply || '');
                               }}
-                              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs cursor-pointer shadow-xs flex-1 sm:flex-initial text-center"
                             >
                               {isSelected ? 'Close Reply Box' : '💬 Reply & Resolve'}
                             </button>
@@ -613,7 +613,7 @@ export default function StaffDashboard({ overrideRole }) {
                             <button
                               type="button"
                               onClick={() => handleSupportReplySubmit(tckId, 'In Progress')}
-                              className="px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-300 text-blue-800 font-bold text-xs hover:bg-blue-100 cursor-pointer"
+                              className="px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-300 text-blue-800 font-bold text-xs hover:bg-blue-100 cursor-pointer flex-1 sm:flex-initial text-center"
                             >
                               Mark In Progress
                             </button>
@@ -623,14 +623,14 @@ export default function StaffDashboard({ overrideRole }) {
 
                       {/* Admin Reply Details if existing */}
                       {tck.adminReply && (
-                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 font-mono">
+                        <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 font-mono">
                           <strong>✓ Support Reply:</strong> {tck.adminReply}
                         </div>
                       )}
 
                       {/* Quick Reply Drawer */}
                       {isSelected && (
-                        <div className="p-4 bg-white rounded-2xl border-2 border-indigo-300 space-y-3 animate-in fade-in">
+                        <div className="p-3.5 sm:p-4 bg-white rounded-2xl border-2 border-indigo-300 space-y-3 animate-in fade-in">
                           <label className="block text-xs font-bold text-slate-800">
                             Reply to {tck.senderName} ({tck.senderEmail})
                           </label>
@@ -641,18 +641,18 @@ export default function StaffDashboard({ overrideRole }) {
                             placeholder="Type resolution instructions or assistance details..."
                             className="w-full p-3 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-900 outline-hidden focus:ring-2 focus:ring-indigo-500 font-editorial"
                           />
-                          <div className="flex justify-end gap-2">
+                          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
                             <button
                               type="button"
                               onClick={() => setSelectedSupportTicket(null)}
-                              className="px-3.5 py-2 rounded-xl bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                              className="px-3.5 py-2 rounded-xl bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer w-full sm:w-auto text-center"
                             >
                               Cancel
                             </button>
                             <button
                               type="button"
                               onClick={() => handleSupportReplySubmit(tckId, 'Resolved')}
-                              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-sm flex items-center gap-1"
+                              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-sm flex items-center justify-center gap-1 w-full sm:w-auto"
                             >
                               <Check size={14} /> Send Reply & Mark Resolved
                             </button>

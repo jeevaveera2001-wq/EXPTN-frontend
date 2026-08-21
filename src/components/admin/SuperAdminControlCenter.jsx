@@ -1113,19 +1113,19 @@ export default function SuperAdminControlCenter() {
                       <p className="text-sm font-bold text-slate-300 font-editorial">No support tickets</p>
                     </div>
                   ) : (
-                    <div className="grid gap-4">
+                    <div className="grid gap-3 sm:gap-4">
                       {ticketsList.map((tck) => (
-                        <div key={tck._id || tck.ticketId} className="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-3">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-cyan-400 font-mono">{tck.ticketId || 'TCK-2001'}</span>
+                        <div key={tck._id || tck.ticketId} className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-slate-900/80 border border-slate-800 space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[11px] font-bold text-cyan-400 font-mono px-2 py-0.5 bg-cyan-950/60 rounded-md border border-cyan-800/60">{tck.ticketId || 'TCK-2001'}</span>
                                 <span className="text-[10px] text-slate-400 font-mono">({tck.category || 'General'})</span>
                               </div>
-                              <h4 className="text-sm font-bold text-white font-editorial mt-1">{tck.subject}</h4>
-                              <p className="text-xs text-slate-400 font-mono">{tck.senderName || 'Member'} · {tck.senderEmail}</p>
+                              <h4 className="text-xs sm:text-sm font-bold text-white font-editorial mt-1 leading-snug">{tck.subject}</h4>
+                              <p className="text-[10px] sm:text-xs text-slate-400 font-mono truncate">{tck.senderName || 'Member'} · {tck.senderEmail}</p>
                             </div>
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono ${
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono shrink-0 ${
                               tck.status === 'Resolved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
                             }`}>
                               {tck.status || 'Open'}
@@ -1144,7 +1144,7 @@ export default function SuperAdminControlCenter() {
                             <button
                               type="button"
                               onClick={() => handleOpenTicketReply(tck)}
-                              className="px-4 py-1.5 rounded-xl bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 text-xs font-bold font-editorial transition-all"
+                              className="px-4 py-2 rounded-xl bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 text-xs font-bold font-editorial transition-all w-full sm:w-auto text-center"
                             >
                               {tck.status === 'Resolved' ? 'View / Edit Reply' : 'Reply & Resolve'}
                             </button>

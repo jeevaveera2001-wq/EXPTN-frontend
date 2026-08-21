@@ -772,16 +772,16 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
 
         {/* 🎫 TAB 4: MY TICKETS */}
         {activeTab === 'tickets' && (
-          <div className="bg-white rounded-3xl p-6 lg:p-8 border border-slate-200 shadow-sm space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 border border-slate-200 shadow-sm space-y-5 sm:space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div>
-                <h3 className="text-xl font-bold text-slate-900">Support Tickets Log</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900">Support Tickets Log</h3>
                 <p className="text-xs text-slate-500 mt-0.5">Track your open inquiries and support tickets.</p>
               </div>
 
               <button 
                 onClick={() => setShowNewTicketModal(!showNewTicketModal)}
-                className="glass-button text-xs px-4 py-2.5 flex items-center gap-2"
+                className="glass-button text-xs px-4 py-2.5 flex items-center justify-center gap-2 w-full sm:w-auto shrink-0"
               >
                 <Plus size={16} /> Create Support Ticket
               </button>
@@ -789,8 +789,8 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
 
             {/* Create Ticket Modal */}
             {showNewTicketModal && (
-              <form onSubmit={handleCreateTicketSubmit} className="p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <form onSubmit={handleCreateTicketSubmit} className="p-4 sm:p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Ticket Subject / Title</label>
                     <input 
@@ -832,45 +832,91 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                   />
                 </div>
 
-                <div className="flex justify-end gap-2">
-                  <button type="submit" className="glass-button text-xs py-2 px-6">Submit Ticket</button>
-                  <button type="button" onClick={() => setShowNewTicketModal(false)} className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+                  <button type="button" onClick={() => setShowNewTicketModal(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 w-full sm:w-auto text-center">Cancel</button>
+                  <button type="submit" className="glass-button text-xs py-2.5 px-6 w-full sm:w-auto">Submit Ticket</button>
                 </div>
               </form>
             )}
 
-            {/* Tickets Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-xs font-extrabold uppercase text-slate-400">
-                    <th className="pb-3">Ticket ID & Subject</th>
-                    <th className="pb-3">Category</th>
-                    <th className="pb-3">Date Submitted</th>
-                    <th className="pb-3 text-right">Ticket Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-xs">
+            {/* Empty State */}
+            {ticketsList.length === 0 ? (
+              <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-500 font-mono text-xs">
+                ✨ No active support tickets. Click "Create Support Ticket" above if you need any assistance!
+              </div>
+            ) : (
+              <>
+                {/* 📱 MOBILE CARD VIEW FOR TICKETS (< sm) */}
+                <div className="block sm:hidden space-y-3">
                   {ticketsList.map(tck => (
-                    <tr key={tck.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-4">
-                        <div className="font-bold text-slate-900 text-sm">{tck.subject}</div>
-                        <div className="text-xs text-blue-600 font-mono font-bold">{tck.id}</div>
-                      </td>
-                      <td className="py-4 font-semibold text-slate-700">{tck.category}</td>
-                      <td className="py-4 font-mono text-slate-500">{tck.date}</td>
-                      <td className="py-4 text-right">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold font-mono ${
-                          tck.status === 'Resolved' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
+                    <div key={tck.id || tck._id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-blue-300 transition-all space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-blue-700 font-bold px-2.5 py-0.5 bg-blue-100 rounded-md border border-blue-200 text-[11px]">
+                          {tck.id || tck.ticketId}
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono ${
+                          tck.status === 'Resolved' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
                         }`}>
                           {tck.status === 'Resolved' ? '🟢 Resolved' : '⏳ In Progress'}
                         </span>
-                      </td>
-                    </tr>
+                      </div>
+
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs leading-snug">{tck.subject}</h4>
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono mt-1 pt-1 border-t border-slate-200/60">
+                          <span>Category: <strong>{tck.category || 'General'}</strong></span>
+                          <span>{tck.date || (tck.createdAt ? new Date(tck.createdAt).toLocaleDateString('en-IN') : 'Recent')}</span>
+                        </div>
+                      </div>
+
+                      {tck.adminReply && (
+                        <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 font-mono">
+                          <strong>✓ Support Resolution:</strong> {tck.adminReply}
+                        </div>
+                      )}
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+
+                {/* 🖥️ DESKTOP TABLE VIEW FOR TICKETS (>= sm) */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-xs font-extrabold uppercase text-slate-400">
+                        <th className="pb-3">Ticket ID & Subject</th>
+                        <th className="pb-3">Category</th>
+                        <th className="pb-3">Date Submitted</th>
+                        <th className="pb-3 text-right">Ticket Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {ticketsList.map(tck => (
+                        <tr key={tck.id || tck._id} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-4">
+                            <div className="font-bold text-slate-900 text-sm">{tck.subject}</div>
+                            <div className="text-xs text-blue-600 font-mono font-bold">{tck.id || tck.ticketId}</div>
+                            {tck.adminReply && (
+                              <div className="mt-1 text-[11px] text-emerald-800 bg-emerald-50 p-2 rounded-lg border border-emerald-200 font-mono">
+                                <strong>Support:</strong> {tck.adminReply}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-4 font-semibold text-slate-700">{tck.category}</td>
+                          <td className="py-4 font-mono text-slate-500">{tck.date || (tck.createdAt ? new Date(tck.createdAt).toLocaleDateString('en-IN') : 'Recent')}</td>
+                          <td className="py-4 text-right">
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold font-mono ${
+                              tck.status === 'Resolved' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
+                            }`}>
+                              {tck.status === 'Resolved' ? '🟢 Resolved' : '⏳ In Progress'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         )}
 

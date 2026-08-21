@@ -1649,28 +1649,42 @@ export default function VendorDashboard() {
             </div>
 
             {/* Support Tickets Section */}
-            <div className="bg-white rounded-3xl p-6 lg:p-8 border border-slate-200 shadow-sm space-y-6">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+            <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 border border-slate-200 shadow-sm space-y-5 sm:space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                 <div>
-                  <h3 className="text-xl font-bold text-slate-900">Your Support Tickets & Requests</h3>
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-900">Host Support Tickets & Requests</h3>
                   <p className="text-xs text-slate-500 mt-0.5">Directly connected to Super Admin Jeeva Veeramani.</p>
                 </div>
-                <button onClick={() => setShowNewTicketModal(!showNewTicketModal)} className="glass-button text-xs px-4 py-2.5 flex items-center gap-2">
+                <button 
+                  onClick={() => setShowNewTicketModal(!showNewTicketModal)} 
+                  className="glass-button text-xs px-4 py-2.5 flex items-center justify-center gap-2 w-full sm:w-auto shrink-0"
+                >
                   <Plus size={16} /> Submit New Request
                 </button>
               </div>
 
               {/* Create Ticket Form */}
               {showNewTicketModal && (
-                <form onSubmit={handleCreateTicketSubmit} className="p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <form onSubmit={handleCreateTicketSubmit} className="p-4 sm:p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 animate-fade-in">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">Ticket Subject</label>
-                      <input type="text" placeholder="E.g. Request payout verification for Ooty Resort" value={ticketSubject} onChange={e => setTicketSubject(e.target.value)} className="glass-input text-xs" required />
+                      <input 
+                        type="text" 
+                        placeholder="E.g. Request payout verification for Ooty Resort" 
+                        value={ticketSubject} 
+                        onChange={e => setTicketSubject(e.target.value)} 
+                        className="glass-input text-xs" 
+                        required 
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
-                      <select value={ticketCategory} onChange={e => setTicketCategory(e.target.value)} className="glass-input text-xs">
+                      <select 
+                        value={ticketCategory} 
+                        onChange={e => setTicketCategory(e.target.value)} 
+                        className="glass-input text-xs"
+                      >
                         <option value="Property Host Settlement">Property Host Settlement</option>
                         <option value="Vehicle Approval">Vehicle Approval</option>
                         <option value="Complaint">Complaint ⚠️</option>
@@ -1681,32 +1695,70 @@ export default function VendorDashboard() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Describe your inquiry / issue in detail</label>
-                    <textarea rows={3} placeholder="Please provide specific details..." value={ticketMessage} onChange={e => setTicketMessage(e.target.value)} className="glass-input text-xs" required />
+                    <textarea 
+                      rows={3} 
+                      placeholder="Please provide specific details..." 
+                      value={ticketMessage} 
+                      onChange={e => setTicketMessage(e.target.value)} 
+                      className="glass-input text-xs" 
+                      required 
+                    />
                   </div>
-                  <div className="flex justify-end gap-2">
-                    <button type="submit" className="glass-button text-xs py-2 px-6">Submit Ticket to Super Admin</button>
-                    <button type="button" onClick={() => setShowNewTicketModal(false)} className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+                  <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+                    <button 
+                      type="button" 
+                      onClick={() => setShowNewTicketModal(false)} 
+                      className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 w-full sm:w-auto text-center"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit" 
+                      className="glass-button text-xs py-2.5 px-6 w-full sm:w-auto"
+                    >
+                      Submit Ticket to Super Admin
+                    </button>
                   </div>
                 </form>
               )}
 
-              {/* Tickets Table */}
-              <div className="space-y-3">
-                {vendorTickets.map(tck => (
-                  <div key={tck.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex justify-between items-center text-xs">
-                    <div>
-                      <span className="font-mono text-blue-600 font-bold">{tck.id}</span>
-                      <h4 className="font-bold text-slate-900 text-sm">{tck.subject}</h4>
-                      <span className="text-[10px] text-slate-500 font-mono uppercase">{tck.category} • Submitted: {tck.date}</span>
+              {/* Tickets List */}
+              {vendorTickets.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-500 font-mono text-xs">
+                  ✨ No open support requests. Click "Submit New Request" if you need immediate assistance!
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {vendorTickets.map(tck => (
+                    <div key={tck.id || tck._id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-amber-300 transition-all space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-blue-700 font-bold px-2.5 py-0.5 bg-blue-100 rounded-md border border-blue-200 text-[11px]">
+                          {tck.id || tck.ticketId}
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono ${
+                          tck.status === 'Resolved' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
+                        }`}>
+                          {tck.status === 'Resolved' ? '🟢 Resolved' : '⏳ In Progress'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-xs sm:text-sm leading-snug">{tck.subject}</h4>
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono mt-1 pt-1 border-t border-slate-200/60">
+                          <span>Category: <strong>{tck.category || 'Host Settlement'}</strong></span>
+                          <span>{tck.date || (tck.createdAt ? new Date(tck.createdAt).toLocaleDateString('en-IN') : 'Recent')}</span>
+                        </div>
+                      </div>
+
+                      {tck.adminReply && (
+                        <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 font-mono">
+                          <strong>✓ Admin Resolution:</strong> {tck.adminReply}
+                        </div>
+                      )}
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold font-mono ${
-                      tck.status === 'Resolved' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
-                    }`}>
-                      {tck.status === 'Resolved' ? '🟢 Resolved' : '⏳ In Progress'}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

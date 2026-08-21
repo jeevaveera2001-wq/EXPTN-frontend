@@ -11,6 +11,7 @@ import {
   User, 
   LogOut, 
   ShieldCheck, 
+  Shield,
   Building2, 
   Car, 
   Compass, 
@@ -165,10 +166,29 @@ export default function Navbar({ onOpenAuth }) {
     saveNotifications(updated);
   };
 
+  const isInternalRole = currentUser && [
+    'super_admin',
+    'admin',
+    'operations_manager',
+    'booking_executive',
+    'customer_support_executive',
+    'destination_content_manager',
+    'property_verification_manager',
+    'transport_manager',
+    'finance_accounts_manager',
+    'marketing_manager',
+    'media_gallery_manager',
+    'hr_staff_manager',
+    'owner',
+    'vendor',
+    'owner_and_vendor'
+  ].includes(currentUser.role);
+
   const getDashboardPath = (role) => {
     if (role === 'super_admin' || role === 'admin') return '/dashboard/super-admin';
     if (role === 'owner' || role === 'vendor' || role === 'owner_and_vendor') return '/dashboard/vendor';
     if (role === 'user' || role === 'guest') return '/dashboard/user';
+    if (role && role !== 'user') return `/dashboard/${role.replace(/_/g, '-')}`;
     return '/dashboard';
   };
 
@@ -224,7 +244,7 @@ export default function Navbar({ onOpenAuth }) {
         <div className="flex items-center justify-between gap-2">
           
           {/* Brand Logo Seal */}
-          <Link to="/" className="flex items-center gap-2 sm:gap-3.5 no-underline group shrink-0">
+          <Link to={isInternalRole ? getDashboardPath(currentUser.role) : '/'} className="flex items-center gap-2 sm:gap-3.5 no-underline group shrink-0">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[#ffffff] border border-[#242429] flex items-center justify-center p-0.5 sm:p-1 shadow-sm group-hover:scale-105 transition-transform shrink-0">
               <img src="/logo.png" alt="Explore Tamil Nadu Logo" className="w-full h-full object-cover rounded-full" />
             </div>
@@ -238,21 +258,37 @@ export default function Navbar({ onOpenAuth }) {
             </div>
           </Link>
 
-          {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
-            <Link to="/" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all">OVERVIEW</Link>
-            <Link to="/explore" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all">EXPLORE</Link>
-            <Link to="/hotels" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] bg-[#ffffff]/60 hover:bg-[#ffffff] border border-[#242429]/15 hover:border-[#242429]/40 transition-all font-bold flex items-center gap-1.5 shadow-xs">
-              <Sparkles size={12} className="text-amber-500 shrink-0" />
-              <span>PREMIUM & FEATURED STAYS & RESORTS</span>
-            </Link>
-            <Link to="/packages" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all flex items-center gap-1.5">
-              <span>PACKAGES</span>
-              <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-mono text-[9px] font-bold tracking-normal">
-                AVAILABLE SOON
+          {/* Desktop Navigation Links (Guest/Tourist only; Internal staff sees console header) */}
+          {isInternalRole ? (
+            <div className="hidden lg:flex items-center gap-2">
+              <span className="px-3.5 py-1.5 rounded-full bg-slate-900 text-amber-300 border border-slate-800 font-mono text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                <Shield size={13} className="text-amber-400" />
+                <span>{getRoleLabel(currentUser.role)} Console</span>
               </span>
-            </Link>
-          </nav>
+              <Link 
+                to={getDashboardPath(currentUser.role)}
+                className="px-4 py-1.5 rounded-full bg-[#242429] hover:bg-black text-white font-mono text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+              >
+                <LayoutDashboard size={13} />
+                <span>Dashboard Control Center</span>
+              </Link>
+            </div>
+          ) : (
+            <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
+              <Link to="/" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all">OVERVIEW</Link>
+              <Link to="/explore" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all">EXPLORE</Link>
+              <Link to="/hotels" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] bg-[#ffffff]/60 hover:bg-[#ffffff] border border-[#242429]/15 hover:border-[#242429]/40 transition-all font-bold flex items-center gap-1.5 shadow-xs">
+                <Sparkles size={12} className="text-amber-500 shrink-0" />
+                <span>PREMIUM & FEATURED STAYS & RESORTS</span>
+              </Link>
+              <Link to="/packages" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all flex items-center gap-1.5">
+                <span>PACKAGES</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-mono text-[9px] font-bold tracking-normal">
+                  AVAILABLE SOON
+                </span>
+              </Link>
+            </nav>
+          )}
 
           {/* Auth & Profile Area */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
@@ -519,55 +555,82 @@ export default function Navbar({ onOpenAuth }) {
         {/* 📱 Mobile Navigation Drawer */}
         {mobileNavOpen && (
           <div className="lg:hidden mt-3 pt-3 border-t border-[#242429]/15 flex flex-col gap-2 animate-in fade-in">
-            <Link 
-              to="/" 
-              onClick={() => setMobileNavOpen(false)}
-              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold"
-            >
-              OVERVIEW
-            </Link>
-            <Link 
-              to="/explore" 
-              onClick={() => setMobileNavOpen(false)}
-              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold"
-            >
-              EXPLORE
-            </Link>
-            <Link 
-              to="/hotels" 
-              onClick={() => setMobileNavOpen(false)}
-              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold flex items-center gap-1.5"
-            >
-              <Sparkles size={12} className="text-amber-500 shrink-0" />
-              <span>PREMIUM & FEATURED STAYS & RESORTS</span>
-            </Link>
-            <Link 
-              to="/packages" 
-              onClick={() => setMobileNavOpen(false)}
-              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold flex items-center justify-between"
-            >
-              <span>PACKAGES</span>
-              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-mono text-[9px] font-bold tracking-normal">
-                AVAILABLE SOON
-              </span>
-            </Link>
-
-            {/* Quick Register link inside mobile drawer if logged out */}
-            {!currentUser && (
-              <div className="pt-2 border-t border-[#242429]/10 grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => { setMobileNavOpen(false); onOpenAuth('login'); }}
-                  className="py-2.5 rounded-2xl bg-[#242429] text-white text-xs font-bold font-editorial flex items-center justify-center gap-1.5 shadow-sm"
+            {isInternalRole ? (
+              <div className="space-y-2 py-1">
+                <div className="p-3.5 rounded-2xl bg-slate-900 text-white font-mono text-xs space-y-1">
+                  <div className="text-amber-400 font-bold flex items-center gap-1.5">
+                    <Shield size={14} /> {getRoleLabel(currentUser.role)}
+                  </div>
+                  <div className="text-[10px] text-slate-400 truncate">{currentUser.email}</div>
+                </div>
+                <Link
+                  to={getDashboardPath(currentUser.role)}
+                  onClick={() => setMobileNavOpen(false)}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-[#242429] text-white text-xs font-bold font-editorial flex items-center justify-center gap-2 shadow-sm"
                 >
-                  <LogIn size={13} /> Sign In
-                </button>
+                  <LayoutDashboard size={14} /> Open Control Dashboard
+                </Link>
                 <button
-                  onClick={() => { setMobileNavOpen(false); onOpenAuth('register'); }}
-                  className="py-2.5 rounded-2xl bg-white border border-[#242429]/25 text-[#242429] text-xs font-bold font-editorial flex items-center justify-center gap-1.5 shadow-sm"
+                  type="button"
+                  onClick={handleLogout}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold font-editorial flex items-center justify-center gap-2"
                 >
-                  <UserPlus size={13} /> Register
+                  <LogOut size={14} /> Sign Out
                 </button>
               </div>
+            ) : (
+              <>
+                <Link 
+                  to="/" 
+                  onClick={() => setMobileNavOpen(false)}
+                  className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold"
+                >
+                  OVERVIEW
+                </Link>
+                <Link 
+                  to="/explore" 
+                  onClick={() => setMobileNavOpen(false)}
+                  className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold"
+                >
+                  EXPLORE
+                </Link>
+                <Link 
+                  to="/hotels" 
+                  onClick={() => setMobileNavOpen(false)}
+                  className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold flex items-center gap-1.5"
+                >
+                  <Sparkles size={12} className="text-amber-500 shrink-0" />
+                  <span>PREMIUM & FEATURED STAYS & RESORTS</span>
+                </Link>
+                <Link 
+                  to="/packages" 
+                  onClick={() => setMobileNavOpen(false)}
+                  className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold flex items-center justify-between"
+                >
+                  <span>PACKAGES</span>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-mono text-[9px] font-bold tracking-normal">
+                    AVAILABLE SOON
+                  </span>
+                </Link>
+
+                {/* Quick Register link inside mobile drawer if logged out */}
+                {!currentUser && (
+                  <div className="pt-2 border-t border-[#242429]/10 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => { setMobileNavOpen(false); onOpenAuth('login'); }}
+                      className="py-2.5 rounded-2xl bg-[#242429] text-white text-xs font-bold font-editorial flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <LogIn size={13} /> Sign In
+                    </button>
+                    <button
+                      onClick={() => { setMobileNavOpen(false); onOpenAuth('register'); }}
+                      className="py-2.5 rounded-2xl bg-white border border-[#242429]/25 text-[#242429] text-xs font-bold font-editorial flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <UserPlus size={13} /> Register
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

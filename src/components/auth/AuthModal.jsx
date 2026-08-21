@@ -64,11 +64,28 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
     login(userData);
     onClose();
 
-    if (userData.role === 'super_admin' || userData.role === 'admin') {
+    const role = userData.role || 'user';
+    const staffRoles = [
+      'operations_manager',
+      'booking_executive',
+      'customer_support_executive',
+      'destination_content_manager',
+      'property_verification_manager',
+      'transport_manager',
+      'finance_accounts_manager',
+      'marketing_manager',
+      'media_gallery_manager',
+      'hr_staff_manager'
+    ];
+
+    if (role === 'super_admin' || role === 'admin') {
       navigate('/dashboard/super-admin');
+    } else if (staffRoles.includes(role)) {
+      navigate(`/dashboard/${role.replace(/_/g, '-')}`);
+    } else if (['owner', 'vendor', 'owner_and_vendor'].includes(role)) {
+      navigate('/dashboard/vendor');
     } else {
-      // Directs customers, property owners, and vendors directly to Explore page
-      navigate('/explore');
+      navigate('/');
     }
   };
 

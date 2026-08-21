@@ -43,7 +43,9 @@ import {
   Heart,
   Calendar,
   ShieldCheck,
-  DollarSign
+  DollarSign,
+  Star,
+  Gift
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
@@ -196,8 +198,8 @@ export default function StaffDashboard({ overrideRole }) {
       icon: <Building2 className="w-5 h-5 text-purple-400" />,
       navItems: [
         { id: 'tab_1', label: 'Verify Hotels & Homestays', icon: <Building2 size={18} />, badge: '3 Pending' },
-        { id: 'tab_2', label: 'Approve Homestays & Cottages', icon: <Home size={18} /> },
-        { id: 'tab_3', label: 'Verify Eco Resorts & Villas', icon: <Castle size={18} /> },
+        { id: 'tab_2', label: 'Approve Homestays & Cottages', icon: <Building2 size={18} /> },
+        { id: 'tab_3', label: 'Verify Eco Resorts & Villas', icon: <Building2 size={18} /> },
         { id: 'tab_4', label: 'Review Ownership & FSSAI', icon: <FileCheck size={18} /> },
         { id: 'tab_5', label: 'Approve / Reject Host Listings', icon: <CheckCircle2 size={18} /> },
         { id: 'tab_6', label: 'Monitor Property Ratings', icon: <Star size={18} /> }

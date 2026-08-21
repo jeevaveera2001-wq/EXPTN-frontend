@@ -491,11 +491,11 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                           <div className="text-2xl font-black text-slate-900">₹{bkAmount.toLocaleString()}</div>
                           <div className="text-[11px] font-bold text-emerald-600">✓ {bk.paymentStatus || 'Paid via Razorpay'}</div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center w-full sm:w-auto">
                           <button 
                             type="button"
                             onClick={() => setShareModalBooking(bk)}
-                            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
                           >
                             <Share2 size={14} /> Share Stay Pass
                           </button>

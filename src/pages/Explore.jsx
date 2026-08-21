@@ -131,6 +131,9 @@ export default function Explore({ onOpenAuth }) {
   const [groupChildren, setGroupChildren] = useState(0);
 
   // Booking process states
+  const [bookingGuestName, setBookingGuestName] = useState('');
+  const [bookingGuestEmail, setBookingGuestEmail] = useState('');
+  const [bookingGuestPhone, setBookingGuestPhone] = useState('');
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const [isAvailable, setIsAvailable] = useState(true);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -266,6 +269,9 @@ export default function Explore({ onOpenAuth }) {
       return;
     }
     setSelectedStayForBooking(stay);
+    setBookingGuestName(currentUser.name || 'Tourist Traveler');
+    setBookingGuestEmail(currentUser.email || '');
+    setBookingGuestPhone(currentUser.phone || '+91 78717 79134');
     setConfirmedBookingDetails(null);
     setIsAvailable(true);
   };
@@ -276,14 +282,18 @@ export default function Explore({ onOpenAuth }) {
     const bookingId = `ETN-BK-${Math.floor(100000 + Math.random() * 900000)}`;
     const paymentId = `pay_rzp_${Date.now().toString().slice(-8)}`;
 
+    const targetCustomerEmail = (bookingGuestEmail || currentUser?.email || 'exploretamizhagam@gmail.com').trim().toLowerCase();
+    const targetCustomerName = (bookingGuestName || currentUser?.name || 'Tourist Traveler').trim();
+    const targetCustomerPhone = (bookingGuestPhone || currentUser?.phone || '+91 78717 79134').trim();
+
     const bookingPayload = {
       bookingId,
-      userEmail: currentUser.email,
-      customerEmail: currentUser.email,
-      userName: currentUser.name || 'Tourist Traveler',
-      customerName: currentUser.name || 'Tourist Traveler',
-      userPhone: currentUser.phone || '+91 78717 79134',
-      customerPhone: currentUser.phone || '+91 78717 79134',
+      userEmail: targetCustomerEmail,
+      customerEmail: targetCustomerEmail,
+      userName: targetCustomerName,
+      customerName: targetCustomerName,
+      userPhone: targetCustomerPhone,
+      customerPhone: targetCustomerPhone,
       itemTitle: selectedStayForBooking.title,
       propertyTitle: selectedStayForBooking.title,
       propertyId: selectedStayForBooking._id || selectedStayForBooking.id,
@@ -801,7 +811,63 @@ export default function Explore({ onOpenAuth }) {
                   )}
                 </div>
 
-                {/* 3. Automatic Price Breakdown Calculation (+18% GST + 5% Service Fees) */}
+                {/* 3. Guest Contact & Official Voucher Delivery Details */}
+                <div className="p-3.5 rounded-2xl bg-white border border-slate-300 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-900 font-editorial flex items-center gap-1.5">
+                      <span>📬</span> Official Stay Pass Voucher Recipient
+                    </span>
+                    <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                      Instant Email Pass
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 font-editorial mb-1">
+                        Full Name *
+                      </label>
+                      <input 
+                        type="text" 
+                        required
+                        value={bookingGuestName} 
+                        onChange={e => setBookingGuestName(e.target.value)} 
+                        placeholder="e.g. Jeeva Veeramani"
+                        className="w-full p-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-editorial font-bold text-black outline-hidden focus:ring-2 focus:ring-black"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 font-editorial mb-1">
+                        Voucher Email Address *
+                      </label>
+                      <input 
+                        type="email" 
+                        required
+                        value={bookingGuestEmail} 
+                        onChange={e => setBookingGuestEmail(e.target.value)} 
+                        placeholder="e.g. exploretamizhagam@gmail.com"
+                        className="w-full p-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-mono font-bold text-black outline-hidden focus:ring-2 focus:ring-black"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 font-editorial mb-1">
+                      Mobile Phone Number *
+                    </label>
+                    <input 
+                      type="tel" 
+                      required
+                      value={bookingGuestPhone} 
+                      onChange={e => setBookingGuestPhone(e.target.value)} 
+                      placeholder="+91 78717 79134"
+                      className="w-full p-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-mono font-bold text-black outline-hidden focus:ring-2 focus:ring-black"
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Automatic Price Breakdown Calculation (+18% GST + 5% Service Fees) */}
                 <div className="p-4 rounded-2xl bg-[#fbf8f5] border border-[#242429]/15 space-y-2 font-mono text-xs">
                   <div className="flex items-center justify-between text-slate-700 font-editorial border-b border-[#242429]/10 pb-1.5">
                     <span className="flex items-center gap-1 font-bold">

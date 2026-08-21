@@ -48,8 +48,9 @@ import { downloadBookingReceiptPDF } from '../utils/receiptGenerator';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=800&q=80';
 
-// Curated verified stays fallback
+// Curated verified stays fallback across particular Tamil Nadu circuits
 const DEFAULT_FEATURED_STAYS = [
+  // 1. Nilgiris (Ooty & Coonoor)
   {
     id: 'prop-1',
     title: 'Ooty Lakeview Grand Resort',
@@ -58,14 +59,16 @@ const DEFAULT_FEATURED_STAYS = [
     type: 'Lakeview Resort',
     price: 4800,
     pricePerNight: 4800,
-    rating: 4.9,
+    rating: 4.95,
     reviews: 52,
     image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
     desc: 'Luxury glass lakeview resort situated directly on the shore of Ooty Lake with private boat deck.',
     amenities: ['Lake View Balcony', 'Boat Deck', 'Fireplace', 'Free WiFi'],
     ownerName: 'Nilgiri Heritage Hosts',
     ownerEmail: 'lastzetas@gmail.com',
-    status: 'Approved'
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
   },
   {
     id: 'prop-2',
@@ -82,13 +85,76 @@ const DEFAULT_FEATURED_STAYS = [
     amenities: ['360 Mountain View', 'Tea Estate Walk', 'Organic Kitchen', 'Heater'],
     ownerName: 'Green Valley Stays',
     ownerEmail: 'greenvalley@stays.com',
-    status: 'Approved'
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
   },
   {
     id: 'prop-3',
+    title: 'Coonoor Tea Heritage Planter Bungalow',
+    district: 'Nilgiris (Ooty)',
+    location: 'Singara Estate, Coonoor, Nilgiris',
+    type: 'Heritage Cottage',
+    price: 6200,
+    pricePerNight: 6200,
+    rating: 4.96,
+    reviews: 42,
+    image: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&q=80',
+    desc: 'Colonial 1920s British planter estate bungalow surrounded by 50 acres of rolling green tea plantations.',
+    amenities: ['Private Tea Garden', 'Fireplace', 'Butler Service', 'Mountain Panorama'],
+    ownerName: 'Nilgiri Planters Trust',
+    ownerEmail: 'coonoor@stays.com',
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
+  },
+
+  // 2. Kodaikanal
+  {
+    id: 'prop-4',
+    title: 'Kodai Star Lakeview Pine Cottage',
+    district: 'Kodaikanal (Princess of Hills)',
+    location: 'Lake Road, Kodaikanal',
+    type: 'Lakeview Cottage',
+    price: 4600,
+    pricePerNight: 4600,
+    rating: 4.91,
+    reviews: 45,
+    image: 'https://images.unsplash.com/photo-1587061949409-02df41d5e562?auto=format&fit=crop&w=800&q=80',
+    desc: 'Private pine wood cottage with direct panorama of Kodai Lake and pine forest trail.',
+    amenities: ['Kodai Lake Panorama', 'Private Bonfire Yard', 'Pine Forest View', 'Hot Water'],
+    ownerName: 'Kodaikanal Escapes',
+    ownerEmail: 'kodai@escapes.com',
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
+  },
+  {
+    id: 'prop-5',
+    title: 'Pillar Rocks Misty Cloud Villa & Resort',
+    district: 'Kodaikanal (Princess of Hills)',
+    location: 'Observatory Road, Pillar Rocks, Kodaikanal',
+    type: 'Mountain View Resort',
+    price: 5800,
+    pricePerNight: 5800,
+    rating: 4.93,
+    reviews: 61,
+    image: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80',
+    desc: 'Cliffside resort nestled beside Pillar Rocks offering breathtaking cloud-top valley vistas.',
+    amenities: ['Cliff View Balcony', 'Heated Jacuzzi', 'Star Gazing Deck', 'Bonfire & BBQ'],
+    ownerName: 'Kodai Mist Hospitality',
+    ownerEmail: 'mist@escapes.com',
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
+  },
+
+  // 3. Thanjavur & Chettinad
+  {
+    id: 'prop-6',
     title: 'Cauvery River View Heritage Resort',
     district: 'Thanjavur (Tanjore)',
-    location: 'Grand Anicut Road, Cauvery River Front',
+    location: 'Grand Anicut Road, Cauvery River Front, Thanjavur',
     type: 'River View Resort',
     price: 4200,
     pricePerNight: 4200,
@@ -99,24 +165,154 @@ const DEFAULT_FEATURED_STAYS = [
     amenities: ['River Front Deck', 'Temple Distance 1km', 'Swimming Pool', 'Tamil Cuisine'],
     ownerName: 'Chola Royal Homestays',
     ownerEmail: 'cholaroyal@stays.com',
-    status: 'Approved'
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
   },
   {
-    id: 'prop-4',
-    title: 'Kodai Star Lakeview Pine Cottage',
-    district: 'Kodaikanal (Princess of Hills)',
-    location: 'Lake Road, Kodaikanal',
-    type: 'Lakeview Cottage',
-    price: 4600,
-    pricePerNight: 4600,
-    rating: 4.82,
-    reviews: 45,
-    image: 'https://images.unsplash.com/photo-1587061949409-02df41d5e562?auto=format&fit=crop&w=800&q=80',
-    desc: 'Private pine wood cottage with direct panorama of Kodai Lake and pine forest trail.',
-    amenities: ['Kodai Lake Panorama', 'Private Bonfire Yard', 'Pine Forest View', 'Hot Water'],
-    ownerName: 'Kodaikanal Escapes',
-    ownerEmail: 'kodai@escapes.com',
-    status: 'Approved'
+    id: 'prop-7',
+    title: 'Chidambara Vilas Chettinad Heritage Palace',
+    district: 'Thanjavur (Tanjore)',
+    location: 'Kadiapatti, Pudukkottai, Chettinad Circuit',
+    type: 'Heritage Palace',
+    price: 7500,
+    pricePerNight: 7500,
+    rating: 4.98,
+    reviews: 112,
+    image: 'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=800&q=80',
+    desc: '110-year-old authentic Chettinad mansion with Belgian glass chandeliers, Italian marble courtyards, and royal banquet feasts.',
+    amenities: ['Royal Courtyard', 'Authentic Chettinad Kitchen', 'Heritage Pool', 'Antique Furnishing'],
+    ownerName: 'Chettinad Heritage Trust',
+    ownerEmail: 'vilas@chettinad.com',
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
+  },
+
+  // 4. Mahabalipuram & ECR Coast
+  {
+    id: 'prop-8',
+    title: 'Bay of Bengal Oceanfront Luxury Beach Resort',
+    district: 'Mahabalipuram (Mamallapuram)',
+    location: 'East Coast Road (ECR), Mahabalipuram',
+    type: 'Beachfront Resort',
+    price: 6800,
+    pricePerNight: 6800,
+    rating: 4.94,
+    reviews: 93,
+    image: 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?auto=format&fit=crop&w=800&q=80',
+    desc: 'Private beachfront luxury villa resort featuring direct ocean sand access, infinity pool, and coastal seafood fine dining.',
+    amenities: ['Private Beach Access', 'Infinity Ocean Pool', 'Sunset Lounge', 'Ayurvedic Spa'],
+    ownerName: 'ECR Coastal Retreats',
+    ownerEmail: 'bayresort@ecr.com',
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
+  },
+
+  // 5. Yercaud (Shevaroy Hills)
+  {
+    id: 'prop-9',
+    title: 'Shevaroy Hills Cloud9 Glass Treehouse & Resort',
+    district: 'Yercaud (Jewel of Shevaroy Hills)',
+    location: 'Tipperary Viewpoint Road, Yercaud',
+    type: 'Mountain View Resort',
+    price: 4900,
+    pricePerNight: 4900,
+    rating: 4.89,
+    reviews: 58,
+    image: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=800&q=80',
+    desc: 'Elevated glass-walled luxury treehouse suspended over the coffee valley canopy of Shevaroy Hills.',
+    amenities: ['Panoramic Treehouse', 'Coffee Estate Walk', 'Glass Balcony', 'Campfire & BBQ'],
+    ownerName: 'Yercaud Canopy Escapes',
+    ownerEmail: 'yercaud@stays.com',
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
+  },
+
+  // 6. Kanyakumari
+  {
+    id: 'prop-10',
+    title: 'Cape Comorin Oceanfront Sunrise Resort',
+    district: 'Kanyakumari',
+    location: 'Beach Road, Near Sunset Point, Kanyakumari',
+    type: 'Beachfront Resort',
+    price: 4500,
+    pricePerNight: 4500,
+    rating: 4.87,
+    reviews: 76,
+    image: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80',
+    desc: 'Oceanfront resort facing the Triveni Sangam with unobstructed sunrise and sunset horizon suites.',
+    amenities: ['Triveni Sangam View', 'Rooftop Sunrise Deck', 'Multi-Cuisine Restaurant', 'Swimming Pool'],
+    ownerName: 'Cape Comorin Hospitality',
+    ownerEmail: 'cape@stays.com',
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
+  },
+
+  // 7. Rameswaram
+  {
+    id: 'prop-11',
+    title: 'Pamban Palm Sea Breeze Beachfront Resort',
+    district: 'Rameswaram (Pamban Island)',
+    location: 'Dhanushkodi Coastal Road, Rameswaram',
+    type: 'Beachfront Resort',
+    price: 3900,
+    pricePerNight: 3900,
+    rating: 4.86,
+    reviews: 64,
+    image: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80',
+    desc: 'Island seaside cottages set amidst coconut groves overlooking the emerald Gulf of Mannar waters.',
+    amenities: ['Private Sea Beach', 'Temple Shuttle', 'Seafood Grill', 'Free High-speed WiFi'],
+    ownerName: 'Pamban Island Retreats',
+    ownerEmail: 'pamban@stays.com',
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
+  },
+
+  // 8. Valparai & Pollachi
+  {
+    id: 'prop-12',
+    title: 'Anamalai Tea Estate Mist Heritage Bungalow',
+    district: 'Valparai',
+    location: 'Waterfall Estate Road, Valparai, Anamalai Hills',
+    type: 'Heritage Cottage',
+    price: 5200,
+    pricePerNight: 5200,
+    rating: 4.95,
+    reviews: 49,
+    image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
+    desc: 'Secluded tea estate villa at 3,500ft altitude surrounded by evergreen rainforest and lion-tailed macaque habitats.',
+    amenities: ['Rainforest Safari', 'Tea Factory Visit', 'Private Chef', 'Mountain River Walk'],
+    ownerName: 'Anamalai Wild Stays',
+    ownerEmail: 'valparai@stays.com',
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
+  },
+
+  // 9. Madurai Heritage
+  {
+    id: 'prop-13',
+    title: 'Madurai Royal Heritage Palace Stay',
+    district: 'Madurai (Meenakshi Amman City)',
+    location: 'Pasumalai Hills, Madurai',
+    type: 'Heritage Palace',
+    price: 5600,
+    pricePerNight: 5600,
+    rating: 4.92,
+    reviews: 88,
+    image: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80',
+    desc: 'Hilltop heritage colonial estate with landscaped gardens overlooking the temple city of Madurai.',
+    amenities: ['Temple Panorama', 'Peacock Gardens', 'Heritage Lounge', 'Tamil Royal Thali'],
+    ownerName: 'Pandya Royal Stays',
+    ownerEmail: 'madurai@stays.com',
+    status: 'Approved',
+    isPremium: true,
+    isFeatured: true
   }
 ];
 
@@ -323,30 +519,39 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
 
   const destinationOptions = [
     'All Tamil Nadu',
-    'Ooty (Nilgiris)',
+    'Nilgiris (Ooty & Coonoor)',
     'Kodaikanal (Princess of Hills)',
-    'Kanyakumari',
-    'Rameswaram (Pamban Island)',
-    'Madurai (Meenakshi Amman City)',
-    'Mahabalipuram (Mamallapuram)',
+    'Thanjavur & Chettinad',
+    'Mahabalipuram (Mamallapuram / ECR)',
     'Yercaud (Jewel of Shevaroy Hills)',
-    'Hogenakkal Falls',
-    'Courtallam',
-    'Thanjavur (Tanjore)',
-    'Coimbatore',
-    'Valparai',
-    'Kolli Hills'
+    'Kanyakumari (Oceanfront)',
+    'Rameswaram (Pamban Island)',
+    'Valparai & Pollachi (Anamalai)',
+    'Madurai (Meenakshi Heritage)'
+  ];
+
+  const areaCircuits = [
+    { id: 'All', label: 'All Particular Areas', icon: '✨' },
+    { id: 'Nilgiris (Ooty & Coonoor)', label: 'Nilgiris (Ooty & Coonoor)', icon: '⛰️' },
+    { id: 'Kodaikanal (Princess of Hills)', label: 'Kodaikanal', icon: '🌲' },
+    { id: 'Thanjavur & Chettinad', label: 'Thanjavur & Chettinad', icon: '🛕' },
+    { id: 'Mahabalipuram (Mamallapuram / ECR)', label: 'Mahabalipuram / ECR', icon: '🏖️' },
+    { id: 'Yercaud (Jewel of Shevaroy Hills)', label: 'Yercaud (Shevaroys)', icon: '🏞️' },
+    { id: 'Kanyakumari (Oceanfront)', label: 'Kanyakumari', icon: '🌊' },
+    { id: 'Rameswaram (Pamban Island)', label: 'Rameswaram Island', icon: '🏝️' },
+    { id: 'Valparai & Pollachi (Anamalai)', label: 'Valparai (Anamalai)', icon: '🌿' },
+    { id: 'Madurai (Meenakshi Heritage)', label: 'Madurai Heritage', icon: '🏛️' }
   ];
 
   const stayCategories = [
-    { name: 'All', label: 'All Stays', icon: '✨' },
-    { name: 'Resort', label: 'Resort', icon: '🏰' },
-    { name: 'Home stay', label: 'Home Stay', icon: '🏡' },
-    { name: 'Lakeview resort', label: 'Lakeview Resort', icon: '🏞️' },
-    { name: 'River view resort', label: 'River View Resort', icon: '🌊' },
-    { name: 'Mountain view resort', label: 'Mountain View Resort', icon: '⛰️' },
-    { name: 'Heritage Cottage', label: 'Heritage Cottage', icon: '🛖' },
-    { name: 'Forest Eco Stay', label: 'Forest Eco Stay', icon: '🌲' }
+    { name: 'All', label: 'All Stays & Resorts', icon: '✨' },
+    { name: 'Resort', label: 'Luxury Resort', icon: '🏰' },
+    { name: 'Lakeview Resort', label: 'Lakeview Resort', icon: '🏞️' },
+    { name: 'Mountain View Resort', label: 'Mountain View Resort', icon: '⛰️' },
+    { name: 'Beachfront Resort', label: 'Beachfront Resort', icon: '🏖️' },
+    { name: 'River View Resort', label: 'River View Resort', icon: '🌊' },
+    { name: 'Heritage Palace', label: 'Heritage Palace & Villa', icon: '🏛️' },
+    { name: 'Heritage Cottage', label: 'Heritage Cottage', icon: '🛖' }
   ];
 
   const apiFetch = useCallback(async (endpoint, options = {}) => {
@@ -371,11 +576,12 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           const approved = data.filter(p => p.status === 'Approved' || !p.status);
-          if (approved.length > 0) {
-            setLiveProperties(approved);
-          } else {
-            setLiveProperties(DEFAULT_FEATURED_STAYS);
-          }
+          
+          // Merge uploaded properties with curated DEFAULT_FEATURED_STAYS
+          const defaultIds = new Set(DEFAULT_FEATURED_STAYS.map(s => s.id));
+          const customProperties = approved.filter(p => !defaultIds.has(p.id) && !defaultIds.has(p._id));
+          
+          setLiveProperties([...customProperties, ...DEFAULT_FEATURED_STAYS]);
         } else {
           setLiveProperties(DEFAULT_FEATURED_STAYS);
         }
@@ -597,11 +803,36 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
   // Filtered Properties List
   const displayedProperties = liveProperties.filter(stay => {
     const sType = String(stay.type || stay.propertyType || '').toLowerCase();
-    const sDistrict = String(stay.district || stay.location || '').toLowerCase();
-    const sTitle = String(stay.title || '').toLowerCase();
+    const sDistrict = String(stay.district || stay.location || stay.city || '').toLowerCase();
+    const sTitle = String(stay.title || stay.name || '').toLowerCase();
     const sDesc = String(stay.desc || stay.description || '').toLowerCase();
 
-    const matchesDistrict = (district === 'All' || district === 'All Tamil Nadu' || sDistrict.includes(district.split(' ')[0].toLowerCase()));
+    let matchesDistrict = true;
+    if (district !== 'All' && district !== 'All Tamil Nadu') {
+      const dLower = district.toLowerCase();
+      if (dLower.includes('ooty') || dLower.includes('nilgiri') || dLower.includes('coonoor')) {
+        matchesDistrict = sDistrict.includes('ooty') || sDistrict.includes('nilgiri') || sDistrict.includes('coonoor') || sTitle.includes('ooty') || sTitle.includes('nilgiri');
+      } else if (dLower.includes('kodai')) {
+        matchesDistrict = sDistrict.includes('kodai') || sTitle.includes('kodai');
+      } else if (dLower.includes('thanjavur') || dLower.includes('tanjore') || dLower.includes('chettinad')) {
+        matchesDistrict = sDistrict.includes('thanjavur') || sDistrict.includes('tanjore') || sDistrict.includes('chettinad') || sDistrict.includes('pudukkottai') || sDistrict.includes('cauvery') || sTitle.includes('cauvery') || sTitle.includes('chettinad') || sTitle.includes('thanjavur');
+      } else if (dLower.includes('mahabalipuram') || dLower.includes('mamallapuram') || dLower.includes('ecr')) {
+        matchesDistrict = sDistrict.includes('mahabalipuram') || sDistrict.includes('mamallapuram') || sDistrict.includes('ecr') || sTitle.includes('mahabalipuram') || sTitle.includes('bay of bengal');
+      } else if (dLower.includes('yercaud') || dLower.includes('shevaroy')) {
+        matchesDistrict = sDistrict.includes('yercaud') || sDistrict.includes('shevaroy') || sTitle.includes('yercaud') || sTitle.includes('shevaroy');
+      } else if (dLower.includes('kanyakumari')) {
+        matchesDistrict = sDistrict.includes('kanyakumari') || sTitle.includes('kanyakumari') || sTitle.includes('cape comorin');
+      } else if (dLower.includes('rameswaram') || dLower.includes('pamban')) {
+        matchesDistrict = sDistrict.includes('rameswaram') || sDistrict.includes('pamban') || sTitle.includes('rameswaram') || sTitle.includes('pamban');
+      } else if (dLower.includes('valparai') || dLower.includes('pollachi') || dLower.includes('anamalai')) {
+        matchesDistrict = sDistrict.includes('valparai') || sDistrict.includes('anamalai') || sDistrict.includes('pollachi') || sTitle.includes('valparai') || sTitle.includes('anamalai');
+      } else if (dLower.includes('madurai') || dLower.includes('pasumalai')) {
+        matchesDistrict = sDistrict.includes('madurai') || sDistrict.includes('pasumalai') || sTitle.includes('madurai');
+      } else {
+        matchesDistrict = sDistrict.includes(district.split(' ')[0].toLowerCase());
+      }
+    }
+
     const matchesType = (stayType === 'All' || sType.includes(stayType.toLowerCase()));
     const matchesQuery = !searchQuery || sTitle.includes(searchQuery.toLowerCase()) || sDesc.includes(searchQuery.toLowerCase()) || sDistrict.includes(searchQuery.toLowerCase());
 
@@ -613,21 +844,21 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
       
       {/* 🧭 HEADING & SEARCH CONSOLE SECTION */}
       <section className="pt-10 sm:pt-14 pb-8 px-4 text-center">
-        <div className="max-w-4xl mx-auto space-y-4">
+        <div className="max-w-5xl mx-auto space-y-4">
           
           {/* Tagline Badge */}
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#242429] text-white text-[10px] sm:text-xs font-fira-mono font-bold shadow-md">
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#242429] text-white text-[10px] sm:text-xs font-fira-mono font-bold shadow-md">
             <Sparkles size={12} className="text-amber-400" />
-            <span>AUTHENTIC TAMIL NADU STAYS & RESORTS</span>
+            <span>✨ PREMIUM & FEATURED STAYS & LUXURY RESORTS</span>
           </div>
 
           {/* Main Heading */}
-          <h1 className="text-3xl sm:text-4xl md:text-6xl font-editorial font-extrabold text-[#000000] tracking-tight leading-tight">
-            Explore Verified Properties
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-editorial font-extrabold text-[#000000] tracking-tight leading-tight">
+            Exclusive Luxury Stays & Resorts
           </h1>
 
-          <p className="text-xs sm:text-sm md:text-base text-slate-600 font-editorial max-w-xl mx-auto leading-relaxed">
-            Discover verified mountain view resorts, lakeside cottages, riverfront villas, and heritage homestays with instant live booking.
+          <p className="text-xs sm:text-sm md:text-base text-slate-600 font-editorial max-w-2xl mx-auto leading-relaxed">
+            Discover verified 5-star mountain villas, lakeview estates, riverfront heritage resorts, and beachfront suites in specific Tamil Nadu circuits.
           </p>
 
           {/* 🔍 SEARCH CONSOLE: DESTINATION CIRCUIT | STAY OPTIONS | SEARCH STAYS */}
@@ -641,7 +872,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
               <select 
                 value={district} 
                 onChange={(e) => setDistrict(e.target.value)}
-                className="w-full p-2.5 sm:p-3 rounded-2xl bg-slate-50 border border-slate-300 text-xs font-fira-mono font-bold text-black focus:ring-2 focus:ring-black outline-hidden"
+                className="w-full p-2.5 sm:p-3 rounded-2xl bg-slate-50 border border-slate-300 text-xs font-fira-mono font-bold text-black focus:ring-2 focus:ring-black outline-hidden cursor-pointer"
               >
                 {destinationOptions.map(opt => (
                   <option key={opt} value={opt}>{opt}</option>
@@ -652,12 +883,12 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
             {/* 2. All Stay Options */}
             <div>
               <label className="block font-fira-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1.5 flex items-center gap-1">
-                <HomeIcon size={11} className="text-cyan-700" /> All Stay Options
+                <HomeIcon size={11} className="text-cyan-700" /> Stay / Resort Type
               </label>
               <select 
                 value={stayType} 
                 onChange={(e) => setStayType(e.target.value)}
-                className="w-full p-2.5 sm:p-3 rounded-2xl bg-slate-50 border border-slate-300 text-xs font-fira-mono font-bold text-black focus:ring-2 focus:ring-black outline-hidden"
+                className="w-full p-2.5 sm:p-3 rounded-2xl bg-slate-50 border border-slate-300 text-xs font-fira-mono font-bold text-black focus:ring-2 focus:ring-black outline-hidden cursor-pointer"
               >
                 {stayCategories.map(cat => (
                   <option key={cat.name} value={cat.name}>{cat.icon} {cat.label}</option>
@@ -673,7 +904,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                   const el = document.getElementById('verified-properties-grid');
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="w-full h-[44px] sm:h-[48px] rounded-2xl bg-[#242429] text-white hover:bg-black text-xs font-bold font-editorial flex items-center justify-center gap-2 shadow-md transition-all"
+                className="w-full h-[44px] sm:h-[48px] rounded-2xl bg-[#242429] text-white hover:bg-black text-xs font-bold font-editorial flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
               >
                 <Search size={14} /> Search Stays ({displayedProperties.length})
               </button>
@@ -688,7 +919,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                 key={cat.name}
                 type="button"
                 onClick={() => setStayType(cat.name)}
-                className={`px-3 sm:px-4 py-1.5 rounded-full text-[11px] font-fira-mono font-bold flex items-center gap-1.5 transition-all shadow-xs ${
+                className={`px-3 sm:px-4 py-1.5 rounded-full text-[11px] font-fira-mono font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
                   stayType === cat.name 
                     ? 'bg-[#242429] text-white ring-2 ring-black/20' 
                     : 'bg-white/80 hover:bg-white text-slate-700 border border-slate-300'
@@ -706,30 +937,62 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
       {/* 🏡 VERIFIED PROPERTIES: ALL PROPERTIES LISTED UNDER HEADING */}
       <section id="verified-properties-grid" className="max-w-7xl mx-auto px-3 sm:px-6 pt-4">
         
+        {/* 📍 PARTICULAR AREA CIRCUIT QUICK SELECTOR BAR */}
+        <div className="mb-6 bg-white/95 backdrop-blur-md p-3.5 sm:p-4 rounded-3xl border border-[#242429]/15 shadow-sm space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <span className="text-[10px] sm:text-xs font-fira-mono font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+              <MapPin size={13} className="text-rose-600" /> Click A Particular Area Circuit:
+            </span>
+            <span className="text-xs font-editorial font-extrabold text-black">
+              {district === 'All' || district === 'All Tamil Nadu' ? '✨ Showing Stays Across All Tamil Nadu Areas' : `📍 Exact Stays in ${district} (${displayedProperties.length})`}
+            </span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1.5 no-scrollbar flex-wrap sm:flex-nowrap">
+            {areaCircuits.map(circuit => {
+              const isSelected = (circuit.id === 'All' && (district === 'All' || district === 'All Tamil Nadu')) || district === circuit.id || district.includes(circuit.id);
+              return (
+                <button
+                  key={circuit.id}
+                  type="button"
+                  onClick={() => setDistrict(circuit.id)}
+                  className={`px-3.5 py-2 rounded-2xl text-xs font-editorial font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer shadow-xs ${
+                    isSelected
+                      ? 'bg-[#242429] text-white ring-2 ring-black/20 scale-[1.02]'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200'
+                  }`}
+                >
+                  <span>{circuit.icon}</span>
+                  <span>{circuit.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Section Header Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6 border-b border-[#242429]/15 pb-4">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] sm:text-xs font-fira-mono font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300">
-                ✓ ALL VERIFIED PROPERTIES
+                ✓ FEATURED & PREMIUM VERIFIED
               </span>
               <span className="text-xs font-mono font-bold text-slate-500">
-                ({displayedProperties.length} Stays Available)
+                ({displayedProperties.length} Properties in {district === 'All' || district === 'All Tamil Nadu' ? 'Tamil Nadu' : district})
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl md:text-3xl font-editorial font-bold text-black mt-1">
-              Curated Luxury Stays & Resort Catalog
+              {district === 'All' || district === 'All Tamil Nadu' ? 'Curated Luxury Stays & Resort Catalog' : `Exact Stays & Resorts in ${district}`}
             </h2>
           </div>
 
           {/* Active Filter Indicators */}
-          {(district !== 'All' && district !== 'All Tamil Nadu' || stayType !== 'All') && (
+          {((district !== 'All' && district !== 'All Tamil Nadu') || stayType !== 'All') && (
             <button
               type="button"
               onClick={() => { setDistrict('All'); setStayType('All'); }}
-              className="text-xs font-mono font-bold text-rose-700 hover:text-rose-900 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-full flex items-center gap-1.5 w-fit"
+              className="text-xs font-mono font-bold text-rose-700 hover:text-rose-900 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-full flex items-center gap-1.5 w-fit cursor-pointer"
             >
-              <X size={12} /> Clear Filter ({district !== 'All' ? district : ''} {stayType !== 'All' ? `· ${stayType}` : ''})
+              <X size={12} /> Clear Filter ({district !== 'All' && district !== 'All Tamil Nadu' ? district : ''} {stayType !== 'All' ? `· ${stayType}` : ''})
             </button>
           )}
         </div>

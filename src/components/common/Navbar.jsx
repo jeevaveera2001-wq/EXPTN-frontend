@@ -242,7 +242,10 @@ export default function Navbar({ onOpenAuth }) {
           <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
             <Link to="/" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all">OVERVIEW</Link>
             <Link to="/explore" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all">EXPLORE</Link>
-            <Link to="/hotels" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all">STAYS & RESORTS</Link>
+            <Link to="/hotels" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] bg-[#ffffff]/60 hover:bg-[#ffffff] border border-[#242429]/15 hover:border-[#242429]/40 transition-all font-bold flex items-center gap-1.5 shadow-xs">
+              <Sparkles size={12} className="text-amber-500 shrink-0" />
+              <span>PREMIUM & FEATURED STAYS & RESORTS</span>
+            </Link>
             <Link to="/packages" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all">PACKAGES</Link>
           </nav>
 
@@ -528,9 +531,10 @@ export default function Navbar({ onOpenAuth }) {
             <Link 
               to="/hotels" 
               onClick={() => setMobileNavOpen(false)}
-              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold"
+              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold flex items-center gap-1.5"
             >
-              STAYS & RESORTS
+              <Sparkles size={12} className="text-amber-500 shrink-0" />
+              <span>PREMIUM & FEATURED STAYS & RESORTS</span>
             </Link>
             <Link 
               to="/packages" 

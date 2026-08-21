@@ -228,39 +228,6 @@ export default function Explore({ onOpenAuth }) {
     ];
   };
 
-  // ⭐ Verified reviews generator
-  const getPropertyReviews = (stay) => {
-    return [
-      {
-        id: 'rev-1',
-        name: 'Ananya Ramaswamy',
-        date: 'August 2026',
-        rating: 5,
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-        comment: 'Breathtaking waterfall and valley views! The hospitality was unmatched, and authentic Chettinad/Tamil dinner served on the private balcony deck was unforgettable. 10/10 stay.',
-        tripType: 'Couple Getaway'
-      },
-      {
-        id: 'rev-2',
-        name: 'Karthik Sundaram',
-        date: 'July 2026',
-        rating: 5,
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-        comment: 'Super clean luxury villa with panoramic hill views. Seamless instant check-in, polite host staff, and fast Wi-Fi. Highly recommended for family vacations.',
-        tripType: 'Family Vacation'
-      },
-      {
-        id: 'rev-3',
-        name: 'Dr. Priya Venkatesh',
-        date: 'June 2026',
-        rating: 5,
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-        comment: 'Tranquil peaceful retreat away from city noise. Traditional filter coffee on the sunrise deck, geyser hot water, and 24/7 security. Absolutely loved it.',
-        tripType: 'Solo Retreat'
-      }
-    ];
-  };
-
   // 📝 Generate Formatted Stay Pass Share Text
   const getShareMessage = (bk) => {
     if (!bk) return '';
@@ -846,7 +813,6 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
       {selectedPropertyDetails && (() => {
         const stay = selectedPropertyDetails;
         const gallery = getPropertyGallery(stay);
-        const reviews = getPropertyReviews(stay);
         const stayPrice = stay.pricePerNight || stay.price || 4800;
         const stayAmenities = stay.amenities || [
           'Panoramic Mountain & Valley View',
@@ -877,7 +843,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                         {stay.type || stay.propertyType || 'VERIFIED RESORT'}
                       </span>
                       <span className="text-[10px] font-mono text-slate-300">
-                        ⭐ {stay.rating || '4.9'} (128 Reviews)
+                        ⭐ {stay.reviews && stay.reviews.length > 0 ? `${stay.rating || '4.9'} (${stay.reviews.length} Reviews)` : 'Verified Listing'}
                       </span>
                     </div>
                     <h3 className="font-extrabold text-sm sm:text-base text-white truncate max-w-md mt-0.5">
@@ -971,9 +937,13 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                       ⭐
                     </div>
                     <div>
-                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase block">Guest Rating</span>
-                      <p className="font-bold text-slate-900 text-xs">4.9 / 5.0 Star Rating</p>
-                      <span className="text-[10px] text-amber-700 font-medium">Top 5% stays in Tamil Nadu</span>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase block">Listing Verification</span>
+                      <p className="font-bold text-slate-900 text-xs">
+                        {stay.reviews && stay.reviews.length > 0 ? `${stay.rating || '4.9'} / 5.0 Rating` : 'Verified Stay'}
+                      </p>
+                      <span className="text-[10px] text-amber-700 font-medium">
+                        {stay.reviews && stay.reviews.length > 0 ? `${stay.reviews.length} Guest Reviews` : 'Certified Quality Stay'}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -984,7 +954,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                     <span>📖</span> About This Property & Experience
                   </h4>
                   <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-editorial bg-slate-50/50 p-4 rounded-2xl border border-slate-200">
-                    {stay.desc || stay.description || 'Nestled in the lush hills and serene landscapes of Tamil Nadu, this verified stay provides panoramic views, pure mountain air, and luxury comfort. Designed with authentic heritage architecture and modern luxury amenities, guests can unwind on the private sunrise deck, experience authentic South Indian flavors, and enjoy complete tranquility.'}
+                    {stay.desc || stay.description || 'Nestled in the serene landscapes of Tamil Nadu, this verified stay provides panoramic views, pure mountain air, and luxury comfort. Designed with authentic heritage architecture and modern luxury amenities, guests can unwind on the private deck and experience authentic hospitality.'}
                   </p>
                 </div>
 
@@ -1003,55 +973,136 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                   </div>
                 </div>
 
-                {/* 5. Rules & Regulations (High Impact Section) */}
-                <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-3">
-                  <h4 className="text-sm font-black text-amber-950 flex items-center gap-2">
-                    <span>📜</span> Property Rules & Check-In Guidelines
+                {/* 5. 📜 RULES & REGULATIONS (OWNER DECLARED + PLATFORM MANDATORY) */}
+                <div className="space-y-4">
+                  <h4 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <span>📜</span> Rules & Guidelines
                   </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-amber-900">
-                    <div className="space-y-1">
-                      <p><strong>🕒 Check-In & Check-Out:</strong> Check-In from 12:00 PM | Check-Out until 11:00 AM</p>
-                      <p><strong>🪪 ID Proof Mandatory:</strong> Valid Government photo ID required for all adult guests.</p>
-                      <p><strong>🚭 Smoking:</strong> Non-smoking inside bedrooms (designated outdoor spaces available).</p>
+
+                  {/* A. Host / Owner Declared House Rules */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/80 border border-amber-200 space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">🏡</span>
+                      <h5 className="text-xs sm:text-sm font-black text-amber-950 uppercase tracking-wide">
+                        House Rules Declared by Property Host ({stay.ownerName || 'Host'})
+                      </h5>
                     </div>
-                    <div className="space-y-1">
-                      <p><strong>🐾 Pets Policy:</strong> Pet-friendly upon prior host confirmation.</p>
-                      <p><strong>🤫 Quiet Hours:</strong> 10:00 PM to 06:00 AM to preserve natural mountain peacefulness.</p>
-                      <p><strong>💰 Cancellation Policy:</strong> 100% full refund on cancellations made 24 hours prior to check-in.</p>
+                    
+                    <div className="space-y-1.5 pt-1">
+                      {(() => {
+                        const ownerRules = (stay.ownerRules && stay.ownerRules.length > 0)
+                          ? stay.ownerRules
+                          : [
+                              'Check-In: 12:00 PM onwards | Check-Out: 11:00 AM',
+                              'Mandatory valid Government ID proof required for all adult guests',
+                              'Strictly non-smoking inside bedrooms (designated outdoor smoking zones available)',
+                              'Pets allowed upon prior host approval',
+                              'Quiet hours observed after 10:00 PM for peaceful mountain ambiance'
+                            ];
+
+                        return ownerRules.map((rule, rIdx) => (
+                          <div key={rIdx} className="flex items-start gap-2 text-xs text-amber-900">
+                            <span className="text-amber-600 font-bold mt-0.5">•</span>
+                            <span>{rule}</span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* B. Platform Mandatory Code of Conduct & Cleanliness Rules (Our Side Rules) */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 text-white space-y-3 shadow-sm border border-slate-800">
+                    <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                      <ShieldCheck size={16} className="text-emerald-400" />
+                      <h5 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
+                        Explore Tamil Nadu Mandatory Guest Conduct & Eco-Rules
+                      </h5>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-300">
+                      <div className="flex items-start gap-2.5 bg-slate-800/60 p-3 rounded-xl border border-slate-700/50">
+                        <span className="text-base">🔇</span>
+                        <div>
+                          <strong className="text-white block mb-0.5">Strict Non-Disturbance Policy:</strong>
+                          <span>No shouting, screaming, or loud music that disturbs neighboring guests, local residents, or hill wildlife.</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2.5 bg-slate-800/60 p-3 rounded-xl border border-slate-700/50">
+                        <span className="text-base">🗑️</span>
+                        <div>
+                          <strong className="text-white block mb-0.5">Eco-Cleanliness (Dustbin Rule):</strong>
+                          <span>All trash, plastics, and food waste must be discarded in designated dustbins. Strictly zero-tolerance for littering on lawns, grounds, or nature.</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2.5 bg-slate-800/60 p-3 rounded-xl border border-slate-700/50">
+                        <span className="text-base">🪪</span>
+                        <div>
+                          <strong className="text-white block mb-0.5">Mandatory ID Verification:</strong>
+                          <span>Physical or digital Government photo ID (Aadhaar / Passport / Voter ID) is mandatory for every adult guest.</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2.5 bg-slate-800/60 p-3 rounded-xl border border-slate-700/50">
+                        <span className="text-base">🚭</span>
+                        <div>
+                          <strong className="text-white block mb-0.5">Fire Safety & Room Care:</strong>
+                          <span>Strictly non-smoking inside rooms. Open bonfires only allowed in designated host campfire zones.</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* 6. Authentic Guest Reviews */}
+                {/* 6. Authentic Guest Reviews (No Fake Reviews) */}
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <h4 className="text-base font-black text-slate-900 flex items-center gap-2">
-                      <span>⭐</span> Guest Reviews ({reviews.length})
+                      <span>⭐</span> Verified Guest Reviews ({stay.reviews ? stay.reviews.length : 0})
                     </h4>
-                    <span className="text-xs font-mono font-bold text-amber-600">4.9 Overall Rating</span>
+                    {stay.reviews && stay.reviews.length > 0 && (
+                      <span className="text-xs font-mono font-bold text-amber-600">{stay.rating || '5.0'} Overall Rating</span>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {reviews.map((rev) => (
-                      <div key={rev.id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 flex flex-col justify-between">
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2.5">
-                            <img src={rev.avatar} alt={rev.name} className="w-8 h-8 rounded-full object-cover border border-slate-300" />
-                            <div>
-                              <p className="font-bold text-xs text-slate-900">{rev.name}</p>
-                              <span className="text-[10px] text-slate-400 font-mono">{rev.date} • {rev.tripType}</span>
+                  {stay.reviews && stay.reviews.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {stay.reviews.map((rev, rIndex) => (
+                        <div key={rIndex} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 flex flex-col justify-between">
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 font-bold text-xs flex items-center justify-center border border-slate-300">
+                                {rev.userName ? rev.userName.charAt(0).toUpperCase() : 'G'}
+                              </div>
+                              <div>
+                                <p className="font-bold text-xs text-slate-900">{rev.userName || 'Verified Guest'}</p>
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  {rev.date ? new Date(rev.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recent Stay'} • {rev.tripType || 'Verified Stay'}
+                                </span>
+                              </div>
                             </div>
+                            <div className="flex text-amber-500 text-xs">
+                              {'★'.repeat(rev.rating || 5)}
+                            </div>
+                            <p className="text-xs text-slate-600 leading-relaxed font-editorial italic">
+                              "{rev.comment}"
+                            </p>
                           </div>
-                          <div className="flex text-amber-500 text-xs">
-                            {'★'.repeat(rev.rating)}
-                          </div>
-                          <p className="text-xs text-slate-600 leading-relaxed font-editorial italic">
-                            "{rev.comment}"
-                          </p>
                         </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-2">
+                      <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto font-bold text-base">
+                        ⭐
                       </div>
-                    ))}
-                  </div>
+                      <h5 className="font-bold text-slate-800 text-sm">No Guest Reviews Yet</h5>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                        This property is verified and ready for bookings. Reviews from verified guests will appear here after their stay.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
               </div>

@@ -124,6 +124,9 @@ export default function VendorDashboard() {
   const [propLocation, setPropLocation] = useState('Coaker Walk, Kodaikanal');
   const [propPrice, setPropPrice] = useState('3800');
   const [propDesc, setPropDesc] = useState('');
+  const [propRules, setPropRules] = useState(
+    'Check-In from 12:00 PM | Check-Out until 11:00 AM\nValid Government Photo ID required for all adult guests\nStrictly non-smoking inside bedrooms (designated smoking areas provided)\nPets allowed on prior host approval\nQuiet hours after 10:00 PM for peaceful mountain ambiance'
+  );
   const [propImages, setPropImages] = useState([]);
   const [propCoordinates, setPropCoordinates] = useState({ lat: 10.2381, lng: 77.4892 });
   const [propError, setPropError] = useState('');
@@ -432,7 +435,10 @@ export default function VendorDashboard() {
       return;
     }
 
-    const googleMapsUrl = `https://www.google.com/maps?q=${propCoordinates.lat},${propCoordinates.lng}`;
+    const rulesArray = propRules
+      .split('\n')
+      .map(r => r.trim())
+      .filter(r => r.length > 0);
 
     const newProp = {
       id: 'p-' + Date.now(),
@@ -447,6 +453,7 @@ export default function VendorDashboard() {
       googleMapsUrl,
       isLocationConfirmed: true,
       description: propDesc || `${propType} in ${propLocation}.`,
+      ownerRules: rulesArray,
       ownerEmail: currentUser?.email || 'vendor@exploretamilnadu.com',
       ownerName: currentUser?.name || 'Property Host',
       status: 'Pending Approval',
@@ -458,6 +465,7 @@ export default function VendorDashboard() {
     setPropTitle('');
     setPropPrice('3800');
     setPropDesc('');
+    setPropRules('Check-In from 12:00 PM | Check-Out until 11:00 AM\nValid Government Photo ID required for all adult guests\nStrictly non-smoking inside bedrooms (designated smoking areas provided)\nPets allowed on prior host approval\nQuiet hours after 10:00 PM for peaceful mountain ambiance');
     setPropImages([]);
     setPropError('');
 
@@ -987,6 +995,59 @@ export default function VendorDashboard() {
                         </div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* 📜 SECTION 3: CUSTOM PROPERTY RULES & GUIDELINES (DECLARED BY PROPERTY OWNER) */}
+                  <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">📜</span>
+                          <label className="text-xs font-extrabold text-slate-900 uppercase tracking-wide">
+                            Property Rules & House Regulations (Declared by Host)
+                          </label>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Specify check-in/out timings, noise policy, pet rules, and expectations for staying guests. (One rule per line).
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Quick Preset Buttons */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 py-1 mr-1">Quick Add:</span>
+                      {[
+                        '🕒 Check-In: 12:00 PM | Check-Out: 11:00 AM',
+                        '🪪 Government ID proof required for all adult guests',
+                        '🚭 Strictly non-smoking inside bedrooms',
+                        '🐾 Pets allowed on prior host approval',
+                        '🤫 Quiet hours from 10:00 PM to 06:00 AM',
+                        '🍳 Kitchen access available on request',
+                        '🔥 Campfire and BBQ setup on advance notice'
+                      ].map((preset, pIdx) => (
+                        <button
+                          key={pIdx}
+                          type="button"
+                          onClick={() => {
+                            if (!propRules.includes(preset)) {
+                              setPropRules(prev => prev ? `${prev}\n${preset}` : preset);
+                            }
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-medium border border-slate-200 transition-all cursor-pointer"
+                        >
+                          + {preset.split(' ')[0]} {preset.split(':')[0]}
+                        </button>
+                      ))}
+                    </div>
+
+                    <textarea
+                      rows={5}
+                      value={propRules}
+                      onChange={e => setPropRules(e.target.value)}
+                      placeholder="Enter house rules (one per line)..."
+                      className="glass-input text-xs font-mono leading-relaxed"
+                      required
+                    />
                   </div>
 
                   {/* Form Submission Actions */}

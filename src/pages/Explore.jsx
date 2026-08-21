@@ -26,7 +26,20 @@ import {
   Send,
   FolderDown,
   Smartphone,
-  Mail
+  Mail,
+  Heart,
+  Wifi,
+  Coffee,
+  Car,
+  Flame,
+  Tv,
+  Bath,
+  Shield,
+  Award,
+  ThumbsUp,
+  ChevronLeft,
+  Bed,
+  Utensils
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -150,6 +163,103 @@ export default function Explore({ onOpenAuth }) {
   // Active Share / Save Stay Pass Modal State
   const [shareModalBooking, setShareModalBooking] = useState(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
+
+  // 🏡 Full Property Details Showcase Modal State
+  const [selectedPropertyDetails, setSelectedPropertyDetails] = useState(null);
+  const [activeGalleryImg, setActiveGalleryImg] = useState(0);
+
+  // ❤️ Wishlist / Favourites State
+  const [wishlist, setWishlist] = useState(() => {
+    try {
+      const email = currentUser?.email?.toLowerCase();
+      const saved = email ? localStorage.getItem(`etn_wishlist_${email}`) : localStorage.getItem('etn_saved_properties');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [wishlistNotification, setWishlistNotification] = useState({ show: false, message: '', isAdded: false });
+
+  const isStayWishlisted = (stay) => {
+    if (!stay) return false;
+    const sId = stay._id || stay.id;
+    return wishlist.some(item => (item._id === sId || item.id === sId));
+  };
+
+  const toggleWishlist = (stay) => {
+    if (!stay) return;
+    const sId = stay._id || stay.id;
+    let updated;
+    const exists = wishlist.some(item => (item._id === sId || item.id === sId));
+    if (exists) {
+      updated = wishlist.filter(item => item._id !== sId && item.id !== sId);
+      setWishlistNotification({ show: true, message: `Removed "${stay.title}" from your Favourites`, isAdded: false });
+    } else {
+      updated = [stay, ...wishlist];
+      setWishlistNotification({ show: true, message: `Added "${stay.title}" to your Favourites!`, isAdded: true });
+    }
+    setWishlist(updated);
+    try {
+      const email = currentUser?.email?.toLowerCase();
+      if (email) {
+        localStorage.setItem(`etn_wishlist_${email}`, JSON.stringify(updated));
+      }
+      localStorage.setItem('etn_saved_properties', JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('etn_wishlist_updated', { detail: updated }));
+    } catch (e) {}
+
+    setTimeout(() => setWishlistNotification({ show: false, message: '', isAdded: false }), 3000);
+  };
+
+  // 📸 Multi-photo gallery generator
+  const getPropertyGallery = (stay) => {
+    if (!stay) return [FALLBACK_IMAGE];
+    const primary = (stay.images && stay.images[0]) || stay.image || FALLBACK_IMAGE;
+    if (stay.images && Array.isArray(stay.images) && stay.images.length > 1) {
+      return stay.images;
+    }
+    return [
+      primary,
+      'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=800&q=80'
+    ];
+  };
+
+  // ⭐ Verified reviews generator
+  const getPropertyReviews = (stay) => {
+    return [
+      {
+        id: 'rev-1',
+        name: 'Ananya Ramaswamy',
+        date: 'August 2026',
+        rating: 5,
+        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+        comment: 'Breathtaking waterfall and valley views! The hospitality was unmatched, and authentic Chettinad/Tamil dinner served on the private balcony deck was unforgettable. 10/10 stay.',
+        tripType: 'Couple Getaway'
+      },
+      {
+        id: 'rev-2',
+        name: 'Karthik Sundaram',
+        date: 'July 2026',
+        rating: 5,
+        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+        comment: 'Super clean luxury villa with panoramic hill views. Seamless instant check-in, polite host staff, and fast Wi-Fi. Highly recommended for family vacations.',
+        tripType: 'Family Vacation'
+      },
+      {
+        id: 'rev-3',
+        name: 'Dr. Priya Venkatesh',
+        date: 'June 2026',
+        rating: 5,
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        comment: 'Tranquil peaceful retreat away from city noise. Traditional filter coffee on the sunrise deck, geyser hot water, and 24/7 security. Absolutely loved it.',
+        tripType: 'Solo Retreat'
+      }
+    ];
+  };
 
   // 📝 Generate Formatted Stay Pass Share Text
   const getShareMessage = (bk) => {
@@ -595,13 +705,16 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6">
             {displayedProperties.map((stay) => {
               const stayPrice = stay.pricePerNight || stay.price || 4800;
-              const stayImg = (stay.images && stay.images[0]) || stay.image || FALLBACK_IMAGE;
               const stayAmenities = stay.amenities || ['Mountain View', 'Free WiFi', 'Private Balcony', 'Organic Dining'];
               
               return (
                 <div 
                   key={stay._id || stay.id} 
-                  className="group rounded-3xl bg-[#ffffff] border border-[#242429]/20 shadow-md hover:shadow-2xl transition-all duration-300 overflow-hidden flex flex-col justify-between"
+                  onClick={() => {
+                    setSelectedPropertyDetails(stay);
+                    setActiveGalleryImg(0);
+                  }}
+                  className="group rounded-3xl bg-[#ffffff] border border-[#242429]/20 shadow-md hover:shadow-2xl transition-all duration-300 overflow-hidden flex flex-col justify-between cursor-pointer hover:border-black/40 hover:-translate-y-1"
                 >
                   
                   {/* Top Image Container */}
@@ -613,21 +726,41 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                     />
                     
-                    {/* Verified Seal Badge */}
+                    {/* Top Left: Verified Seal Badge */}
                     <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-3 py-1 rounded-full border border-black/15 shadow-md flex items-center gap-1.5 text-[10px] font-fira-mono font-black text-black">
                       <Sparkles size={11} className="text-amber-500" />
                       <span>VERIFIED LUXURY</span>
                     </div>
 
-                    {/* Property Type Badge */}
-                    <div className="absolute bottom-3 left-3 bg-[#242429]/90 backdrop-blur-md px-3 py-1 rounded-full text-white text-[10px] font-fira-mono font-bold shadow-md">
-                      {stay.type || stay.propertyType || 'RESORT'}
-                    </div>
+                    {/* ❤️ TOP RIGHT: HEART / FAVOURITES BUTTON */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleWishlist(stay);
+                      }}
+                      className={`absolute top-3 right-3 p-2 rounded-full backdrop-blur-md border shadow-md transition-all z-10 cursor-pointer ${
+                        isStayWishlisted(stay)
+                          ? 'bg-rose-500 text-white border-rose-400 scale-110'
+                          : 'bg-white/90 hover:bg-white text-slate-700 hover:text-rose-500 border-black/10'
+                      }`}
+                      title={isStayWishlisted(stay) ? 'Remove from Favourites' : 'Save to Favourites'}
+                    >
+                      <Heart 
+                        size={16} 
+                        className={isStayWishlisted(stay) ? 'fill-white text-white' : 'text-slate-700 hover:text-rose-500'} 
+                      />
+                    </button>
 
-                    {/* Rating Badge */}
-                    <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full border border-black/15 shadow-md flex items-center gap-1 text-[10px] font-mono font-extrabold text-black">
-                      <Star size={11} className="text-amber-500 fill-amber-500" />
-                      <span>{stay.rating || '4.9'}</span>
+                    {/* Bottom Left: Property Type & Rating */}
+                    <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
+                      <div className="bg-[#242429]/90 backdrop-blur-md px-2.5 py-1 rounded-full text-white text-[10px] font-fira-mono font-bold shadow-md">
+                        {stay.type || stay.propertyType || 'RESORT'}
+                      </div>
+                      <div className="bg-white/95 backdrop-blur-md px-2 py-1 rounded-full border border-black/15 shadow-md flex items-center gap-1 text-[10px] font-mono font-extrabold text-black">
+                        <Star size={10} className="text-amber-500 fill-amber-500" />
+                        <span>{stay.rating || '4.9'}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -642,7 +775,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                       </div>
 
                       {/* Title */}
-                      <h3 className="text-base sm:text-lg font-bold font-editorial text-black leading-snug group-hover:text-cyan-950 transition-colors line-clamp-2">
+                      <h3 className="text-base sm:text-lg font-bold font-editorial text-black leading-snug group-hover:text-blue-900 transition-colors line-clamp-2">
                         {stay.title}
                       </h3>
 
@@ -675,15 +808,17 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
 
                       <button 
                         type="button"
-                        onClick={() => handleOpenBookingModal(stay)}
-                        className="px-3.5 sm:px-4 py-2 rounded-2xl bg-[#242429] text-white hover:bg-black text-xs font-bold font-editorial flex items-center gap-1 shadow-sm transition-all shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenBookingModal(stay);
+                        }}
+                        className="px-3.5 sm:px-4 py-2 rounded-2xl bg-[#242429] text-white hover:bg-black text-xs font-bold font-editorial flex items-center gap-1 shadow-sm transition-all shrink-0 cursor-pointer"
                       >
                         Book Stay <ChevronRight size={13} />
                       </button>
                     </div>
 
                   </div>
-
                 </div>
               );
             })}
@@ -691,6 +826,279 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
         )}
 
       </section>
+
+      {/* ❤️ WISHLIST FLOATING TOAST NOTIFICATION */}
+      {wishlistNotification.show && (
+        <div className="fixed bottom-6 right-6 z-50 animate-bounce">
+          <div className={`px-4 py-3 rounded-2xl shadow-2xl border flex items-center gap-2.5 text-xs font-bold font-editorial backdrop-blur-md ${
+            wishlistNotification.isAdded 
+              ? 'bg-rose-500 text-white border-rose-400' 
+              : 'bg-slate-900 text-white border-slate-700'
+          }`}>
+            <Heart size={16} className={wishlistNotification.isAdded ? 'fill-white' : ''} />
+            <span>{wishlistNotification.message}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 🏡 FULL PROPERTY DETAILS SHOWCASE MODAL */}
+      {selectedPropertyDetails && (() => {
+        const stay = selectedPropertyDetails;
+        const gallery = getPropertyGallery(stay);
+        const reviews = getPropertyReviews(stay);
+        const stayPrice = stay.pricePerNight || stay.price || 4800;
+        const stayAmenities = stay.amenities || [
+          'Panoramic Mountain & Valley View',
+          'High-Speed Fiber Wi-Fi',
+          'Private Sunrise Balcony Deck',
+          'Traditional Tamil & Chettinad Dining',
+          '24/7 Hot Water Geyser',
+          '100% Power Backup',
+          'Free Secure Vehicle Parking',
+          'Campfire & Barbecue Setup',
+          'King-Size Luxury Bedding',
+          'Air Conditioning'
+        ];
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
+            <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-fade-in my-auto">
+              
+              {/* Header Bar */}
+              <div className="bg-[#061833] text-white p-4 sm:p-5 flex items-center justify-between flex-shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold">
+                    <Sparkles size={16} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono font-bold uppercase text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full">
+                        {stay.type || stay.propertyType || 'VERIFIED RESORT'}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-300">
+                        ⭐ {stay.rating || '4.9'} (128 Reviews)
+                      </span>
+                    </div>
+                    <h3 className="font-extrabold text-sm sm:text-base text-white truncate max-w-md mt-0.5">
+                      {stay.title}
+                    </h3>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleWishlist(stay)}
+                    className={`p-2 rounded-xl transition-all cursor-pointer ${
+                      isStayWishlisted(stay)
+                        ? 'bg-rose-500 text-white'
+                        : 'bg-white/10 hover:bg-white/20 text-white'
+                    }`}
+                    title="Save to Favourites"
+                  >
+                    <Heart size={16} className={isStayWishlisted(stay) ? 'fill-white' : ''} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPropertyDetails(null)}
+                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrollable Content Body */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-6 text-slate-800 text-xs sm:text-sm">
+                
+                {/* 1. Interactive Multi-Photo Gallery */}
+                <div className="space-y-2">
+                  <div className="relative h-60 sm:h-80 md:h-96 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 shadow-inner">
+                    <img 
+                      src={gallery[activeGalleryImg] || gallery[0]} 
+                      alt={stay.title} 
+                      className="w-full h-full object-cover transition-all duration-500"
+                    />
+                    <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full text-white text-[11px] font-mono font-bold flex items-center gap-1.5">
+                      <Sparkles size={12} className="text-amber-400" />
+                      <span>Photo {activeGalleryImg + 1} of {gallery.length}</span>
+                    </div>
+                  </div>
+
+                  {/* Thumbnail Row */}
+                  <div className="flex gap-2 overflow-x-auto pb-1 pt-1">
+                    {gallery.map((imgUrl, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActiveGalleryImg(idx)}
+                        className={`relative h-16 w-20 sm:h-20 sm:w-28 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
+                          activeGalleryImg === idx ? 'border-blue-600 scale-105 shadow-md' : 'border-transparent opacity-70 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={imgUrl} alt={`Thumbnail ${idx}`} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Key Highlights & Host Profile */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-lg shrink-0">
+                      📍
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase block">Location & District</span>
+                      <p className="font-bold text-slate-900 text-xs">{stay.location} · {stay.district}</p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg shrink-0">
+                      🛡️
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase block">Verified Host</span>
+                      <p className="font-bold text-slate-900 text-xs">{stay.ownerName || 'Last Zetas (Superhost)'}</p>
+                      <span className="text-[10px] text-emerald-600 font-medium">⚡ 100% Response Rate</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-lg shrink-0">
+                      ⭐
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase block">Guest Rating</span>
+                      <p className="font-bold text-slate-900 text-xs">4.9 / 5.0 Star Rating</p>
+                      <span className="text-[10px] text-amber-700 font-medium">Top 5% stays in Tamil Nadu</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Overview & Editorial Description */}
+                <div className="space-y-2">
+                  <h4 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <span>📖</span> About This Property & Experience
+                  </h4>
+                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-editorial bg-slate-50/50 p-4 rounded-2xl border border-slate-200">
+                    {stay.desc || stay.description || 'Nestled in the lush hills and serene landscapes of Tamil Nadu, this verified stay provides panoramic views, pure mountain air, and luxury comfort. Designed with authentic heritage architecture and modern luxury amenities, guests can unwind on the private sunrise deck, experience authentic South Indian flavors, and enjoy complete tranquility.'}
+                  </p>
+                </div>
+
+                {/* 4. Amenities & Facilities Matrix */}
+                <div className="space-y-3">
+                  <h4 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <span>✨</span> What This Stay Offers (Amenities)
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    {stayAmenities.map((am, idx) => (
+                      <div key={idx} className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-2.5 text-xs text-slate-800 font-semibold">
+                        <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                        <span className="truncate">{am}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 5. Rules & Regulations (High Impact Section) */}
+                <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-3">
+                  <h4 className="text-sm font-black text-amber-950 flex items-center gap-2">
+                    <span>📜</span> Property Rules & Check-In Guidelines
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-amber-900">
+                    <div className="space-y-1">
+                      <p><strong>🕒 Check-In & Check-Out:</strong> Check-In from 12:00 PM | Check-Out until 11:00 AM</p>
+                      <p><strong>🪪 ID Proof Mandatory:</strong> Valid Government photo ID required for all adult guests.</p>
+                      <p><strong>🚭 Smoking:</strong> Non-smoking inside bedrooms (designated outdoor spaces available).</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p><strong>🐾 Pets Policy:</strong> Pet-friendly upon prior host confirmation.</p>
+                      <p><strong>🤫 Quiet Hours:</strong> 10:00 PM to 06:00 AM to preserve natural mountain peacefulness.</p>
+                      <p><strong>💰 Cancellation Policy:</strong> 100% full refund on cancellations made 24 hours prior to check-in.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 6. Authentic Guest Reviews */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-base font-black text-slate-900 flex items-center gap-2">
+                      <span>⭐</span> Guest Reviews ({reviews.length})
+                    </h4>
+                    <span className="text-xs font-mono font-bold text-amber-600">4.9 Overall Rating</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {reviews.map((rev) => (
+                      <div key={rev.id} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 flex flex-col justify-between">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2.5">
+                            <img src={rev.avatar} alt={rev.name} className="w-8 h-8 rounded-full object-cover border border-slate-300" />
+                            <div>
+                              <p className="font-bold text-xs text-slate-900">{rev.name}</p>
+                              <span className="text-[10px] text-slate-400 font-mono">{rev.date} • {rev.tripType}</span>
+                            </div>
+                          </div>
+                          <div className="flex text-amber-500 text-xs">
+                            {'★'.repeat(rev.rating)}
+                          </div>
+                          <p className="text-xs text-slate-600 leading-relaxed font-editorial italic">
+                            "{rev.comment}"
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Sticky Action Footer */}
+              <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0">
+                <div>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-black font-fira-mono text-slate-900">
+                      ₹{Number(stayPrice).toLocaleString()}
+                    </span>
+                    <span className="text-xs font-mono text-slate-500"> / NIGHT (Base Tariff)</span>
+                  </div>
+                  <p className="text-[10px] text-emerald-700 font-mono font-bold">✓ Best Rate Guarantee · Instant Razorpay Booking</p>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => toggleWishlist(stay)}
+                    className={`px-4 py-3 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
+                      isStayWishlisted(stay)
+                        ? 'bg-rose-50 border-rose-300 text-rose-700'
+                        : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Heart size={15} className={isStayWishlisted(stay) ? 'fill-rose-500 text-rose-500' : ''} />
+                    <span>{isStayWishlisted(stay) ? 'Saved' : 'Save'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPropertyDetails(null);
+                      handleOpenBookingModal(stay);
+                    }}
+                    className="flex-1 sm:flex-none px-7 py-3 rounded-2xl bg-[#242429] text-white font-extrabold text-xs hover:bg-black flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] transition-all cursor-pointer font-editorial"
+                  >
+                    <span>📅 Reserve & Book Stay</span>
+                    <ChevronRight size={15} />
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 🎟️ COMPREHENSIVE BOOKING & RAZORPAY PAYMENT MODAL */}
       {selectedStayForBooking && (

@@ -89,8 +89,17 @@ export default function UserDashboard() {
   // Live Bookings (Starts strictly at 0 / empty)
   const [bookingsList, setBookingsList] = useState([]);
 
-  // Live Saved Wishlist (Starts strictly at 0 / empty)
-  const [savedWishlist, setSavedWishlist] = useState([]);
+  // Live Saved Wishlist (Loads from localStorage and syncs with Explore page)
+  const getInitialWishlist = () => {
+    try {
+      const email = currentUser?.email?.toLowerCase();
+      const saved = email ? localStorage.getItem(`etn_wishlist_${email}`) : localStorage.getItem('etn_saved_properties');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  };
+  const [savedWishlist, setSavedWishlist] = useState(getInitialWishlist);
 
   // Live Support Tickets (Starts strictly at 0 / empty)
   const [ticketsList, setTicketsList] = useState([]);
@@ -166,9 +175,27 @@ export default function UserDashboard() {
     };
   }, [socket, currentUser]);
 
+  useEffect(() => {
+    const handleWishlistUpdate = (e) => {
+      if (e.detail) setSavedWishlist(e.detail);
+    };
+    window.addEventListener('etn_wishlist_updated', handleWishlistUpdate);
+    return () => window.removeEventListener('etn_wishlist_updated', handleWishlistUpdate);
+  }, []);
+
   const triggerSuccess = (msg) => {
     setActionSuccess(msg);
     setTimeout(() => setActionSuccess(''), 3500);
+  };
+
+  const handleRemoveWishlist = (stayId) => {
+    const updated = savedWishlist.filter(s => (s._id !== stayId && s.id !== stayId));
+    setSavedWishlist(updated);
+    const email = currentUser?.email?.toLowerCase();
+    if (email) localStorage.setItem(`etn_wishlist_${email}`, JSON.stringify(updated));
+    localStorage.setItem('etn_saved_properties', JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('etn_wishlist_updated', { detail: updated }));
+    triggerSuccess('Removed from saved favourites');
   };
 
   // Profile Picture Upload Handler
@@ -513,44 +540,78 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
         {activeTab === 'wishlist' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h3 className="text-xl font-black text-slate-900">Saved Wishlist Stays</h3>
-              <span className="text-xs font-mono font-bold text-rose-600">{savedWishlist.length} Items Saved</span>
+              <div>
+                <h3 className="text-xl font-black text-slate-900">Saved Favourites & Wishlist</h3>
+                <p className="text-xs text-slate-500">Properties you saved while browsing Tamil Nadu stays</p>
+              </div>
+              <span className="text-xs font-mono font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1 rounded-full">
+                {savedWishlist.length} Items Saved
+              </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {savedWishlist.map((item) => (
-                <div key={item.id} className="rounded-3xl bg-white border border-slate-200 overflow-hidden shadow-xs hover:shadow-md transition-all">
-                  <div className="h-48 relative overflow-hidden">
-                    <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
-                    <button 
-                      onClick={() => {
-                        setSavedWishlist(savedWishlist.filter(s => s.id !== item.id));
-                        triggerSuccess('Removed from saved wishlist');
-                      }}
-                      className="absolute top-3 right-3 p-2 rounded-full bg-white/90 text-rose-600 hover:bg-white"
-                    >
-                      <Heart size={16} className="fill-rose-600" />
-                    </button>
-                  </div>
-                  <div className="p-5 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[11px] font-mono text-slate-400 uppercase">📍 {item.location}</span>
-                      <span className="text-xs font-bold text-amber-500">⭐ {item.rating}</span>
+            {savedWishlist.length === 0 ? (
+              <div className="p-12 text-center text-slate-500 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-3">
+                <Heart size={40} className="mx-auto text-slate-300" />
+                <h3 className="text-lg font-bold text-slate-800">No Saved Properties Yet</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Browse verified stays on the Explore page and click the ❤️ Heart button on any card to save your favourite resorts and cottages.
+                </p>
+                <a
+                  href="/explore"
+                  className="inline-block px-5 py-2.5 rounded-2xl bg-[#061833] text-white text-xs font-bold hover:bg-black transition-all shadow-sm"
+                >
+                  Explore Verified Stays
+                </a>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {savedWishlist.map((item) => {
+                  const itemId = item._id || item.id;
+                  const itemImg = (item.images && item.images[0]) || item.image || 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=800&q=80';
+                  const itemPrice = item.pricePerNight || item.price || 4800;
+
+                  return (
+                    <div key={itemId} className="rounded-3xl bg-white border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group">
+                      <div className="h-48 relative overflow-hidden bg-slate-100">
+                        <img src={itemImg} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                        <button 
+                          type="button"
+                          onClick={() => handleRemoveWishlist(itemId)}
+                          className="absolute top-3 right-3 p-2 rounded-full bg-rose-500 text-white shadow-md hover:bg-rose-600 transition-all cursor-pointer"
+                          title="Remove from saved"
+                        >
+                          <Heart size={16} className="fill-white" />
+                        </button>
+                        <div className="absolute bottom-3 left-3 bg-black/75 backdrop-blur-md px-2.5 py-0.5 rounded-full text-white text-[10px] font-mono font-bold">
+                          {item.type || item.propertyType || 'RESORT'}
+                        </div>
+                      </div>
+                      <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[11px] font-mono text-slate-500 uppercase truncate">📍 {item.location || item.district || 'Tamil Nadu'}</span>
+                            <span className="text-xs font-bold text-amber-500 flex items-center gap-1 font-mono">⭐ {item.rating || '4.9'}</span>
+                          </div>
+                          <h4 className="font-extrabold text-slate-900 text-base leading-snug">{item.title}</h4>
+                        </div>
+                        <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                          <div>
+                            <span className="text-lg font-black text-slate-900 font-mono">₹{Number(itemPrice).toLocaleString()}</span>
+                            <span className="text-[10px] text-slate-400 font-mono"> / night</span>
+                          </div>
+                          <a 
+                            href="/explore"
+                            className="px-4 py-2 rounded-xl bg-[#061833] text-white hover:bg-black text-xs font-bold transition-all shadow-xs"
+                          >
+                            Book Stay
+                          </a>
+                        </div>
+                      </div>
                     </div>
-                    <h4 className="font-extrabold text-slate-900 text-base">{item.title}</h4>
-                    <div className="flex justify-between items-center pt-2 border-t border-slate-100">
-                      <span className="text-lg font-black text-blue-600">₹{item.price.toLocaleString()} <span className="text-xs text-slate-400 font-normal">/ night</span></span>
-                      <button 
-                        onClick={() => triggerSuccess(`Reservation request sent for ${item.title}!`)}
-                        className="glass-button text-xs py-2 px-4"
-                      >
-                        Book Stay
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

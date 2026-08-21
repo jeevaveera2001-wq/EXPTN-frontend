@@ -48,273 +48,8 @@ import { downloadBookingReceiptPDF } from '../utils/receiptGenerator';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=800&q=80';
 
-// Curated verified stays fallback across particular Tamil Nadu circuits
-const DEFAULT_FEATURED_STAYS = [
-  // 1. Nilgiris (Ooty & Coonoor)
-  {
-    id: 'prop-1',
-    title: 'Ooty Lakeview Grand Resort',
-    district: 'Nilgiris (Ooty)',
-    location: 'West Lake Road, Ooty Lake',
-    type: 'Lakeview Resort',
-    price: 4800,
-    pricePerNight: 4800,
-    rating: 4.95,
-    reviews: 52,
-    image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
-    desc: 'Luxury glass lakeview resort situated directly on the shore of Ooty Lake with private boat deck.',
-    amenities: ['Lake View Balcony', 'Boat Deck', 'Fireplace', 'Free WiFi'],
-    ownerName: 'Nilgiri Heritage Hosts',
-    ownerEmail: 'lastzetas@gmail.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  },
-  {
-    id: 'prop-2',
-    title: 'Nilgiri Mountain View Eco Villa',
-    district: 'Nilgiris (Ooty)',
-    location: 'Doddabetta Ridge Road, Ooty',
-    type: 'Mountain View Resort',
-    price: 5400,
-    pricePerNight: 5400,
-    rating: 4.88,
-    reviews: 38,
-    image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
-    desc: 'High-altitude mountain view resort overlooking the misty Nilgiri tea estates.',
-    amenities: ['360 Mountain View', 'Tea Estate Walk', 'Organic Kitchen', 'Heater'],
-    ownerName: 'Green Valley Stays',
-    ownerEmail: 'greenvalley@stays.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  },
-  {
-    id: 'prop-3',
-    title: 'Coonoor Tea Heritage Planter Bungalow',
-    district: 'Nilgiris (Ooty)',
-    location: 'Singara Estate, Coonoor, Nilgiris',
-    type: 'Heritage Cottage',
-    price: 6200,
-    pricePerNight: 6200,
-    rating: 4.96,
-    reviews: 42,
-    image: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&q=80',
-    desc: 'Colonial 1920s British planter estate bungalow surrounded by 50 acres of rolling green tea plantations.',
-    amenities: ['Private Tea Garden', 'Fireplace', 'Butler Service', 'Mountain Panorama'],
-    ownerName: 'Nilgiri Planters Trust',
-    ownerEmail: 'coonoor@stays.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  },
-
-  // 2. Kodaikanal
-  {
-    id: 'prop-4',
-    title: 'Kodai Star Lakeview Pine Cottage',
-    district: 'Kodaikanal (Princess of Hills)',
-    location: 'Lake Road, Kodaikanal',
-    type: 'Lakeview Cottage',
-    price: 4600,
-    pricePerNight: 4600,
-    rating: 4.91,
-    reviews: 45,
-    image: 'https://images.unsplash.com/photo-1587061949409-02df41d5e562?auto=format&fit=crop&w=800&q=80',
-    desc: 'Private pine wood cottage with direct panorama of Kodai Lake and pine forest trail.',
-    amenities: ['Kodai Lake Panorama', 'Private Bonfire Yard', 'Pine Forest View', 'Hot Water'],
-    ownerName: 'Kodaikanal Escapes',
-    ownerEmail: 'kodai@escapes.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  },
-  {
-    id: 'prop-5',
-    title: 'Pillar Rocks Misty Cloud Villa & Resort',
-    district: 'Kodaikanal (Princess of Hills)',
-    location: 'Observatory Road, Pillar Rocks, Kodaikanal',
-    type: 'Mountain View Resort',
-    price: 5800,
-    pricePerNight: 5800,
-    rating: 4.93,
-    reviews: 61,
-    image: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80',
-    desc: 'Cliffside resort nestled beside Pillar Rocks offering breathtaking cloud-top valley vistas.',
-    amenities: ['Cliff View Balcony', 'Heated Jacuzzi', 'Star Gazing Deck', 'Bonfire & BBQ'],
-    ownerName: 'Kodai Mist Hospitality',
-    ownerEmail: 'mist@escapes.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  },
-
-  // 3. Thanjavur & Chettinad
-  {
-    id: 'prop-6',
-    title: 'Cauvery River View Heritage Resort',
-    district: 'Thanjavur (Tanjore)',
-    location: 'Grand Anicut Road, Cauvery River Front, Thanjavur',
-    type: 'River View Resort',
-    price: 4200,
-    pricePerNight: 4200,
-    rating: 4.92,
-    reviews: 84,
-    image: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80',
-    desc: 'Peaceful river view resort situated along the holy Cauvery River banks near Tanjore Big Temple.',
-    amenities: ['River Front Deck', 'Temple Distance 1km', 'Swimming Pool', 'Tamil Cuisine'],
-    ownerName: 'Chola Royal Homestays',
-    ownerEmail: 'cholaroyal@stays.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  },
-  {
-    id: 'prop-7',
-    title: 'Chidambara Vilas Chettinad Heritage Palace',
-    district: 'Thanjavur (Tanjore)',
-    location: 'Kadiapatti, Pudukkottai, Chettinad Circuit',
-    type: 'Heritage Palace',
-    price: 7500,
-    pricePerNight: 7500,
-    rating: 4.98,
-    reviews: 112,
-    image: 'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=800&q=80',
-    desc: '110-year-old authentic Chettinad mansion with Belgian glass chandeliers, Italian marble courtyards, and royal banquet feasts.',
-    amenities: ['Royal Courtyard', 'Authentic Chettinad Kitchen', 'Heritage Pool', 'Antique Furnishing'],
-    ownerName: 'Chettinad Heritage Trust',
-    ownerEmail: 'vilas@chettinad.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  },
-
-  // 4. Mahabalipuram & ECR Coast
-  {
-    id: 'prop-8',
-    title: 'Bay of Bengal Oceanfront Luxury Beach Resort',
-    district: 'Mahabalipuram (Mamallapuram)',
-    location: 'East Coast Road (ECR), Mahabalipuram',
-    type: 'Beachfront Resort',
-    price: 6800,
-    pricePerNight: 6800,
-    rating: 4.94,
-    reviews: 93,
-    image: 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?auto=format&fit=crop&w=800&q=80',
-    desc: 'Private beachfront luxury villa resort featuring direct ocean sand access, infinity pool, and coastal seafood fine dining.',
-    amenities: ['Private Beach Access', 'Infinity Ocean Pool', 'Sunset Lounge', 'Ayurvedic Spa'],
-    ownerName: 'ECR Coastal Retreats',
-    ownerEmail: 'bayresort@ecr.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  },
-
-  // 5. Yercaud (Shevaroy Hills)
-  {
-    id: 'prop-9',
-    title: 'Shevaroy Hills Cloud9 Glass Treehouse & Resort',
-    district: 'Yercaud (Jewel of Shevaroy Hills)',
-    location: 'Tipperary Viewpoint Road, Yercaud',
-    type: 'Mountain View Resort',
-    price: 4900,
-    pricePerNight: 4900,
-    rating: 4.89,
-    reviews: 58,
-    image: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=800&q=80',
-    desc: 'Elevated glass-walled luxury treehouse suspended over the coffee valley canopy of Shevaroy Hills.',
-    amenities: ['Panoramic Treehouse', 'Coffee Estate Walk', 'Glass Balcony', 'Campfire & BBQ'],
-    ownerName: 'Yercaud Canopy Escapes',
-    ownerEmail: 'yercaud@stays.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  },
-
-  // 6. Kanyakumari
-  {
-    id: 'prop-10',
-    title: 'Cape Comorin Oceanfront Sunrise Resort',
-    district: 'Kanyakumari',
-    location: 'Beach Road, Near Sunset Point, Kanyakumari',
-    type: 'Beachfront Resort',
-    price: 4500,
-    pricePerNight: 4500,
-    rating: 4.87,
-    reviews: 76,
-    image: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80',
-    desc: 'Oceanfront resort facing the Triveni Sangam with unobstructed sunrise and sunset horizon suites.',
-    amenities: ['Triveni Sangam View', 'Rooftop Sunrise Deck', 'Multi-Cuisine Restaurant', 'Swimming Pool'],
-    ownerName: 'Cape Comorin Hospitality',
-    ownerEmail: 'cape@stays.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  },
-
-  // 7. Rameswaram
-  {
-    id: 'prop-11',
-    title: 'Pamban Palm Sea Breeze Beachfront Resort',
-    district: 'Rameswaram (Pamban Island)',
-    location: 'Dhanushkodi Coastal Road, Rameswaram',
-    type: 'Beachfront Resort',
-    price: 3900,
-    pricePerNight: 3900,
-    rating: 4.86,
-    reviews: 64,
-    image: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80',
-    desc: 'Island seaside cottages set amidst coconut groves overlooking the emerald Gulf of Mannar waters.',
-    amenities: ['Private Sea Beach', 'Temple Shuttle', 'Seafood Grill', 'Free High-speed WiFi'],
-    ownerName: 'Pamban Island Retreats',
-    ownerEmail: 'pamban@stays.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  },
-
-  // 8. Valparai & Pollachi
-  {
-    id: 'prop-12',
-    title: 'Anamalai Tea Estate Mist Heritage Bungalow',
-    district: 'Valparai',
-    location: 'Waterfall Estate Road, Valparai, Anamalai Hills',
-    type: 'Heritage Cottage',
-    price: 5200,
-    pricePerNight: 5200,
-    rating: 4.95,
-    reviews: 49,
-    image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
-    desc: 'Secluded tea estate villa at 3,500ft altitude surrounded by evergreen rainforest and lion-tailed macaque habitats.',
-    amenities: ['Rainforest Safari', 'Tea Factory Visit', 'Private Chef', 'Mountain River Walk'],
-    ownerName: 'Anamalai Wild Stays',
-    ownerEmail: 'valparai@stays.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  },
-
-  // 9. Madurai Heritage
-  {
-    id: 'prop-13',
-    title: 'Madurai Royal Heritage Palace Stay',
-    district: 'Madurai (Meenakshi Amman City)',
-    location: 'Pasumalai Hills, Madurai',
-    type: 'Heritage Palace',
-    price: 5600,
-    pricePerNight: 5600,
-    rating: 4.92,
-    reviews: 88,
-    image: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80',
-    desc: 'Hilltop heritage colonial estate with landscaped gardens overlooking the temple city of Madurai.',
-    amenities: ['Temple Panorama', 'Peacock Gardens', 'Heritage Lounge', 'Tamil Royal Thali'],
-    ownerName: 'Pandya Royal Stays',
-    ownerEmail: 'madurai@stays.com',
-    status: 'Approved',
-    isPremium: true,
-    isFeatured: true
-  }
-];
+// Curated verified stays fallback (Only manual/database entries will be displayed)
+const DEFAULT_FEATURED_STAYS = [];
 
 export default function Explore({ onOpenAuth }) {
   const { currentUser } = useAuth();
@@ -325,7 +60,7 @@ export default function Explore({ onOpenAuth }) {
   const [district, setDistrict] = useState('All');
   const [stayType, setStayType] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [liveProperties, setLiveProperties] = useState(DEFAULT_FEATURED_STAYS);
+  const [liveProperties, setLiveProperties] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // 🎟️ Advanced Booking Modal States
@@ -999,17 +734,43 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
 
         {/* Empty State */}
         {displayedProperties.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 rounded-3xl bg-white/80 border border-[#242429]/20 space-y-3">
-            <Building2 size={40} className="mx-auto text-slate-400" />
-            <h3 className="text-lg font-bold text-slate-800 font-editorial">No Properties Match Your Search Criteria</h3>
-            <p className="text-xs text-slate-500 font-mono">Try switching Destination Circuit to "All Tamil Nadu" or Stay Option to "All Stays".</p>
-            <button
-              type="button"
-              onClick={() => { setDistrict('All'); setStayType('All'); }}
-              className="px-4 py-2 rounded-2xl bg-[#242429] text-white text-xs font-bold font-editorial"
-            >
-              Show All Verified Properties
-            </button>
+          <div className="p-10 sm:p-14 text-center text-slate-500 rounded-3xl bg-white/90 border border-[#242429]/15 shadow-sm space-y-4 max-w-2xl mx-auto my-8">
+            <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center mx-auto shadow-inner">
+              <Building2 size={32} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-xl font-bold text-slate-900 font-editorial">
+                {district !== 'All' && district !== 'All Tamil Nadu'
+                  ? `No Luxury Stays Uploaded in ${district} Yet`
+                  : 'No Properties Uploaded in Catalog Yet'}
+              </h3>
+              <p className="text-xs text-slate-500 font-mono max-w-md mx-auto leading-relaxed">
+                All stays and luxury resorts on Explore Tamil Nadu are uploaded and verified manually by authenticated hosts and resort owners.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => { setDistrict('All'); setStayType('All'); setSearchQuery(''); }}
+                className="px-5 py-2.5 rounded-2xl bg-[#242429] text-white hover:bg-black text-xs font-bold font-editorial transition-all shadow-sm cursor-pointer"
+              >
+                View All Stays
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentUser?.role === 'owner' || currentUser?.role === 'vendor' || currentUser?.role === 'super_admin') {
+                    navigate('/dashboard/vendor');
+                  } else {
+                    onOpenAuth ? onOpenAuth('register') : navigate('/register');
+                  }
+                }}
+                className="px-5 py-2.5 rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold font-editorial flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+              >
+                <span>➕</span>
+                <span>List Your Property as Host</span>
+              </button>
+            </div>
           </div>
         ) : (
           /* Property Cards Grid */

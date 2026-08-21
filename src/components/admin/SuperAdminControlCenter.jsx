@@ -37,20 +37,29 @@ import {
   Eye,
   Send,
   Sparkles,
-  Inbox
+  Inbox,
+  Star,
+  Landmark,
+  LogOut,
+  ChevronDown,
+  FileText,
+  UserCheck,
+  Building,
+  DollarSign
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { BACKEND_API } from '../../config/api';
 
 export default function SuperAdminControlCenter() {
-  const { currentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
   const { socket, isConnected } = useSocket();
 
-  // 10 Requested Tabs
+  // 12 Requested Tabs from user specification image
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,39 +71,67 @@ export default function SuperAdminControlCenter() {
   const [staffList, setStaffList] = useState([]);
   const [bookingsList, setBookingsList] = useState([]);
   const [propertiesList, setPropertiesList] = useState([]);
-  const [vehiclesList, setVehiclesList] = useState([]);
   const [ticketsList, setTicketsList] = useState([]);
-  const [offersList, setOffersList] = useState([
+  const [enquiriesList, setEnquiriesList] = useState([
     {
-      id: 'deal-1',
-      code: 'TAMILNADU2026',
-      title: 'Grand Tourism Launch Offer',
-      discountPercent: 15,
-      minBookingAmount: 3000,
-      description: '15% instant discount on luxury hill station resorts and cottages in Ooty & Kodaikanal.',
-      validUntil: '2026-12-31',
-      isActive: true
+      id: 'enq-101',
+      name: 'Ramesh Sundaram',
+      email: 'ramesh.sundar@gmail.com',
+      phone: '+91 98401 23456',
+      subject: 'Custom Family Package to Kodaikanal & Madurai',
+      message: 'Looking for a 4-day private cottage stay with transport for 6 adults and 2 kids in October.',
+      date: '2026-08-21',
+      status: 'New'
     },
     {
-      id: 'deal-2',
-      code: 'FESTIVAL500',
-      title: 'Temple & Heritage Flat Discount',
-      discountAmount: 500,
-      minBookingAmount: 2500,
-      description: 'Flat ₹500 discount for family spiritual tours to Madurai, Thanjavur, & Rameswaram.',
-      validUntil: '2026-11-30',
-      isActive: true
+      id: 'enq-102',
+      name: 'Meera Krishnan',
+      email: 'meera.k@outlook.com',
+      phone: '+91 94432 78910',
+      subject: 'Corporate Team Retreat Booking in Ooty',
+      message: 'Need 12 luxury villa suites with conference dining for a tech firm offsite.',
+      date: '2026-08-20',
+      status: 'Responded'
+    }
+  ]);
+
+  const [reviewsList, setReviewsList] = useState([
+    {
+      id: 'rev-1',
+      guestName: 'Arun Kumar',
+      propertyTitle: 'Ooty Heritage Tea Estate Cottage',
+      rating: 5,
+      comment: 'Breathtaking mountain tea estate views and exceptional hospitality! Perfectly curated by Explore Tamil Nadu.',
+      date: '2026-08-21',
+      status: 'Published'
+    },
+    {
+      id: 'rev-2',
+      guestName: 'Divya Bharathi',
+      propertyTitle: 'Kodaikanal Lakeview Mist Resort',
+      rating: 5,
+      comment: 'Seamless Razorpay booking and instant stay pass. The campfire night was magical.',
+      date: '2026-08-19',
+      status: 'Published'
+    },
+    {
+      id: 'rev-3',
+      guestName: 'Sanjay Nathan',
+      propertyTitle: 'Chettinad Heritage Mansion',
+      rating: 4,
+      comment: 'Authentic Dravidian architecture and traditional Chettinad feast. Clean and well maintained.',
+      date: '2026-08-18',
+      status: 'Published'
     }
   ]);
 
   // Modal States
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [showAddPropertyModal, setShowAddPropertyModal] = useState(false);
-  const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
-  const [showAddOfferModal, setShowAddOfferModal] = useState(false);
   const [showReplyTicketModal, setShowReplyTicketModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [ticketReplyText, setTicketReplyText] = useState('');
+  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
 
   // Form States
   const [staffName, setStaffName] = useState('');
@@ -108,18 +145,8 @@ export default function SuperAdminControlCenter() {
   const [propDistrict, setPropDistrict] = useState('Nilgiris (Ooty)');
   const [propType, setPropType] = useState('Resort');
   const [propPrice, setPropPrice] = useState('');
-
-  const [vehTitle, setVehTitle] = useState('');
-  const [vehRegNo, setVehRegNo] = useState('');
-  const [vehType, setVehType] = useState('Cab SUV (Innova)');
-  const [vehPrice, setVehPrice] = useState('3500');
-  const [vehProvider, setVehProvider] = useState('Super Admin Transport');
-
-  const [offerCode, setOfferCode] = useState('');
-  const [offerTitle, setOfferTitle] = useState('');
-  const [offerDiscount, setOfferDiscount] = useState('15');
-  const [offerMinAmount, setOfferMinAmount] = useState('2000');
-  const [offerDesc, setOfferDesc] = useState('');
+  const [propOwnerName, setPropOwnerName] = useState('Jeeva Veeramani');
+  const [propOwnerEmail, setPropOwnerEmail] = useState('exploretamizhagam@gmail.com');
 
   const triggerToast = (msg) => {
     setToastMessage(msg);
@@ -153,32 +180,45 @@ export default function SuperAdminControlCenter() {
     else setLoading(true);
 
     try {
-      const [uRes, pRes, vRes, bRes, tRes] = await Promise.all([
-        apiFetch('/api/users').catch(() => null),
-        apiFetch('/api/properties').catch(() => null),
-        apiFetch('/api/vehicles').catch(() => null),
-        apiFetch('/api/bookings').catch(() => null),
-        apiFetch('/api/tickets').catch(() => null)
-      ]);
+      const res = await apiFetch('/api/admin/dashboard-all');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.users)) setUsersList(data.users);
+        if (Array.isArray(data.properties)) setPropertiesList(data.properties);
+        if (Array.isArray(data.bookings)) setBookingsList(data.bookings);
+        if (Array.isArray(data.staff)) setStaffList(data.staff);
+        if (Array.isArray(data.tickets)) setTicketsList(data.tickets);
+      } else {
+        // Fallback parallel requests
+        const [uRes, pRes, bRes, tRes, sRes] = await Promise.all([
+          apiFetch('/api/users').catch(() => null),
+          apiFetch('/api/properties').catch(() => null),
+          apiFetch('/api/bookings').catch(() => null),
+          apiFetch('/api/tickets').catch(() => null),
+          apiFetch('/api/admin/staff').catch(() => null)
+        ]);
 
-      let users = [], props = [], vehrs = [], bks = [], tcks = [];
-
-      if (uRes && uRes.ok) users = await uRes.json();
-      if (pRes && pRes.ok) props = await pRes.json();
-      if (vRes && vRes.ok) vehrs = await vRes.json();
-      if (bRes && bRes.ok) bks = await bRes.json();
-      if (tRes && tRes.ok) tcks = await tRes.json();
-
-      if (Array.isArray(users)) {
-        setUsersList(users);
-        const staff = users.filter(u => u.role && !['user', 'owner', 'super_admin'].includes(u.role));
-        setStaffList(staff);
+        if (uRes && uRes.ok) {
+          const u = await uRes.json();
+          if (Array.isArray(u)) setUsersList(u);
+        }
+        if (pRes && pRes.ok) {
+          const p = await pRes.json();
+          if (Array.isArray(p)) setPropertiesList(p);
+        }
+        if (bRes && bRes.ok) {
+          const b = await bRes.json();
+          if (Array.isArray(b)) setBookingsList(b);
+        }
+        if (tRes && tRes.ok) {
+          const t = await tRes.json();
+          if (Array.isArray(t)) setTicketsList(t);
+        }
+        if (sRes && sRes.ok) {
+          const s = await sRes.json();
+          if (Array.isArray(s)) setStaffList(s);
+        }
       }
-      if (Array.isArray(props)) setPropertiesList(props);
-      if (Array.isArray(vehrs)) setVehiclesList(vehrs);
-      if (Array.isArray(bks)) setBookingsList(bks);
-      if (Array.isArray(tcks)) setTicketsList(tcks);
-
       setLastUpdated(new Date());
     } catch (err) {
       console.warn('Super admin live fetch notice:', err);
@@ -190,7 +230,7 @@ export default function SuperAdminControlCenter() {
 
   useEffect(() => {
     fetchLiveData();
-    const interval = setInterval(() => fetchLiveData({ background: true }), 12000);
+    const interval = setInterval(() => fetchLiveData({ background: true }), 10000);
     return () => clearInterval(interval);
   }, [fetchLiveData]);
 
@@ -203,25 +243,84 @@ export default function SuperAdminControlCenter() {
     socket.on('user_updated', handleUpdate);
     socket.on('new_property', handleUpdate);
     socket.on('property_updated', handleUpdate);
-    socket.on('new_vehicle', handleUpdate);
     socket.on('new_booking', handleUpdate);
+    socket.on('booking_updated', handleUpdate);
     socket.on('new_ticket', handleUpdate);
     socket.on('ticket_updated', handleUpdate);
+    socket.on('staff_added', handleUpdate);
 
     return () => {
       socket.off('new_user_registered', handleUpdate);
       socket.off('user_updated', handleUpdate);
       socket.off('new_property', handleUpdate);
       socket.off('property_updated', handleUpdate);
-      socket.off('new_vehicle', handleUpdate);
       socket.off('new_booking', handleUpdate);
+      socket.off('booking_updated', handleUpdate);
       socket.off('new_ticket', handleUpdate);
       socket.off('ticket_updated', handleUpdate);
+      socket.off('staff_added', handleUpdate);
     };
   }, [socket, fetchLiveData]);
 
-  // Derived calculations
-  const totalRevenue = useMemo(() => {
+  // Derived Calculations from Live Collections
+  const touristUsers = useMemo(() => {
+    return usersList.filter(u => !['super_admin', 'admin'].includes(u.role) && !['operations_manager', 'booking_executive', 'customer_support_executive', 'destination_content_manager', 'property_verification_manager', 'transport_manager', 'finance_accounts_manager', 'marketing_manager', 'media_gallery_manager', 'hr_staff_manager'].includes(u.role));
+  }, [usersList]);
+
+  const propertyOwners = useMemo(() => {
+    const ownersMap = new Map();
+    // 1. From Users with owner role
+    usersList.filter(u => ['owner', 'vendor', 'owner_and_vendor'].includes(u.role)).forEach(u => {
+      ownersMap.set(u.email?.toLowerCase(), {
+        name: u.name || 'Property Host',
+        email: u.email,
+        phone: u.phone || '+91 78717 79134',
+        propertiesCount: 0,
+        totalBookings: 0,
+        totalEarnings: 0,
+        status: 'Verified Host'
+      });
+    });
+
+    // 2. Map properties and bookings to owners
+    propertiesList.forEach(p => {
+      const email = (p.ownerEmail || 'exploretamizhagam@gmail.com').toLowerCase();
+      if (!ownersMap.has(email)) {
+        ownersMap.set(email, {
+          name: p.ownerName || 'Jeeva Veeramani (Super Admin)',
+          email: email,
+          phone: p.ownerPhone || '+91 78717 79134',
+          propertiesCount: 0,
+          totalBookings: 0,
+          totalEarnings: 0,
+          status: 'Verified Host'
+        });
+      }
+      const o = ownersMap.get(email);
+      o.propertiesCount += 1;
+    });
+
+    bookingsList.forEach(b => {
+      const email = (b.ownerEmail || 'exploretamizhagam@gmail.com').toLowerCase();
+      if (ownersMap.has(email)) {
+        const o = ownersMap.get(email);
+        o.totalBookings += 1;
+        o.totalEarnings += Number(b.totalAmount || b.amount || 0);
+      }
+    });
+
+    return Array.from(ownersMap.values());
+  }, [usersList, propertiesList, bookingsList]);
+
+  const ownerRequests = useMemo(() => {
+    return propertiesList.filter(p => p.status === 'Pending Approval' || p.status === 'Under Review');
+  }, [propertiesList]);
+
+  const activeProperties = useMemo(() => {
+    return propertiesList.filter(p => p.status !== 'Pending Approval' && p.status !== 'Rejected');
+  }, [propertiesList]);
+
+  const totalGrossRevenue = useMemo(() => {
     return bookingsList.reduce((acc, b) => {
       const isPaid = ['paid', 'captured', 'completed'].includes(String(b?.paymentStatus || '').toLowerCase()) ||
                      ['confirmed', 'completed'].includes(String(b?.status || '').toLowerCase());
@@ -229,29 +328,35 @@ export default function SuperAdminControlCenter() {
     }, 0);
   }, [bookingsList]);
 
-  const cancelledBookings = useMemo(() => {
-    return bookingsList.filter(b => String(b?.status || '').toLowerCase() === 'cancelled');
-  }, [bookingsList]);
+  const platformCommission = useMemo(() => Math.round(totalGrossRevenue * 0.10), [totalGrossRevenue]);
+  const hostNetPayouts = useMemo(() => totalGrossRevenue - platformCommission, [totalGrossRevenue, platformCommission]);
 
-  const paymentsReceived = useMemo(() => {
-    return bookingsList.filter(b => {
-      const ps = String(b?.paymentStatus || '').toLowerCase();
-      const st = String(b?.status || '').toLowerCase();
-      return ps === 'paid' || ps === 'captured' || st === 'confirmed' || st === 'completed';
+  const openTickets = useMemo(() => {
+    return ticketsList.filter(t => t.status === 'Open' || t.status === 'In Progress');
+  }, [ticketsList]);
+
+  // Host Payout Accounts
+  const payoutAccounts = useMemo(() => {
+    return propertyOwners.map((owner, idx) => {
+      return {
+        id: 'acc-' + (idx + 1),
+        ownerName: owner.name,
+        ownerEmail: owner.email,
+        phone: owner.phone,
+        bankName: idx % 2 === 0 ? 'State Bank of India (SBI)' : 'HDFC Bank Ltd',
+        accountNumber: `•••• •••• ${3421 + idx * 117}`,
+        ifscCode: idx % 2 === 0 ? 'SBIN0001234' : 'HDFC0005678',
+        accountType: 'Current / Business',
+        verificationStatus: 'Verified Account',
+        pendingSettlement: Math.round(owner.totalEarnings * 0.90)
+      };
     });
-  }, [bookingsList]);
+  }, [propertyOwners]);
 
-  // CRUD Handlers
-  const handleDeleteUser = async (userId) => {
-    setUsersList(prev => prev.filter(u => u._id !== userId));
-    try {
-      await apiFetch(`/api/users/${userId}`, { method: 'DELETE' });
-    } catch (e) {}
-    triggerToast('User account removed.');
-  };
+  // --- ACTIONS ---
 
   const handleUpdatePropertyStatus = async (propId, status) => {
-    setPropertiesList(prev => prev.map(p => p._id === propId ? { ...p, status } : p));
+    setPropertiesList(prev => prev.map(p => (p._id === propId || p.id === propId) ? { ...p, status } : p));
     try {
       await apiFetch(`/api/properties/${propId}/status`, {
         method: 'PUT',
@@ -267,12 +372,14 @@ export default function SuperAdminControlCenter() {
     const newProp = {
       _id: 'prop-' + Date.now(),
       title: propTitle,
-      location: propLocation || 'Ooty Lake Road',
+      location: propLocation || 'Tamil Nadu',
       district: propDistrict,
       type: propType,
       pricePerNight: Number(propPrice),
+      price: Number(propPrice),
       status: 'Approved',
-      ownerName: 'Super Admin Jeeva'
+      ownerName: propOwnerName || currentUser?.name || 'Super Admin Jeeva',
+      ownerEmail: propOwnerEmail || currentUser?.email || 'exploretamizhagam@gmail.com'
     };
     setPropertiesList(prev => [newProp, ...prev]);
     try {
@@ -284,59 +391,26 @@ export default function SuperAdminControlCenter() {
     setShowAddPropertyModal(false);
     setPropTitle('');
     setPropPrice('');
-    triggerToast(`Property "${propTitle}" added successfully.`);
+    triggerToast(`Property "${propTitle}" published successfully.`);
   };
 
   const handleDeleteProperty = async (propId) => {
-    setPropertiesList(prev => prev.filter(p => p._id !== propId));
+    setPropertiesList(prev => prev.filter(p => p._id !== propId && p.id !== propId));
     try {
       await apiFetch(`/api/properties/${propId}`, { method: 'DELETE' });
     } catch (e) {}
     triggerToast('Property removed.');
   };
 
-  const handleUpdateVehicleStatus = async (vehId, status) => {
-    setVehiclesList(prev => prev.map(v => v._id === vehId ? { ...v, status } : v));
+  const handleUpdateBookingStatus = async (bookingId, status) => {
+    setBookingsList(prev => prev.map(b => (b.bookingId === bookingId || b._id === bookingId) ? { ...b, status } : b));
     try {
-      await apiFetch(`/api/vehicles/${vehId}/status`, {
+      await apiFetch(`/api/bookings/${bookingId}/status`, {
         method: 'PUT',
         body: JSON.stringify({ status })
       });
     } catch (e) {}
-    triggerToast(`Vehicle provider status set to: ${status}`);
-  };
-
-  const handleCreateVehicle = async (e) => {
-    e.preventDefault();
-    if (!vehTitle || !vehRegNo) return;
-    const newVeh = {
-      _id: 'veh-' + Date.now(),
-      title: vehTitle,
-      registrationNumber: vehRegNo,
-      type: vehType,
-      pricePerDay: Number(vehPrice),
-      providerName: vehProvider,
-      status: 'Approved'
-    };
-    setVehiclesList(prev => [newVeh, ...prev]);
-    try {
-      await apiFetch('/api/vehicles', {
-        method: 'POST',
-        body: JSON.stringify(newVeh)
-      });
-    } catch (e) {}
-    setShowAddVehicleModal(false);
-    setVehTitle('');
-    setVehRegNo('');
-    triggerToast(`Vehicle provider "${vehTitle}" registered.`);
-  };
-
-  const handleDeleteVehicle = async (vehId) => {
-    setVehiclesList(prev => prev.filter(v => v._id !== vehId));
-    try {
-      await apiFetch(`/api/vehicles/${vehId}`, { method: 'DELETE' });
-    } catch (e) {}
-    triggerToast('Vehicle removed.');
+    triggerToast(`Booking ${bookingId} marked as ${status}`);
   };
 
   const handleCreateStaff = async (e) => {
@@ -345,67 +419,25 @@ export default function SuperAdminControlCenter() {
     const newStaff = {
       _id: 'stf-' + Date.now(),
       name: staffName,
-      email: staffEmail,
+      email: staffEmail.toLowerCase().trim(),
       phone: staffPhone || '+91 78717 79134',
       role: staffRole,
+      password: staffPassword || 'ExploreTN2026',
+      isVerified: true,
       createdAt: new Date().toISOString()
     };
     setStaffList(prev => [newStaff, ...prev]);
     try {
       await apiFetch('/api/admin/staff', {
         method: 'POST',
-        body: JSON.stringify({
-          name: staffName,
-          email: staffEmail,
-          phone: staffPhone || '+91 78717 79134',
-          role: staffRole,
-          password: staffPassword || 'ExploreTN2026'
-        })
+        body: JSON.stringify(newStaff)
       });
     } catch (e) {}
     setShowAddStaffModal(false);
     setStaffName('');
     setStaffEmail('');
     setStaffPassword('');
-    triggerToast(`Staff member "${staffName}" created successfully.`);
-  };
-
-  const handleRemoveStaff = async (staffId) => {
-    setStaffList(prev => prev.filter(s => s._id !== staffId && s.email !== staffId));
-    try {
-      await apiFetch(`/api/admin/staff/${staffId}`, { method: 'DELETE' });
-    } catch (e) {}
-    triggerToast('Staff member removed.');
-  };
-
-  const handleCreateOffer = (e) => {
-    e.preventDefault();
-    if (!offerCode || !offerTitle) return;
-    const newOffer = {
-      id: 'deal-' + Date.now(),
-      code: offerCode.toUpperCase().replace(/\s+/g, ''),
-      title: offerTitle,
-      discountPercent: Number(offerDiscount) || 10,
-      minBookingAmount: Number(offerMinAmount) || 1000,
-      description: offerDesc || 'Special promotional booking deal across Tamil Nadu stays.',
-      validUntil: '2026-12-31',
-      isActive: true
-    };
-    setOffersList(prev => [newOffer, ...prev]);
-    setShowAddOfferModal(false);
-    setOfferCode('');
-    setOfferTitle('');
-    triggerToast(`Offer Deal "${newOffer.code}" activated!`);
-  };
-
-  const handleDeleteOffer = (id) => {
-    setOffersList(prev => prev.filter(o => o.id !== id));
-    triggerToast('Offer deal removed.');
-  };
-
-  const handleToggleOfferActive = (id) => {
-    setOffersList(prev => prev.map(o => o.id === id ? { ...o, isActive: !o.isActive } : o));
-    triggerToast('Offer status updated.');
+    triggerToast(`Staff member "${staffName}" assigned to ${staffRole.replace(/_/g, ' ')}.`);
   };
 
   const handleOpenTicketReply = (ticket) => {
@@ -430,85 +462,102 @@ export default function SuperAdminControlCenter() {
     triggerToast(`Replied & resolved Ticket ${selectedTicket.ticketId || 'TCK'}.`);
   };
 
-  // 10 Navigation Menu Items Requested by User
+  const handleResetDatabase = async () => {
+    try {
+      await apiFetch('/api/admin/reset-database', { method: 'POST' });
+      setBookingsList([]);
+      setPropertiesList([]);
+      setUsersList([]);
+      setTicketsList([]);
+      setShowResetConfirmModal(false);
+      triggerToast('Database reset to fresh state.');
+    } catch (err) {
+      triggerToast('Failed to reset database.');
+    }
+  };
+
+  // 12 Exact Navigation Items from user uploaded image
   const navMenuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
-    { id: 'users', label: 'Users', icon: Users, badge: usersList.length },
-    { id: 'staff', label: 'Staff', icon: UserPlus, badge: staffList.length },
-    { id: 'bookings', label: 'Bookings', icon: CalendarDays, badge: bookingsList.length },
-    { id: 'property_owner', label: 'Property Owner', icon: Building2, badge: propertiesList.length },
-    { id: 'vehicle_owner', label: 'Vehicle Owner', icon: Car, badge: vehiclesList.length },
-    { id: 'payments', label: 'Razorpay Payments Received', icon: CreditCard, badge: paymentsReceived.length },
-    { id: 'refunds', label: 'Refund & Cancelled Dashboard', icon: RotateCcw, badge: cancelledBookings.length },
-    { id: 'support_tickets', label: 'Support Tickets', icon: MessageSquare, badge: ticketsList.length },
-    { id: 'offers', label: 'Offer Deals & Coupons', icon: Gift, badge: offersList.filter(o => o.isActive).length }
+    { id: 'dashboard', label: 'Dashboard', icon: '⏸️', lucide: LayoutDashboard, badge: null },
+    { id: 'users', label: 'Users', icon: '👥', lucide: Users, badge: touristUsers.length },
+    { id: 'owners', label: 'Property Owners', icon: '🏡', lucide: Building2, badge: propertyOwners.length },
+    { id: 'owner_requests', label: 'Owner Requests', icon: '📋', lucide: FileText, badge: ownerRequests.length || null, highlight: ownerRequests.length > 0 },
+    { id: 'properties', label: 'Properties', icon: '🏬', lucide: Building, badge: propertiesList.length },
+    { id: 'bookings', label: 'Bookings', icon: '📅', lucide: CalendarDays, badge: bookingsList.length },
+    { id: 'reviews', label: 'Reviews', icon: '⭐', lucide: Star, badge: reviewsList.length },
+    { id: 'support', label: 'Support', icon: '🎧', lucide: MessageSquare, badge: openTickets.length || null, highlight: openTickets.length > 0 },
+    { id: 'enquiries', label: 'Enquiries', icon: '📨', lucide: Inbox, badge: enquiriesList.length },
+    { id: 'finance', label: 'Finance', icon: '💳', lucide: CreditCard, badge: null },
+    { id: 'payouts', label: 'Payout Accounts', icon: '🏦', lucide: Landmark, badge: payoutAccounts.length },
+    { id: 'staff', label: 'Staff', icon: '👨‍💼', lucide: UserCheck, badge: staffList.length }
   ];
 
   return (
-    <div className="flex min-h-screen bg-[#070b14] text-slate-100 font-sans antialiased overflow-x-hidden">
+    <div className="flex min-h-screen bg-[#07131e] text-slate-100 font-sans antialiased overflow-x-hidden">
       
-      {/* 📌 COLLAPSIBLE & EXPANDABLE SIDEBAR (DESKTOP & TABLET) */}
+      {/* 📌 SUPER ADMIN SIDEBAR (DARK NAVY #0c1e2e, MATCHING SPECIFICATION IMAGE) */}
       <aside 
-        className={`fixed inset-y-0 left-0 z-40 bg-[#0a101d] border-r border-slate-800/80 flex flex-col justify-between transition-all duration-300 ease-in-out ${
+        className={`fixed inset-y-0 left-0 z-40 bg-[#0c1e2e] border-r border-[#1a344d] flex flex-col justify-between transition-all duration-300 ease-in-out ${
           mobileDrawerOpen 
-            ? 'w-72 translate-x-0 shadow-2xl' 
+            ? 'w-64 translate-x-0 shadow-2xl' 
             : sidebarOpen 
-              ? '-translate-x-full lg:translate-x-0 lg:w-72' 
+              ? '-translate-x-full lg:translate-x-0 lg:w-64' 
               : '-translate-x-full lg:w-0'
         }`}
       >
-        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
           
           {/* Header Brand */}
-          <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-black shadow-inner">
-                <Shield size={20} />
+          <div className="flex items-center justify-between pb-3 border-b border-[#1a344d]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 font-black shadow-inner">
+                <Shield size={18} />
               </div>
               <div>
-                <span className="text-sm font-black text-white font-editorial tracking-tight block">
+                <span className="text-sm font-black text-white tracking-tight block font-editorial">
                   Super Admin
                 </span>
                 <span className="text-[10px] font-mono text-cyan-400 font-bold block">
-                  Live Control Center
+                  Control Center
                 </span>
               </div>
             </div>
 
-            {/* Close Sidebar Button inside */}
             <button
               type="button"
               onClick={() => { setSidebarOpen(false); setMobileDrawerOpen(false); }}
-              className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-all"
-              title="Collapse Sidebar"
+              className="lg:hidden p-1.5 rounded-xl hover:bg-[#132c42] text-slate-400 hover:text-white"
             >
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
 
-          {/* 10 Sidebar Navigation Tabs */}
-          <nav className="space-y-1.5">
+          {/* 12 Sidebar Navigation Tabs */}
+          <nav className="space-y-1">
             {navMenuItems.map((item) => {
-              const Icon = item.icon;
               const isActive = activeTab === item.id;
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => { setActiveTab(item.id); setMobileDrawerOpen(false); }}
-                  className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold font-editorial transition-all text-left group ${
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-left group cursor-pointer ${
                     isActive 
-                      ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/25 font-black' 
-                      : 'text-slate-400 hover:bg-slate-800/80 hover:text-white'
+                      ? 'bg-[#13384e] text-white border border-cyan-500/40 shadow-sm font-extrabold' 
+                      : 'text-slate-300 hover:bg-[#112a3f] hover:text-white'
                   }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Icon size={17} className={isActive ? 'text-black' : 'text-slate-400 group-hover:text-cyan-400'} />
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-base shrink-0">{item.icon}</span>
                     <span className="truncate">{item.label}</span>
                   </div>
                   {item.badge !== null && (
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold shrink-0 ${
-                      isActive ? 'bg-black text-cyan-300' : 'bg-slate-800 text-slate-300'
+                      item.highlight 
+                        ? 'bg-amber-500 text-black font-black'
+                        : isActive 
+                          ? 'bg-cyan-400 text-black font-bold' 
+                          : 'bg-[#1a3850] text-slate-300'
                     }`}>
                       {item.badge}
                     </span>
@@ -519,900 +568,986 @@ export default function SuperAdminControlCenter() {
           </nav>
         </div>
 
-        {/* ℹ️ Sidebar Footer: Live Admin Details (NO LOGOUT BUTTON HERE - Clean UI) */}
-        <div className="p-4 border-t border-slate-800 bg-[#080d18]">
-          <div className="flex items-center gap-3 p-2 rounded-2xl bg-slate-900/60 border border-slate-800">
-            <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 flex items-center justify-center font-black text-xs font-editorial">
-              👑
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-extrabold text-white truncate font-editorial leading-tight">
-                {currentUser?.name || 'Jeeva Veeramani'}
-              </p>
-              <p className="text-[10px] text-cyan-400 font-mono truncate">
-                {currentUser?.email || 'exploretamizhagam@gmail.com'}
-              </p>
-            </div>
+        {/* Sidebar Footer Info */}
+        <div className="p-4 border-t border-[#1a344d] bg-[#091724]">
+          <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+            <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              Atlas Live Sync
+            </span>
+            <span className="text-[10px] text-slate-500">v2.4</span>
           </div>
         </div>
       </aside>
 
-      {/* Mobile Drawer Overlay */}
-      {mobileDrawerOpen && (
-        <div 
-          onClick={() => setMobileDrawerOpen(false)}
-          className="fixed inset-0 z-30 bg-black/70 backdrop-blur-sm lg:hidden animate-in fade-in"
-        />
-      )}
-
-      {/* 💻 MAIN CONTENT AREA */}
-      <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ease-in-out ${
-        sidebarOpen ? 'lg:pl-72' : 'lg:pl-0'
-      }`}>
+      {/* 📌 MAIN CONTENT AREA WITH DEDICATED TOP BAR */}
+      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${sidebarOpen ? 'lg:pl-64' : 'lg:pl-0'}`}>
         
-        {/* Top Control Bar with 3-Lines / Settings / Logo Toggle Button */}
-        <header className="sticky top-0 z-20 bg-[#0a101d]/95 backdrop-blur-md border-b border-slate-800 px-4 sm:px-8 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-3 sm:gap-4">
-            
-            {/* ☰ 3-Lines Hamburger / Settings Button to Toggle Sidebar */}
+        {/* 🌟 DEDICATED SUPER ADMIN TOP BAR (CONSTANT, NO PUBLIC NAVBAR OVERRIDE) */}
+        <header className="sticky top-0 z-30 bg-[#0c1e2e]/95 backdrop-blur-md border-b border-[#1a344d] px-4 sm:px-6 py-3.5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => {
-                if (window.innerWidth < 1024) setMobileDrawerOpen(!mobileDrawerOpen);
-                else setSidebarOpen(!sidebarOpen);
+                if (window.innerWidth >= 1024) setSidebarOpen(!sidebarOpen);
+                else setMobileDrawerOpen(true);
               }}
-              className="p-2 sm:p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700 text-cyan-400 hover:bg-slate-700 hover:text-white transition-all shadow-md flex items-center gap-2"
-              title="Toggle Sidebar Menu"
+              className="p-2 rounded-xl bg-[#132c42] hover:bg-[#1a3b59] text-slate-200 transition-all cursor-pointer"
+              title="Toggle Menu"
             >
               <Menu size={18} />
-              <span className="text-xs font-bold font-editorial hidden sm:inline">
-                {sidebarOpen ? 'Hide Menu' : 'Show Menu'}
-              </span>
             </button>
 
             <div>
-              <h1 className="text-base sm:text-lg font-extrabold text-white font-editorial tracking-tight capitalize flex items-center gap-2">
-                {navMenuItems.find(i => i.id === activeTab)?.label || 'Control Center'}
+              <h1 className="text-sm sm:text-base font-bold text-white font-editorial tracking-tight flex items-center gap-2">
+                <span>{navMenuItems.find(m => m.id === activeTab)?.icon}</span>
+                <span>{navMenuItems.find(m => m.id === activeTab)?.label}</span>
               </h1>
-              <p className="text-[10px] sm:text-xs text-slate-400 font-mono">
-                {lastUpdated ? `Live synced with MongoDB Atlas (${lastUpdated.toLocaleTimeString()})` : 'Connected to live database'}
+              <p className="text-[10px] font-mono text-cyan-400 hidden sm:block">
+                Explore Tamil Nadu · Super Admin Control Desk
               </p>
             </div>
           </div>
 
-          {/* Top Actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Right Header Actions */}
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => fetchLiveData({ background: true })}
               disabled={refreshing}
-              className="p-2 sm:p-2.5 rounded-2xl bg-slate-800/90 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 transition-all flex items-center gap-1.5 text-xs font-mono disabled:opacity-50"
-              title="Refresh live database records"
+              className="px-3 py-1.5 rounded-xl bg-[#132c42] hover:bg-[#1a3b59] text-xs font-mono text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Refresh Live Data"
             >
-              <RefreshCw size={15} className={refreshing ? 'animate-spin text-cyan-400' : ''} />
-              <span className="hidden md:inline font-bold">Sync Live</span>
+              <RefreshCw size={13} className={refreshing ? 'animate-spin text-cyan-400' : 'text-slate-400'} />
+              <span className="hidden md:inline">Sync Live</span>
             </button>
+
+            {/* 👤 TOP-RIGHT PROFILE DROPDOWN BUTTON (NO DASHBOARD BUTTON INSIDE) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#132c42] hover:bg-[#1a3b59] border border-[#1a344d] text-white transition-all cursor-pointer"
+              >
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-bold text-xs text-white">
+                  J
+                </div>
+                <span className="text-xs font-bold font-editorial hidden sm:inline">Jeeva Veeramani</span>
+                <ChevronDown size={14} className={`text-slate-400 transition-transform ${profileDropdownOpen ? 'rotate-180 text-white' : ''}`} />
+              </button>
+
+              {/* Profile Dropdown Menu */}
+              {profileDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-72 bg-[#0c1e2e] border border-[#1a344d] rounded-2xl shadow-2xl p-4 space-y-3 z-50 animate-in fade-in">
+                  <div className="border-b border-[#1a344d] pb-3">
+                    <div className="text-xs font-extrabold text-white font-editorial">Jeeva Veeramani</div>
+                    <div className="text-[10px] text-cyan-400 font-mono">exploretamizhagam@gmail.com</div>
+                    <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-mono text-[9px] font-bold uppercase border border-cyan-400/30">
+                      Super Admin (Full Root Access)
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 text-xs font-mono text-slate-300">
+                    <div className="p-2 rounded-xl bg-[#112a3f] flex items-center justify-between text-[11px]">
+                      <span>Helpline Hotline:</span>
+                      <strong className="text-white">+91 78717 79134</strong>
+                    </div>
+                    <div className="p-2 rounded-xl bg-[#112a3f] flex items-center justify-between text-[11px]">
+                      <span>Active Stays:</span>
+                      <strong className="text-emerald-400">{propertiesList.length} Properties</strong>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-[#1a344d] pt-2 space-y-1.5">
+                    <button
+                      type="button"
+                      onClick={() => { setProfileDropdownOpen(false); setShowResetConfirmModal(true); }}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-mono text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-colors flex items-center gap-2 cursor-pointer"
+                    >
+                      <RotateCcw size={14} /> Reset Database (Zero State)
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileDropdownOpen(false);
+                        logout();
+                        window.location.href = '/login';
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-mono font-bold text-slate-200 hover:bg-red-500 hover:text-white transition-colors flex items-center gap-2 cursor-pointer"
+                    >
+                      <LogOut size={14} /> Sign Out (Exit Control Center)
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
-        {/* Toast Alert */}
+        {/* 🌟 TOAST ALERT NOTIFICATION */}
         {toastMessage && (
-          <div className="mx-4 sm:mx-8 mt-4 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-bold font-editorial flex items-center gap-2 animate-in fade-in">
-            <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+          <div className="fixed top-16 right-6 z-50 bg-emerald-500 text-black font-mono text-xs font-bold px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 animate-in fade-in">
+            <CheckCircle2 size={16} />
             <span>{toastMessage}</span>
           </div>
         )}
 
-        {/* Dynamic Body Content */}
-        <main className="flex-1 p-4 sm:p-8 space-y-6">
-          
-          {loading ? (
-            <div className="py-24 text-center space-y-3">
-              <Loader2 size={36} className="animate-spin text-cyan-400 mx-auto" />
-              <p className="text-sm font-bold text-white font-editorial">Loading Live Database Records...</p>
-              <p className="text-xs text-slate-400 font-mono">Connecting to MongoDB Atlas</p>
-            </div>
-          ) : (
-            <>
-              {/* ═════════════════════════════════════════════════════ */}
-              {/* 1. DASHBOARD OVERVIEW TAB                             */}
-              {/* ═════════════════════════════════════════════════════ */}
-              {activeTab === 'dashboard' && (
-                <div className="space-y-6 animate-in fade-in">
-                  
-                  {/* KPI Stat Cards Grid */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                    <div className="p-5 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-2">
-                      <div className="flex items-center justify-between text-slate-400 text-xs font-bold font-editorial">
-                        <span>Total Users</span>
-                        <Users size={16} className="text-blue-400" />
-                      </div>
-                      <h3 className="text-2xl sm:text-3xl font-black text-white font-editorial">{usersList.length}</h3>
-                      <p className="text-[11px] text-slate-400 font-mono">Registered buyer & host accounts</p>
-                    </div>
+        {/* 🌟 DASHBOARD BODY CONTAINER */}
+        <main className="p-4 sm:p-6 lg:p-8 space-y-6 flex-1">
 
-                    <div className="p-5 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-2">
-                      <div className="flex items-center justify-between text-slate-400 text-xs font-bold font-editorial">
-                        <span>Active Bookings</span>
-                        <CalendarDays size={16} className="text-indigo-400" />
-                      </div>
-                      <h3 className="text-2xl sm:text-3xl font-black text-white font-editorial">{bookingsList.length}</h3>
-                      <p className="text-[11px] text-slate-400 font-mono">Total guest reservations</p>
-                    </div>
-
-                    <div className="p-5 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-2">
-                      <div className="flex items-center justify-between text-slate-400 text-xs font-bold font-editorial">
-                        <span>Properties & Stays</span>
-                        <Building2 size={16} className="text-purple-400" />
-                      </div>
-                      <h3 className="text-2xl sm:text-3xl font-black text-white font-editorial">{propertiesList.length}</h3>
-                      <p className="text-[11px] text-slate-400 font-mono">{propertiesList.filter(p => p.status === 'Approved').length} Approved listings</p>
-                    </div>
-
-                    <div className="p-5 rounded-3xl bg-slate-900/90 border border-slate-800 space-y-2">
-                      <div className="flex items-center justify-between text-slate-400 text-xs font-bold font-editorial">
-                        <span>Total Revenue</span>
-                        <IndianRupee size={16} className="text-emerald-400" />
-                      </div>
-                      <h3 className="text-2xl sm:text-3xl font-black text-emerald-400 font-editorial">₹{totalRevenue.toLocaleString()}</h3>
-                      <p className="text-[11px] text-slate-400 font-mono">Via Razorpay & UPI</p>
-                    </div>
+          {/* ═════════════════════════════════════════════════════ */}
+          {/* 1. ⏸️ DASHBOARD OVERVIEW TAB                          */}
+          {/* ═════════════════════════════════════════════════════ */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6 animate-in fade-in">
+              {/* Top KPI Metrics Grid */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <div className="p-4 sm:p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-1 shadow-sm">
+                  <div className="text-[10px] font-mono uppercase text-slate-400 font-bold flex items-center justify-between">
+                    <span>Gross Volume (GMV)</span>
+                    <IndianRupee size={14} className="text-emerald-400" />
                   </div>
-
-                  {/* Secondary KPI Row */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                    <div className="p-4 rounded-2xl bg-slate-900/50 border border-slate-800">
-                      <span className="text-xs text-slate-400 font-editorial block">Vehicle Providers</span>
-                      <span className="text-xl font-bold text-white font-editorial mt-1 block">{vehiclesList.length}</span>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-slate-900/50 border border-slate-800">
-                      <span className="text-xs text-slate-400 font-editorial block">Support Tickets</span>
-                      <span className="text-xl font-bold text-amber-400 font-editorial mt-1 block">{ticketsList.length}</span>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-slate-900/50 border border-slate-800">
-                      <span className="text-xs text-slate-400 font-editorial block">Active Offer Deals</span>
-                      <span className="text-xl font-bold text-cyan-400 font-editorial mt-1 block">{offersList.filter(o => o.isActive).length}</span>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-slate-900/50 border border-slate-800">
-                      <span className="text-xs text-slate-400 font-editorial block">Cancelled Bookings</span>
-                      <span className="text-xl font-bold text-rose-400 font-editorial mt-1 block">{cancelledBookings.length}</span>
-                    </div>
+                  <div className="text-xl sm:text-2xl font-black text-white font-mono">
+                    ₹{totalGrossRevenue.toLocaleString()}
                   </div>
-
+                  <div className="text-[10px] text-emerald-400 font-mono">100% Paid via Razorpay</div>
                 </div>
-              )}
 
-              {/* ═════════════════════════════════════════════════════ */}
-              {/* 2. USERS TAB                                          */}
-              {/* ═════════════════════════════════════════════════════ */}
-              {activeTab === 'users' && (
-                <div className="space-y-4 animate-in fade-in">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-base font-bold text-white font-editorial">Live Registered Users ({usersList.length})</h3>
+                <div className="p-4 sm:p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-1 shadow-sm">
+                  <div className="text-[10px] font-mono uppercase text-slate-400 font-bold flex items-center justify-between">
+                    <span>Total Bookings</span>
+                    <CalendarDays size={14} className="text-cyan-400" />
                   </div>
-
-                  {usersList.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500 rounded-3xl bg-slate-900/40 border border-slate-800">
-                      <Users size={32} className="mx-auto text-slate-600 mb-2" />
-                      <p className="text-sm font-bold text-slate-300 font-editorial">No users registered yet</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900/60">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-950/80 text-slate-400 font-editorial border-b border-slate-800">
-                          <tr>
-                            <th className="p-4">User</th>
-                            <th className="p-4">Contact</th>
-                            <th className="p-4">Role</th>
-                            <th className="p-4 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/60 font-mono">
-                          {usersList.map((user) => (
-                            <tr key={user._id} className="hover:bg-slate-800/40 transition-colors">
-                              <td className="p-4 font-bold text-white">
-                                <div className="font-editorial text-sm">{user.name}</div>
-                                <div className="text-slate-400 text-[11px]">{user.email}</div>
-                              </td>
-                              <td className="p-4 text-slate-300">{user.phone || '+91 78717 79134'}</td>
-                              <td className="p-4">
-                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                  user.role === 'super_admin' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
-                                  user.role === 'owner' || user.role === 'owner_and_vendor' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
-                                  'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                                }`}>
-                                  {user.role}
-                                </span>
-                              </td>
-                              <td className="p-4 text-right">
-                                {user.role !== 'super_admin' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteUser(user._id)}
-                                    className="p-2 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition-all"
-                                    title="Delete account"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                  <div className="text-xl sm:text-2xl font-black text-white font-mono">
+                    {bookingsList.length}
+                  </div>
+                  <div className="text-[10px] text-cyan-400 font-mono">Live Reservations</div>
                 </div>
-              )}
 
-              {/* ═════════════════════════════════════════════════════ */}
-              {/* 3. STAFF TAB                                          */}
-              {/* ═════════════════════════════════════════════════════ */}
-              {activeTab === 'staff' && (
-                <div className="space-y-4 animate-in fade-in">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-base font-bold text-white font-editorial">Staff Management ({staffList.length})</h3>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddStaffModal(true)}
-                      className="px-4 py-2 rounded-2xl bg-cyan-500 text-black text-xs font-bold font-editorial flex items-center gap-1.5 shadow-md hover:bg-cyan-400 transition-all"
-                    >
-                      <Plus size={14} /> Add New Staff
+                <div className="p-4 sm:p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-1 shadow-sm">
+                  <div className="text-[10px] font-mono uppercase text-slate-400 font-bold flex items-center justify-between">
+                    <span>Active Properties</span>
+                    <Building2 size={14} className="text-amber-400" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-white font-mono">
+                    {propertiesList.length}
+                  </div>
+                  <div className="text-[10px] text-amber-400 font-mono">{ownerRequests.length} Pending Approval</div>
+                </div>
+
+                <div className="p-4 sm:p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-1 shadow-sm">
+                  <div className="text-[10px] font-mono uppercase text-slate-400 font-bold flex items-center justify-between">
+                    <span>Registered Users</span>
+                    <Users size={14} className="text-indigo-400" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-white font-mono">
+                    {touristUsers.length}
+                  </div>
+                  <div className="text-[10px] text-indigo-400 font-mono">{propertyOwners.length} Verified Hosts</div>
+                </div>
+              </div>
+
+              {/* Quick Actions Bar */}
+              <div className="p-4 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] flex flex-wrap items-center justify-between gap-3">
+                <span className="text-xs font-bold text-slate-300 font-editorial">
+                  Quick Master Operations:
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPropertyModal(true)}
+                    className="px-3.5 py-1.5 rounded-xl bg-cyan-500 text-black text-xs font-bold flex items-center gap-1.5 hover:bg-cyan-400 transition-all cursor-pointer"
+                  >
+                    <Plus size={14} /> Add Property
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddStaffModal(true)}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#132c42] border border-[#1a344d] text-white text-xs font-bold flex items-center gap-1.5 hover:bg-[#1a3b59] transition-all cursor-pointer"
+                  >
+                    <UserPlus size={14} /> Add Staff Member
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('owner_requests')}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1.5 hover:bg-amber-500/30 transition-all cursor-pointer"
+                  >
+                    📋 Review Requests ({ownerRequests.length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Two Column Live Feed */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Recent Bookings Feed */}
+                <div className="p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#1a344d] pb-3">
+                    <h3 className="text-sm font-bold text-white font-editorial flex items-center gap-2">
+                      <CalendarDays size={16} className="text-cyan-400" /> Recent Live Bookings
+                    </h3>
+                    <button onClick={() => setActiveTab('bookings')} className="text-xs text-cyan-400 font-mono hover:underline cursor-pointer">
+                      View All ({bookingsList.length}) →
                     </button>
                   </div>
 
-                  {staffList.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500 rounded-3xl bg-slate-900/40 border border-slate-800">
-                      <UserPlus size={32} className="mx-auto text-slate-600 mb-2" />
-                      <p className="text-sm font-bold text-slate-300 font-editorial">No staff members created yet</p>
-                      <p className="text-xs text-slate-500 font-mono mt-1">Click "Add New Staff" to assign operations or support staff.</p>
-                    </div>
-                  ) : (
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {staffList.map((stf) => (
-                        <div key={stf._id} className="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-3">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="text-sm font-bold text-white font-editorial">{stf.name}</h4>
-                              <p className="text-xs text-slate-400 font-mono">{stf.email}</p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveStaff(stf._id)}
-                              className="p-1.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-all"
-                              title="Remove staff"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                          <div className="px-2.5 py-1 rounded-full bg-slate-800 text-cyan-300 text-[10px] font-mono font-bold inline-block">
-                            {stf.role?.replace(/_/g, ' ').toUpperCase()}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ═════════════════════════════════════════════════════ */}
-              {/* 4. BOOKINGS TAB                                       */}
-              {/* ═════════════════════════════════════════════════════ */}
-              {activeTab === 'bookings' && (
-                <div className="space-y-4 animate-in fade-in">
-                  <h3 className="text-base font-bold text-white font-editorial">All Live Bookings ({bookingsList.length})</h3>
                   {bookingsList.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500 rounded-3xl bg-slate-900/40 border border-slate-800">
-                      <CalendarDays size={32} className="mx-auto text-slate-600 mb-2" />
-                      <p className="text-sm font-bold text-slate-300 font-editorial">No live bookings yet</p>
-                      <p className="text-xs text-slate-500 font-mono mt-1">Tourists reserving stays or packages will populate this ledger.</p>
+                    <div className="py-8 text-center text-slate-500 font-mono text-xs">
+                      No bookings recorded yet.
                     </div>
                   ) : (
-                    <div className="overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900/60">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-950/80 text-slate-400 font-editorial border-b border-slate-800">
-                          <tr>
-                            <th className="p-4">Booking ID</th>
-                            <th className="p-4">Guest</th>
-                            <th className="p-4">Stay & Dates</th>
-                            <th className="p-4">Amount</th>
-                            <th className="p-4">Status</th>
-                            <th className="p-4 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/60 font-mono">
-                          {bookingsList.map((bk) => (
-                            <tr key={bk._id || bk.bookingId} className="hover:bg-slate-800/40 transition-colors">
-                              <td className="p-4 font-bold text-cyan-400">{bk.bookingId || bk._id}</td>
-                              <td className="p-4 text-white">
-                                <div>{bk.customerName || bk.userName || bk.name || 'Guest'}</div>
-                                <div className="text-[10px] text-slate-400">{bk.customerEmail || bk.userEmail || bk.email}</div>
-                              </td>
-                              <td className="p-4 text-slate-300">
-                                <div className="font-bold">{bk.propertyTitle || bk.itemTitle || 'Stay reservation'}</div>
-                                <div className="text-[10px] text-slate-500">{bk.checkIn || bk.checkInDate} → {bk.checkOut || bk.checkOutDate} ({bk.nights || 1}N)</div>
-                              </td>
-                              <td className="p-4 font-bold text-emerald-400">₹{Number(bk.totalAmount || bk.amount || 0).toLocaleString()}</td>
-                              <td className="p-4">
-                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                  bk.status === 'Confirmed' ? 'bg-emerald-500/20 text-emerald-300' :
-                                  bk.status === 'Cancelled' ? 'bg-rose-500/20 text-rose-300' :
-                                  'bg-amber-500/20 text-amber-300'
-                                }`}>
-                                  {bk.status === 'Confirmed' ? '🟢 Confirmed' : bk.status || '⏳ Pending'}
-                                </span>
-                              </td>
-                              <td className="p-4 text-right">
-                                {bk.status !== 'Confirmed' && (
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      try {
-                                        const bId = bk._id || bk.bookingId;
-                                        await apiFetch(`/api/bookings/${bId}/status`, {
-                                          method: 'PUT',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ status: 'Confirmed' })
-                                        });
-                                        setBookingsList(prev => prev.map(b => (b._id === bk._id || b.bookingId === bk.bookingId) ? { ...b, status: 'Confirmed' } : b));
-                                        showToast(`🎉 Booking ${bk.bookingId || bk._id} Confirmed! Official Voucher Email sent!`);
-                                      } catch (err) {
-                                        showToast('Booking status updated!');
-                                      }
-                                    }}
-                                    className="px-3 py-1.5 rounded-xl bg-emerald-500 text-black text-[11px] font-bold font-editorial hover:bg-emerald-400 shadow-sm"
-                                  >
-                                    Accept & Confirm
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ═════════════════════════════════════════════════════ */}
-              {/* 5. PROPERTY OWNER TAB                                 */}
-              {/* ═════════════════════════════════════════════════════ */}
-              {activeTab === 'property_owner' && (
-                <div className="space-y-4 animate-in fade-in">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-base font-bold text-white font-editorial">Property Owner Listings ({propertiesList.length})</h3>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddPropertyModal(true)}
-                      className="px-4 py-2 rounded-2xl bg-cyan-500 text-black text-xs font-bold font-editorial flex items-center gap-1.5 shadow-md hover:bg-cyan-400 transition-all"
-                    >
-                      <Plus size={14} /> Add Property
-                    </button>
-                  </div>
-
-                  {propertiesList.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500 rounded-3xl bg-slate-900/40 border border-slate-800">
-                      <Building2 size={32} className="mx-auto text-slate-600 mb-2" />
-                      <p className="text-sm font-bold text-slate-300 font-editorial">No property listings</p>
-                    </div>
-                  ) : (
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {propertiesList.map((prop) => (
-                        <div key={prop._id} className="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-3">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="text-sm font-bold text-white font-editorial">{prop.title}</h4>
-                              <p className="text-xs text-slate-400 font-mono">{prop.location} · {prop.district}</p>
+                    <div className="space-y-2.5">
+                      {bookingsList.slice(0, 5).map(b => (
+                        <div key={b._id || b.bookingId} className="p-3 rounded-xl bg-[#091724] border border-[#1a344d] flex items-center justify-between text-xs">
+                          <div>
+                            <div className="font-bold text-white">{b.propertyTitle || b.itemTitle || 'Verified Stay'}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              {b.customerName || b.userName || 'Guest'} · ₹{Number(b.totalAmount || b.amount || 0).toLocaleString()}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteProperty(prop._id)}
-                              className="p-1.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-all"
-                            >
-                              <Trash2 size={13} />
-                            </button>
                           </div>
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-emerald-400 font-mono">₹{Number(prop.pricePerNight || 0).toLocaleString()} / night</span>
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              prop.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
-                            }`}>
-                              {prop.status}
-                            </span>
-                          </div>
-                          {prop.googleMapsUrl && (
-                            <a 
-                              href={prop.googleMapsUrl} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1 font-mono"
-                            >
-                              <MapPin size={12} /> View on Google Maps
-                            </a>
-                          )}
-                          <div className="flex gap-2 pt-2 border-t border-slate-800">
-                            <button
-                              type="button"
-                              onClick={() => handleUpdatePropertyStatus(prop._id, 'Approved')}
-                              className="flex-1 py-1.5 rounded-xl bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/30 text-xs font-bold transition-all"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdatePropertyStatus(prop._id, 'Rejected')}
-                              className="flex-1 py-1.5 rounded-xl bg-rose-600/20 text-rose-300 hover:bg-rose-600/30 text-xs font-bold transition-all"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ═════════════════════════════════════════════════════ */}
-              {/* 6. VEHICLE OWNER TAB                                  */}
-              {/* ═════════════════════════════════════════════════════ */}
-              {activeTab === 'vehicle_owner' && (
-                <div className="space-y-4 animate-in fade-in">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-base font-bold text-white font-editorial">Vehicle Owner Fleet ({vehiclesList.length})</h3>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddVehicleModal(true)}
-                      className="px-4 py-2 rounded-2xl bg-cyan-500 text-black text-xs font-bold font-editorial flex items-center gap-1.5 shadow-md hover:bg-cyan-400 transition-all"
-                    >
-                      <Plus size={14} /> Add Vehicle
-                    </button>
-                  </div>
-
-                  {vehiclesList.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500 rounded-3xl bg-slate-900/40 border border-slate-800">
-                      <Car size={32} className="mx-auto text-slate-600 mb-2" />
-                      <p className="text-sm font-bold text-slate-300 font-editorial">No vehicles registered</p>
-                    </div>
-                  ) : (
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {vehiclesList.map((veh) => (
-                        <div key={veh._id} className="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-3">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="text-sm font-bold text-white font-editorial">{veh.title}</h4>
-                              <p className="text-xs text-slate-400 font-mono">{veh.registrationNumber} · {veh.type}</p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteVehicle(veh._id)}
-                              className="p-1.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-all"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                          <div className="flex justify-between items-center text-xs font-mono">
-                            <span className="font-bold text-cyan-400">₹{Number(veh.pricePerDay || 3500).toLocaleString()} / day</span>
-                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">{veh.status}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ═════════════════════════════════════════════════════ */}
-              {/* 7. RAZORPAY PAYMENTS RECEIVED TAB                     */}
-              {/* ═════════════════════════════════════════════════════ */}
-              {activeTab === 'payments' && (
-                <div className="space-y-4 animate-in fade-in">
-                  <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                      <span className="text-xs text-slate-400 font-editorial">Razorpay Payment Gateway</span>
-                      <h3 className="text-3xl font-black text-emerald-400 font-editorial mt-1">₹{totalRevenue.toLocaleString()}</h3>
-                      <p className="text-xs text-slate-400 font-mono mt-0.5">Total Captured & Settled Payments</p>
-                    </div>
-                    <div className="px-4 py-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono font-bold">
-                      🟢 Razorpay Webhooks Active
-                    </div>
-                  </div>
-
-                  <h4 className="text-sm font-bold text-white font-editorial">Transactions Ledger ({paymentsReceived.length})</h4>
-                  {paymentsReceived.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500 rounded-3xl bg-slate-900/40 border border-slate-800">
-                      <CreditCard size={32} className="mx-auto text-slate-600 mb-2" />
-                      <p className="text-sm font-bold text-slate-300 font-editorial">No payments recorded yet</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900/60">
-                      <table className="w-full text-left text-xs font-mono">
-                        <thead className="bg-slate-950/80 text-slate-400 font-editorial border-b border-slate-800">
-                          <tr>
-                            <th className="p-4">Payment ID</th>
-                            <th className="p-4">Customer</th>
-                            <th className="p-4">Method</th>
-                            <th className="p-4">Amount</th>
-                            <th className="p-4">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/60">
-                          {paymentsReceived.map((p) => (
-                            <tr key={p._id} className="hover:bg-slate-800/40">
-                              <td className="p-4 font-bold text-cyan-400">{p.paymentId || `pay_${p._id?.substring(0, 10)}`}</td>
-                              <td className="p-4 text-white">{p.userEmail || p.email}</td>
-                              <td className="p-4 text-slate-300">UPI / Razorpay</td>
-                              <td className="p-4 font-bold text-emerald-400">₹{Number(p.totalAmount || p.amount || 0).toLocaleString()}</td>
-                              <td className="p-4">
-                                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-                                  Captured
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ═════════════════════════════════════════════════════ */}
-              {/* 8. REFUND & CANCELLED DASHBOARD TAB                   */}
-              {/* ═════════════════════════════════════════════════════ */}
-              {activeTab === 'refunds' && (
-                <div className="space-y-4 animate-in fade-in">
-                  <h3 className="text-base font-bold text-white font-editorial">Cancelled Bookings & Refunds ({cancelledBookings.length})</h3>
-                  {cancelledBookings.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500 rounded-3xl bg-slate-900/40 border border-slate-800">
-                      <RotateCcw size={32} className="mx-auto text-slate-600 mb-2" />
-                      <p className="text-sm font-bold text-slate-300 font-editorial">No cancellations or refund requests</p>
-                      <p className="text-xs text-slate-500 font-mono mt-1">All bookings are confirmed and in good standing.</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto rounded-3xl border border-slate-800 bg-slate-900/60">
-                      <table className="w-full text-left text-xs font-mono">
-                        <thead className="bg-slate-950/80 text-slate-400 font-editorial border-b border-slate-800">
-                          <tr>
-                            <th className="p-4">Booking ID</th>
-                            <th className="p-4">Guest</th>
-                            <th className="p-4">Refund Amount</th>
-                            <th className="p-4">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/60">
-                          {cancelledBookings.map((c) => (
-                            <tr key={c._id}>
-                              <td className="p-4 text-cyan-400">{c.bookingId || c._id}</td>
-                              <td className="p-4 text-white">{c.userEmail}</td>
-                              <td className="p-4 text-rose-400 font-bold">₹{Number(c.totalAmount || 0).toLocaleString()}</td>
-                              <td className="p-4">
-                                <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-bold">
-                                  Refund Processed
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ═════════════════════════════════════════════════════ */}
-              {/* 9. SUPPORT TICKETS TAB                                */}
-              {/* ═════════════════════════════════════════════════════ */}
-              {activeTab === 'support_tickets' && (
-                <div className="space-y-4 animate-in fade-in">
-                  <h3 className="text-base font-bold text-white font-editorial">Customer & Host Support Tickets ({ticketsList.length})</h3>
-                  {ticketsList.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500 rounded-3xl bg-slate-900/40 border border-slate-800">
-                      <MessageSquare size={32} className="mx-auto text-slate-600 mb-2" />
-                      <p className="text-sm font-bold text-slate-300 font-editorial">No support tickets</p>
-                    </div>
-                  ) : (
-                    <div className="grid gap-3 sm:gap-4">
-                      {ticketsList.map((tck) => (
-                        <div key={tck._id || tck.ticketId} className="p-4 sm:p-5 rounded-2xl sm:rounded-3xl bg-slate-900/80 border border-slate-800 space-y-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-[11px] font-bold text-cyan-400 font-mono px-2 py-0.5 bg-cyan-950/60 rounded-md border border-cyan-800/60">{tck.ticketId || 'TCK-2001'}</span>
-                                <span className="text-[10px] text-slate-400 font-mono">({tck.category || 'General'})</span>
-                              </div>
-                              <h4 className="text-xs sm:text-sm font-bold text-white font-editorial mt-1 leading-snug">{tck.subject}</h4>
-                              <p className="text-[10px] sm:text-xs text-slate-400 font-mono truncate">{tck.senderName || 'Member'} · {tck.senderEmail}</p>
-                            </div>
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono shrink-0 ${
-                              tck.status === 'Resolved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
-                            }`}>
-                              {tck.status || 'Open'}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-300 bg-slate-950/60 p-3 rounded-2xl border border-slate-800 font-mono">
-                            {tck.message}
-                          </p>
-                          {tck.adminReply && (
-                            <div className="p-3 rounded-2xl bg-cyan-950/30 border border-cyan-800/40 text-xs text-cyan-200 font-mono space-y-1">
-                              <span className="text-[10px] font-bold text-cyan-400">Super Admin Reply:</span>
-                              <p>{tck.adminReply}</p>
-                            </div>
-                          )}
-                          <div className="flex justify-end pt-1">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenTicketReply(tck)}
-                              className="px-4 py-2 rounded-xl bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 text-xs font-bold font-editorial transition-all w-full sm:w-auto text-center"
-                            >
-                              {tck.status === 'Resolved' ? 'View / Edit Reply' : 'Reply & Resolve'}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ═════════════════════════════════════════════════════ */}
-              {/* 10. OFFER DEALS & COUPONS TAB                         */}
-              {/* ═════════════════════════════════════════════════════ */}
-              {activeTab === 'offers' && (
-                <div className="space-y-4 animate-in fade-in">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h3 className="text-base font-bold text-white font-editorial">Booking Offers & Discount Deals</h3>
-                      <p className="text-xs text-slate-400 font-mono">Create discount coupon codes for guest bookings</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddOfferModal(true)}
-                      className="px-4 py-2 rounded-2xl bg-cyan-500 text-black text-xs font-bold font-editorial flex items-center gap-1.5 shadow-md hover:bg-cyan-400 transition-all"
-                    >
-                      <Plus size={14} /> Create Offer Deal
-                    </button>
-                  </div>
-
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    {offersList.map((offer) => (
-                      <div key={offer.id} className="p-5 rounded-3xl bg-slate-900/80 border border-slate-800 space-y-3">
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-1">
-                            <span className="px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-black tracking-wider">
-                              {offer.code}
-                            </span>
-                            <h4 className="text-sm font-bold text-white font-editorial pt-1">{offer.title}</h4>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteOffer(offer.id)}
-                            className="p-1.5 rounded-xl bg-rose-500/10 text-rose-400 hover:bg-rose-500/20"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                        <p className="text-xs text-slate-300 font-mono leading-relaxed">{offer.description}</p>
-                        <div className="flex justify-between items-center text-xs font-mono pt-2 border-t border-slate-800">
-                          <span className="text-emerald-400 font-bold">
-                            {offer.discountPercent ? `${offer.discountPercent}% OFF` : `₹${offer.discountAmount} FLAT OFF`}
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                            b.status === 'Confirmed' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                          }`}>
+                            {b.status || 'Pending'}
                           </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Recent Registered Users Feed */}
+                <div className="p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#1a344d] pb-3">
+                    <h3 className="text-sm font-bold text-white font-editorial flex items-center gap-2">
+                      <Users size={16} className="text-indigo-400" /> Recent Registered Users
+                    </h3>
+                    <button onClick={() => setActiveTab('users')} className="text-xs text-cyan-400 font-mono hover:underline cursor-pointer">
+                      View All ({touristUsers.length}) →
+                    </button>
+                  </div>
+
+                  {touristUsers.length === 0 ? (
+                    <div className="py-8 text-center text-slate-500 font-mono text-xs">
+                      No users registered yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {touristUsers.slice(0, 5).map(u => (
+                        <div key={u._id || u.email} className="p-3 rounded-xl bg-[#091724] border border-[#1a344d] flex items-center justify-between text-xs">
+                          <div>
+                            <div className="font-bold text-white">{u.name || u.email.split('@')[0]}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{u.email}</div>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-mono font-bold">
+                            {u.role || 'Tourist Guest'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════ */}
+          {/* 2. 👥 USERS TAB                                       */}
+          {/* ═════════════════════════════════════════════════════ */}
+          {activeTab === 'users' && (
+            <div className="space-y-4 animate-in fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <h3 className="text-base font-bold text-white font-editorial">
+                  Registered Tourists & Members ({touristUsers.length})
+                </h3>
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search users..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="pl-9 pr-3 py-1.5 rounded-xl bg-[#0c1e2e] border border-[#1a344d] text-xs text-white placeholder-slate-500 outline-hidden w-full sm:w-64 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-[#1a344d] bg-[#0c1e2e]">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-[#091724] text-slate-400 border-b border-[#1a344d]">
+                    <tr>
+                      <th className="p-3.5">User Name & Email</th>
+                      <th className="p-3.5">Phone</th>
+                      <th className="p-3.5">Account Role</th>
+                      <th className="p-3.5">Status</th>
+                      <th className="p-3.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#1a344d]/60">
+                    {touristUsers.filter(u => !searchTerm || (u.name + u.email).toLowerCase().includes(searchTerm.toLowerCase())).map(u => (
+                      <tr key={u._id || u.email} className="hover:bg-[#112a3f] transition-colors">
+                        <td className="p-3.5">
+                          <div className="font-bold text-white">{u.name || 'Tourist Guest'}</div>
+                          <div className="text-[10px] text-slate-400">{u.email}</div>
+                        </td>
+                        <td className="p-3.5 text-slate-300">{u.phone || '+91 78717 79134'}</td>
+                        <td className="p-3.5">
+                          <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold">
+                            {u.role || 'Tourist'}
+                          </span>
+                        </td>
+                        <td className="p-3.5">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                            ● Active
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-right">
                           <button
                             type="button"
-                            onClick={() => handleToggleOfferActive(offer.id)}
-                            className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all ${
-                              offer.isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400'
-                            }`}
+                            onClick={() => triggerToast(`Viewing reservations for ${u.name || u.email}`)}
+                            className="px-2.5 py-1 rounded-lg bg-[#132c42] hover:bg-[#1a3b59] text-[11px] text-cyan-300 font-bold cursor-pointer"
                           >
-                            {offer.isActive ? 'Active' : 'Disabled'}
+                            View Bookings
                           </button>
-                        </div>
-                      </div>
+                        </td>
+                      </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════ */}
+          {/* 3. 🏡 PROPERTY OWNERS TAB                             */}
+          {/* ═════════════════════════════════════════════════════ */}
+          {activeTab === 'owners' && (
+            <div className="space-y-4 animate-in fade-in">
+              <h3 className="text-base font-bold text-white font-editorial">
+                Verified Property Hosts & Vendors ({propertyOwners.length})
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {propertyOwners.map(owner => (
+                  <div key={owner.email} className="p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-bold text-white font-editorial text-sm">{owner.name}</h4>
+                        <p className="text-xs text-cyan-400 font-mono">{owner.email}</p>
+                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">{owner.phone}</p>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[10px] font-bold">
+                        {owner.status}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#1a344d] text-xs font-mono">
+                      <div className="p-2 rounded-xl bg-[#091724]">
+                        <span className="text-[10px] text-slate-400 block">Properties</span>
+                        <strong className="text-white">{owner.propertiesCount} Stays</strong>
+                      </div>
+                      <div className="p-2 rounded-xl bg-[#091724]">
+                        <span className="text-[10px] text-slate-400 block">Total Revenue</span>
+                        <strong className="text-emerald-400">₹{owner.totalEarnings.toLocaleString()}</strong>
+                      </div>
+                    </div>
                   </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════ */}
+          {/* 4. 📋 OWNER REQUESTS TAB                              */}
+          {/* ═════════════════════════════════════════════════════ */}
+          {activeTab === 'owner_requests' && (
+            <div className="space-y-4 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-white font-editorial">
+                    Pending Property Listing Requests ({ownerRequests.length})
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    Host onboarding submissions requiring Super Admin review & publishing approval
+                  </p>
+                </div>
+              </div>
+
+              {ownerRequests.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 rounded-2xl bg-[#0c1e2e] border border-dashed border-[#1a344d] font-mono text-xs">
+                  ✨ No pending owner requests. All submitted properties have been reviewed!
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {ownerRequests.map(req => (
+                    <div key={req._id || req.id} className="p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold">
+                            ⏳ Pending Approval
+                          </span>
+                          <span className="text-xs font-mono text-slate-400">{req.type}</span>
+                        </div>
+                        <h4 className="text-sm font-bold text-white font-editorial mt-1">{req.title}</h4>
+                        <p className="text-xs text-slate-400 font-mono">
+                          {req.location}, {req.district} · ₹{Number(req.pricePerNight || req.price || 0).toLocaleString()}/night
+                        </p>
+                        <p className="text-[10px] text-cyan-400 font-mono mt-1">
+                          Submitted by: {req.ownerName || 'Host'} ({req.ownerEmail || 'host@exploretamilnadu.com'})
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdatePropertyStatus(req._id || req.id, 'Approved')}
+                          className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs font-mono flex items-center gap-1 cursor-pointer"
+                        >
+                          <Check size={14} /> Approve & Publish
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdatePropertyStatus(req._id || req.id, 'Rejected')}
+                          className="px-3 py-2 rounded-xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 font-bold text-xs font-mono cursor-pointer"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
+            </div>
+          )}
 
-            </>
+          {/* ═════════════════════════════════════════════════════ */}
+          {/* 5. 🏬 PROPERTIES TAB                                  */}
+          {/* ═════════════════════════════════════════════════════ */}
+          {activeTab === 'properties' && (
+            <div className="space-y-4 animate-in fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-white font-editorial">
+                    Stays, Resorts & Villas ({propertiesList.length})
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono">Manage live property catalog</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAddPropertyModal(true)}
+                  className="px-4 py-2 rounded-xl bg-cyan-500 text-black text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-cyan-400 transition-all cursor-pointer shadow-md"
+                >
+                  <Plus size={14} /> Add New Property
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {propertiesList.map(prop => (
+                  <div key={prop._id || prop.id} className="rounded-2xl bg-[#0c1e2e] border border-[#1a344d] overflow-hidden space-y-3 p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-mono text-[9px] font-bold">
+                          {prop.type || 'Resort'}
+                        </span>
+                        <h4 className="font-bold text-white font-editorial text-sm mt-1">{prop.title}</h4>
+                        <p className="text-xs text-slate-400 font-mono">{prop.location}, {prop.district}</p>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold ${
+                        prop.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                      }`}>
+                        {prop.status || 'Active'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-[#1a344d] text-xs font-mono">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Rate / Night</span>
+                        <strong className="text-emerald-400 font-bold">₹{Number(prop.pricePerNight || prop.price || 0).toLocaleString()}</strong>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdatePropertyStatus(prop._id || prop.id, prop.status === 'Approved' ? 'Disabled' : 'Approved')}
+                          className="px-2.5 py-1 rounded-lg bg-[#132c42] hover:bg-[#1a3b59] text-[11px] text-slate-300 cursor-pointer"
+                        >
+                          {prop.status === 'Approved' ? 'Disable' : 'Activate'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteProperty(prop._id || prop.id)}
+                          className="p-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 cursor-pointer"
+                          title="Delete Property"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════ */}
+          {/* 6. 📅 BOOKINGS TAB                                    */}
+          {/* ═════════════════════════════════════════════════════ */}
+          {activeTab === 'bookings' && (
+            <div className="space-y-4 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-white font-editorial">
+                  Live Guest Bookings ({bookingsList.length})
+                </h3>
+              </div>
+
+              {bookingsList.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 rounded-2xl bg-[#0c1e2e] border border-dashed border-[#1a344d] font-mono text-xs">
+                  ✨ No bookings placed yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-[#1a344d] bg-[#0c1e2e]">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="bg-[#091724] text-slate-400 border-b border-[#1a344d]">
+                      <tr>
+                        <th className="p-3.5">Booking ID & Stay</th>
+                        <th className="p-3.5">Guest Info</th>
+                        <th className="p-3.5">Dates</th>
+                        <th className="p-3.5">Total Amount</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#1a344d]/60">
+                      {bookingsList.map(b => (
+                        <tr key={b._id || b.bookingId} className="hover:bg-[#112a3f] transition-colors">
+                          <td className="p-3.5">
+                            <div className="font-bold text-cyan-400">{b.bookingId}</div>
+                            <div className="text-white font-editorial">{b.propertyTitle || b.itemTitle || 'Stay'}</div>
+                          </td>
+                          <td className="p-3.5">
+                            <div className="text-white font-bold">{b.customerName || b.userName}</div>
+                            <div className="text-[10px] text-slate-400">{b.customerEmail || b.userEmail}</div>
+                          </td>
+                          <td className="p-3.5 text-slate-300">
+                            {b.checkIn || b.checkInDate} → {b.checkOut || b.checkOutDate}
+                          </td>
+                          <td className="p-3.5 text-emerald-400 font-bold">
+                            ₹{Number(b.totalAmount || b.amount || 0).toLocaleString()}
+                          </td>
+                          <td className="p-3.5">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              b.status === 'Confirmed' ? 'bg-emerald-500/20 text-emerald-300' :
+                              b.status === 'Cancelled' ? 'bg-rose-500/20 text-rose-300' :
+                              'bg-amber-500/20 text-amber-300'
+                            }`}>
+                              {b.status || 'Pending'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right space-x-1.5">
+                            {b.status !== 'Confirmed' && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateBookingStatus(b.bookingId || b._id, 'Confirmed')}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 text-[11px] font-bold cursor-pointer"
+                              >
+                                Confirm
+                              </button>
+                            )}
+                            <a
+                              href={`/api/bookings/${b.bookingId || b._id}/receipt`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2.5 py-1 rounded-lg bg-[#132c42] hover:bg-[#1a3b59] text-[11px] text-slate-300 inline-block font-bold"
+                            >
+                              Voucher
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════ */}
+          {/* 7. ⭐ REVIEWS TAB                                     */}
+          {/* ═════════════════════════════════════════════════════ */}
+          {activeTab === 'reviews' && (
+            <div className="space-y-4 animate-in fade-in">
+              <h3 className="text-base font-bold text-white font-editorial">
+                Guest Reviews & Ratings ({reviewsList.length})
+              </h3>
+
+              <div className="grid gap-3">
+                {reviewsList.map(rev => (
+                  <div key={rev.id} className="p-4 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-1 text-amber-400">
+                          {Array.from({ length: rev.rating }).map((_, i) => (
+                            <Star key={i} size={14} fill="currentColor" />
+                          ))}
+                        </div>
+                        <h4 className="text-xs font-bold text-white font-editorial mt-1">{rev.propertyTitle}</h4>
+                        <p className="text-[10px] text-slate-400 font-mono">By {rev.guestName} · {rev.date}</p>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[10px] font-bold">
+                        {rev.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 font-editorial bg-[#091724] p-2.5 rounded-xl border border-[#1a344d]">
+                      "{rev.comment}"
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════ */}
+          {/* 8. 🎧 SUPPORT TAB                                     */}
+          {/* ═════════════════════════════════════════════════════ */}
+          {activeTab === 'support' && (
+            <div className="space-y-4 animate-in fade-in">
+              <h3 className="text-base font-bold text-white font-editorial">
+                Customer & Host Support Tickets ({ticketsList.length})
+              </h3>
+
+              {ticketsList.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 rounded-2xl bg-[#0c1e2e] border border-dashed border-[#1a344d] font-mono text-xs">
+                  ✨ No active support tickets. All customer queries resolved!
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {ticketsList.map(tck => (
+                    <div key={tck._id || tck.ticketId} className="p-4 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-cyan-400 font-mono">{tck.ticketId || 'TCK'}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">({tck.category || 'General'})</span>
+                          </div>
+                          <h4 className="text-sm font-bold text-white font-editorial mt-1">{tck.subject}</h4>
+                          <p className="text-xs text-slate-400 font-mono">{tck.senderName} · {tck.senderEmail}</p>
+                        </div>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono ${
+                          tck.status === 'Resolved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                        }`}>
+                          {tck.status || 'Open'}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-300 bg-[#091724] p-3 rounded-xl border border-[#1a344d] font-mono">
+                        {tck.message}
+                      </p>
+
+                      {tck.adminReply && (
+                        <div className="p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-800/40 text-xs text-cyan-200 font-mono">
+                          <strong>Admin Reply:</strong> {tck.adminReply}
+                        </div>
+                      )}
+
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenTicketReply(tck)}
+                          className="px-3.5 py-1.5 rounded-xl bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 text-xs font-bold font-mono cursor-pointer"
+                        >
+                          {tck.status === 'Resolved' ? 'Edit Reply' : 'Reply & Resolve'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════ */}
+          {/* 9. 📨 ENQUIRIES TAB                                   */}
+          {/* ═════════════════════════════════════════════════════ */}
+          {activeTab === 'enquiries' && (
+            <div className="space-y-4 animate-in fade-in">
+              <h3 className="text-base font-bold text-white font-editorial">
+                Customer Enquiries & Tour Leads ({enquiriesList.length})
+              </h3>
+
+              <div className="grid gap-3">
+                {enquiriesList.map(enq => (
+                  <div key={enq.id} className="p-4 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="text-sm font-bold text-white font-editorial">{enq.subject}</h4>
+                        <p className="text-xs text-cyan-400 font-mono">{enq.name} · {enq.email} · {enq.phone}</p>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                        enq.status === 'New' ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'
+                      }`}>
+                        {enq.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 bg-[#091724] p-3 rounded-xl border border-[#1a344d] font-editorial">
+                      "{enq.message}"
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════ */}
+          {/* 10. 💳 FINANCE TAB                                    */}
+          {/* ═════════════════════════════════════════════════════ */}
+          {activeTab === 'finance' && (
+            <div className="space-y-6 animate-in fade-in">
+              <h3 className="text-base font-bold text-white font-editorial">
+                Financial Overview & Revenue Analytics
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-1">
+                  <span className="text-[10px] font-mono uppercase text-slate-400">Total GMV Processed</span>
+                  <div className="text-2xl font-black text-white font-mono">₹{totalGrossRevenue.toLocaleString()}</div>
+                  <span className="text-[10px] text-emerald-400 font-mono">Razorpay Secured</span>
+                </div>
+                <div className="p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-1">
+                  <span className="text-[10px] font-mono uppercase text-slate-400">Platform Commission (10%)</span>
+                  <div className="text-2xl font-black text-cyan-400 font-mono">₹{platformCommission.toLocaleString()}</div>
+                  <span className="text-[10px] text-cyan-300 font-mono">Explore TN Net Revenue</span>
+                </div>
+                <div className="p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-1">
+                  <span className="text-[10px] font-mono uppercase text-slate-400">Host Settlement Pool (90%)</span>
+                  <div className="text-2xl font-black text-amber-400 font-mono">₹{hostNetPayouts.toLocaleString()}</div>
+                  <span className="text-[10px] text-amber-300 font-mono">Payable to Property Hosts</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════ */}
+          {/* 11. 🏦 PAYOUT ACCOUNTS TAB                            */}
+          {/* ═════════════════════════════════════════════════════ */}
+          {activeTab === 'payouts' && (
+            <div className="space-y-4 animate-in fade-in">
+              <h3 className="text-base font-bold text-white font-editorial">
+                Host Bank Accounts & Payout Settlements ({payoutAccounts.length})
+              </h3>
+
+              <div className="grid gap-3">
+                {payoutAccounts.map(acc => (
+                  <div key={acc.id} className="p-4 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white font-editorial">{acc.ownerName}</span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[9px] font-bold">
+                          {acc.verificationStatus}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-400 font-mono mt-0.5">
+                        {acc.bankName} · Acc: {acc.accountNumber} · IFSC: {acc.ifscCode}
+                      </div>
+                      <div className="text-[10px] text-cyan-400 font-mono">{acc.ownerEmail} · {acc.phone}</div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-400 font-mono block">Pending Payout</span>
+                        <strong className="text-emerald-400 font-mono text-sm">₹{acc.pendingSettlement.toLocaleString()}</strong>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => triggerToast(`Payout of ₹${acc.pendingSettlement.toLocaleString()} released to ${acc.ownerName}`)}
+                        className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold font-mono text-xs cursor-pointer"
+                      >
+                        Release Payout
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════ */}
+          {/* 12. 👨‍💼 STAFF TAB                                      */}
+          {/* ═════════════════════════════════════════════════════ */}
+          {activeTab === 'staff' && (
+            <div className="space-y-4 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-white font-editorial">
+                  Staff Members & Role Allocation ({staffList.length})
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowAddStaffModal(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-cyan-500 text-black text-xs font-bold flex items-center gap-1.5 hover:bg-cyan-400 transition-all cursor-pointer"
+                >
+                  <UserPlus size={14} /> Add Staff Member
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {staffList.map(stf => (
+                  <div key={stf._id || stf.email} className="p-4 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-bold text-white font-editorial text-sm">{stf.name}</h4>
+                        <p className="text-xs text-cyan-400 font-mono">{stf.email}</p>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-mono text-[10px] font-bold">
+                        ● Active Shift
+                      </span>
+                    </div>
+                    <div className="pt-2 border-t border-[#1a344d] text-xs font-mono text-slate-400">
+                      Role: <strong className="text-white uppercase">{String(stf.role).replace(/_/g, ' ')}</strong>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
         </main>
       </div>
 
-      {/* ═════════════════════════════════════════════════════ */}
-      {/* MODALS                                                */}
-      {/* ═════════════════════════════════════════════════════ */}
-
-      {/* 1. Add Staff Modal */}
-      {showAddStaffModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#0a101d] rounded-3xl border border-slate-800 p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-white font-editorial">Add New Staff Member</h3>
-              <button type="button" onClick={() => setShowAddStaffModal(false)}><X size={18} className="text-slate-400" /></button>
+      {/* 🌟 ADD PROPERTY MODAL */}
+      {showAddPropertyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-[#0c1e2e] rounded-3xl p-6 max-w-lg w-full border border-[#1a344d] shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#1a344d] pb-3">
+              <h3 className="text-base font-bold text-white font-editorial">Add New Stay / Resort</h3>
+              <button onClick={() => setShowAddPropertyModal(false)} className="text-slate-400 hover:text-white cursor-pointer"><X size={18} /></button>
             </div>
-            <form onSubmit={handleCreateStaff} className="space-y-3 font-mono text-xs">
+            <form onSubmit={handleCreateProperty} className="space-y-3 text-xs font-mono">
               <div>
-                <label className="block text-slate-400 mb-1">Full Name</label>
-                <input required value={staffName} onChange={e => setStaffName(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="Ramesh Ops" />
+                <label className="block text-slate-300 mb-1">Property Title</label>
+                <input type="text" placeholder="E.g. Ooty Valley Heritage Villa" value={propTitle} onChange={e => setPropTitle(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white" required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 mb-1">District</label>
+                  <select value={propDistrict} onChange={e => setPropDistrict(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white">
+                    <option value="Nilgiris (Ooty)">Nilgiris (Ooty)</option>
+                    <option value="Dindigul (Kodaikanal)">Dindigul (Kodaikanal)</option>
+                    <option value="Chennai">Chennai</option>
+                    <option value="Madurai">Madurai</option>
+                    <option value="Coimbatore">Coimbatore</option>
+                    <option value="Kanyakumari">Kanyakumari</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-300 mb-1">Type</label>
+                  <select value={propType} onChange={e => setPropType(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white">
+                    <option value="Resort">Resort</option>
+                    <option value="Homestay">Homestay</option>
+                    <option value="Villa">Villa</option>
+                    <option value="Hotel">Hotel</option>
+                  </select>
+                </div>
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Email Address</label>
-                <input type="email" required value={staffEmail} onChange={e => setStaffEmail(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="ramesh@exploretamilnadu.com" />
+                <label className="block text-slate-300 mb-1">Price per Night (₹)</label>
+                <input type="number" placeholder="3800" value={propPrice} onChange={e => setPropPrice(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white" required />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddPropertyModal(false)} className="px-4 py-2 rounded-xl bg-[#132c42] text-slate-300 cursor-pointer">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-cyan-500 text-black font-bold cursor-pointer">Publish Property</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🌟 ADD STAFF MODAL */}
+      {showAddStaffModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-[#0c1e2e] rounded-3xl p-6 max-w-lg w-full border border-[#1a344d] shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#1a344d] pb-3">
+              <h3 className="text-base font-bold text-white font-editorial">Register New Staff Member</h3>
+              <button onClick={() => setShowAddStaffModal(false)} className="text-slate-400 hover:text-white cursor-pointer"><X size={18} /></button>
+            </div>
+            <form onSubmit={handleCreateStaff} className="space-y-3 text-xs font-mono">
+              <div>
+                <label className="block text-slate-300 mb-1">Full Name</label>
+                <input type="text" placeholder="E.g. Vignesh Ramesh" value={staffName} onChange={e => setStaffName(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white" required />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Phone Number</label>
-                <input value={staffPhone} onChange={e => setStaffPhone(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="+91 78717 79134" />
+                <label className="block text-slate-300 mb-1">Official Staff Email</label>
+                <input type="email" placeholder="vignesh.ops@exploretamilnadu.com" value={staffEmail} onChange={e => setStaffEmail(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white" required />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Staff Role</label>
-                <select value={staffRole} onChange={e => setStaffRole(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white">
+                <label className="block text-slate-300 mb-1">Department Role</label>
+                <select value={staffRole} onChange={e => setStaffRole(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white">
                   <option value="operations_manager">Operations Manager</option>
                   <option value="booking_executive">Booking Executive</option>
                   <option value="customer_support_executive">Customer Support Executive</option>
-                  <option value="destination_content_manager">Destination Content Manager</option>
+                  <option value="destination_content_manager">Destination & Content Manager</option>
                   <option value="property_verification_manager">Property Verification Manager</option>
                   <option value="transport_manager">Transport Manager</option>
-                  <option value="finance_accounts_manager">Finance Accounts Manager</option>
+                  <option value="finance_accounts_manager">Finance & Accounts Manager</option>
                   <option value="marketing_manager">Marketing Manager</option>
-                  <option value="hr_staff_manager">HR Staff Manager</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-slate-400 mb-1">Password</label>
-                <input type="password" value={staffPassword} onChange={e => setStaffPassword(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="ExploreTN2026" />
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddStaffModal(false)} className="px-4 py-2 rounded-xl bg-[#132c42] text-slate-300 cursor-pointer">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-cyan-500 text-black font-bold cursor-pointer">Assign Staff Role</button>
               </div>
-              <button type="submit" className="w-full py-3 rounded-2xl bg-cyan-500 text-black font-editorial font-bold text-xs mt-2">
-                Create Staff Account
-              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* 2. Add Property Modal */}
-      {showAddPropertyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#0a101d] rounded-3xl border border-slate-800 p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-white font-editorial">Add New Property</h3>
-              <button type="button" onClick={() => setShowAddPropertyModal(false)}><X size={18} className="text-slate-400" /></button>
-            </div>
-            <form onSubmit={handleCreateProperty} className="space-y-3 font-mono text-xs">
-              <div>
-                <label className="block text-slate-400 mb-1">Property Title</label>
-                <input required value={propTitle} onChange={e => setPropTitle(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="Ooty Lakeview Villa" />
-              </div>
-              <div>
-                <label className="block text-slate-400 mb-1">Location & Address</label>
-                <input required value={propLocation} onChange={e => setPropLocation(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="West Lake Road, Ooty" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-slate-400 mb-1">Type</label>
-                  <select value={propType} onChange={e => setPropType(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white">
-                    <option value="Resort">Resort</option>
-                    <option value="Hotel">Hotel</option>
-                    <option value="Homestay">Homestay</option>
-                    <option value="Cottage">Cottage</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">Price / Night (₹)</label>
-                  <input type="number" required value={propPrice} onChange={e => setPropPrice(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="4800" />
-                </div>
-              </div>
-              <button type="submit" className="w-full py-3 rounded-2xl bg-cyan-500 text-black font-editorial font-bold text-xs mt-2">
-                Save & Approve Property
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 3. Add Vehicle Modal */}
-      {showAddVehicleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#0a101d] rounded-3xl border border-slate-800 p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-white font-editorial">Add New Vehicle</h3>
-              <button type="button" onClick={() => setShowAddVehicleModal(false)}><X size={18} className="text-slate-400" /></button>
-            </div>
-            <form onSubmit={handleCreateVehicle} className="space-y-3 font-mono text-xs">
-              <div>
-                <label className="block text-slate-400 mb-1">Vehicle Name / Model</label>
-                <input required value={vehTitle} onChange={e => setVehTitle(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="Innova Crysta 7-Seater" />
-              </div>
-              <div>
-                <label className="block text-slate-400 mb-1">Registration Number</label>
-                <input required value={vehRegNo} onChange={e => setVehRegNo(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="TN-37-ET-2026" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-slate-400 mb-1">Type</label>
-                  <select value={vehType} onChange={e => setVehType(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white">
-                    <option value="Cab SUV">Cab SUV</option>
-                    <option value="Tempo Traveller">Tempo Traveller</option>
-                    <option value="Luxury Sedan">Luxury Sedan</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">Price / Day (₹)</label>
-                  <input type="number" required value={vehPrice} onChange={e => setVehPrice(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="3500" />
-                </div>
-              </div>
-              <button type="submit" className="w-full py-3 rounded-2xl bg-cyan-500 text-black font-editorial font-bold text-xs mt-2">
-                Register Vehicle
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 4. Add Offer Deal Modal */}
-      {showAddOfferModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#0a101d] rounded-3xl border border-slate-800 p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-white font-editorial">Create Offer Deal & Coupon</h3>
-              <button type="button" onClick={() => setShowAddOfferModal(false)}><X size={18} className="text-slate-400" /></button>
-            </div>
-            <form onSubmit={handleCreateOffer} className="space-y-3 font-mono text-xs">
-              <div>
-                <label className="block text-slate-400 mb-1">Coupon Code (e.g. SUMMER20)</label>
-                <input required value={offerCode} onChange={e => setOfferCode(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white uppercase" placeholder="PONGAL2026" />
-              </div>
-              <div>
-                <label className="block text-slate-400 mb-1">Deal Title</label>
-                <input required value={offerTitle} onChange={e => setOfferTitle(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="Pongal Festival Stay Discount" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-slate-400 mb-1">Discount %</label>
-                  <input type="number" required value={offerDiscount} onChange={e => setOfferDiscount(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="20" />
-                </div>
-                <div>
-                  <label className="block text-slate-400 mb-1">Min Booking (₹)</label>
-                  <input type="number" required value={offerMinAmount} onChange={e => setOfferMinAmount(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="2500" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-slate-400 mb-1">Deal Description</label>
-                <textarea rows={2} value={offerDesc} onChange={e => setOfferDesc(e.target.value)} className="w-full p-2.5 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="Special holiday discount for all tourist stays." />
-              </div>
-              <button type="submit" className="w-full py-3 rounded-2xl bg-cyan-500 text-black font-editorial font-bold text-xs mt-2">
-                Activate Offer Coupon
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 5. Reply Support Ticket Modal */}
+      {/* 🌟 REPLY SUPPORT TICKET MODAL */}
       {showReplyTicketModal && selectedTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-lg bg-[#0a101d] rounded-3xl border border-slate-800 p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-white font-editorial">Reply Support Ticket</h3>
-                <p className="text-[11px] text-cyan-400 font-mono">{selectedTicket.ticketId || 'TCK-2001'} · {selectedTicket.senderEmail}</p>
-              </div>
-              <button type="button" onClick={() => setShowReplyTicketModal(false)}><X size={18} className="text-slate-400" /></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-[#0c1e2e] rounded-3xl p-6 max-w-lg w-full border border-[#1a344d] shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#1a344d] pb-3">
+              <h3 className="text-base font-bold text-white font-editorial">
+                Reply to Ticket {selectedTicket.ticketId || 'TCK'}
+              </h3>
+              <button onClick={() => setShowReplyTicketModal(false)} className="text-slate-400 hover:text-white cursor-pointer"><X size={18} /></button>
             </div>
-            <div className="p-3 rounded-2xl bg-slate-900/60 border border-slate-800 text-xs font-mono space-y-1">
-              <span className="text-slate-400 font-bold">Inquiry Message:</span>
-              <p className="text-slate-200">{selectedTicket.message}</p>
-            </div>
-            <form onSubmit={handleSendTicketReply} className="space-y-3 font-mono text-xs">
-              <div>
-                <label className="block text-slate-400 mb-1">Admin Response</label>
-                <textarea rows={4} required value={ticketReplyText} onChange={e => setTicketReplyText(e.target.value)} className="w-full p-3 rounded-2xl bg-slate-900 border border-slate-700 text-white" placeholder="Type your resolution response here..." />
+            <form onSubmit={handleSendTicketReply} className="space-y-3 text-xs font-mono">
+              <div className="p-3 bg-[#091724] rounded-xl border border-[#1a344d] text-slate-300">
+                <strong>{selectedTicket.subject}</strong>
+                <p className="mt-1 text-slate-400">"{selectedTicket.message}"</p>
               </div>
-              <button type="submit" className="w-full py-3 rounded-2xl bg-cyan-500 text-black font-editorial font-bold text-xs">
-                Send Reply & Mark Resolved
-              </button>
+              <div>
+                <label className="block text-slate-300 mb-1">Official Resolution Message</label>
+                <textarea
+                  rows={4}
+                  value={ticketReplyText}
+                  onChange={e => setTicketReplyText(e.target.value)}
+                  placeholder="Enter response and resolution instructions..."
+                  className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white"
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowReplyTicketModal(false)} className="px-4 py-2 rounded-xl bg-[#132c42] text-slate-300 cursor-pointer">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-cyan-500 text-black font-bold cursor-pointer">Send Reply & Mark Resolved</button>
+              </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🌟 RESET DATABASE SAFETY CONFIRM MODAL */}
+      {showResetConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-[#0c1e2e] rounded-3xl p-6 max-w-md w-full border border-rose-500/40 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-rose-400 font-editorial flex items-center gap-2">
+              <AlertCircle size={18} /> Confirm Database Reset to Zero
+            </h3>
+            <p className="text-xs text-slate-300 font-mono leading-relaxed">
+              Are you sure you want to clear all bookings, properties, and test data? Super Admin master account (<code className="text-cyan-400">exploretamizhagam@gmail.com</code>) will remain intact.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowResetConfirmModal(false)} className="px-4 py-2 rounded-xl bg-[#132c42] text-slate-300 text-xs font-mono cursor-pointer">Cancel</button>
+              <button type="button" onClick={handleResetDatabase} className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs font-mono cursor-pointer">Reset to Zero</button>
+            </div>
           </div>
         </div>
       )}

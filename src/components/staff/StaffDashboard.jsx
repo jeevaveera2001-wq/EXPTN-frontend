@@ -33,6 +33,7 @@ import {
   RefreshCw,
   LogOut,
   ChevronRight,
+  ChevronDown,
   PhoneCall,
   Edit,
   Trash2,
@@ -60,6 +61,7 @@ export default function StaffDashboard({ overrideRole }) {
   // Active Tab for Sidebar (6 Tabs for each role)
   const [activeNavTab, setActiveNavTab] = useState('tab_1');
   const [actionSuccess, setActionSuccess] = useState('');
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
 
   // Live Support Tickets State
   const [supportTickets, setSupportTickets] = useState([]);
@@ -362,9 +364,51 @@ export default function StaffDashboard({ overrideRole }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="px-3 py-1.5 rounded-full text-xs font-mono font-extrabold bg-green-100 text-green-800 border border-green-300">
+            <span className="hidden sm:inline-block px-3 py-1.5 rounded-full text-xs font-mono font-extrabold bg-green-100 text-green-800 border border-green-300">
               🟢 Shift Active
             </span>
+
+            {/* Staff Profile Dropdown Button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-800 shadow-xs hover:bg-slate-50 transition-all cursor-pointer"
+              >
+                <div className="w-6 h-6 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-xs text-white">
+                  {(currentUser?.name || 'S')[0].toUpperCase()}
+                </div>
+                <span className="text-xs font-bold hidden sm:inline">{currentUser?.name || 'Staff Member'}</span>
+                <ChevronDown size={14} className={`text-slate-500 transition-transform ${profileDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* Profile Dropdown Menu (No redundant dashboard button) */}
+              {profileDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl p-4 space-y-3 z-50 animate-in fade-in">
+                  <div className="border-b border-slate-100 pb-3">
+                    <div className="text-xs font-bold text-slate-900">{currentUser?.name || 'Staff Member'}</div>
+                    <div className="text-[10px] text-slate-500 font-mono">{currentUser?.email || 'staff@exploretamilnadu.com'}</div>
+                    <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono text-[9px] font-bold uppercase border border-blue-200">
+                      {role.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileDropdownOpen(false);
+                        logout();
+                        window.location.href = '/login';
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl text-xs font-mono font-bold text-rose-600 hover:bg-rose-50 transition-colors flex items-center gap-2 cursor-pointer"
+                    >
+                      <LogOut size={14} /> Sign Out (End Shift)
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

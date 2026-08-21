@@ -220,19 +220,19 @@ export default function Navbar({ onOpenAuth }) {
 
   return (
     <>
-      <header className="glass-panel sticky top-3 sm:top-4 z-40 mx-2 sm:mx-4 mb-4 sm:mb-6 rounded-full px-4 sm:px-6 py-2.5 sm:py-3 bg-[#f9f5f2]/95 border border-[#242429]/15 shadow-xl backdrop-blur-md">
-        <div className="flex items-center justify-between">
+      <header className="sticky top-2 sm:top-4 z-40 mx-2 sm:mx-4 mb-3 sm:mb-6 rounded-full px-3.5 sm:px-6 py-2 sm:py-3 bg-[#f9f5f2]/95 border border-[#242429]/15 shadow-xl backdrop-blur-md">
+        <div className="flex items-center justify-between gap-2">
           
           {/* Brand Logo Seal */}
-          <Link to="/" className="flex items-center gap-2.5 sm:gap-3.5 no-underline group">
+          <Link to="/" className="flex items-center gap-2 sm:gap-3.5 no-underline group shrink-0">
             <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[#ffffff] border border-[#242429] flex items-center justify-center p-0.5 sm:p-1 shadow-sm group-hover:scale-105 transition-transform shrink-0">
               <img src="/logo.png" alt="Explore Tamil Nadu Logo" className="w-full h-full object-cover rounded-full" />
             </div>
-            <div>
-              <span className="text-base sm:text-xl font-editorial font-bold tracking-tight text-[#000000] block leading-none">
+            <div className="min-w-0">
+              <span className="text-sm sm:text-lg font-editorial font-bold tracking-tight text-[#000000] block leading-none truncate max-w-[120px] sm:max-w-none">
                 Explore Tamil Nadu
               </span>
-              <span className="font-fira-mono text-[8px] sm:text-[10px] font-medium text-[#919191] tracking-[0.15em] sm:tracking-[0.18em] uppercase block mt-0.5 sm:mt-1">
+              <span className="font-fira-mono text-[7px] sm:text-[9px] font-medium text-[#919191] tracking-[0.12em] sm:tracking-[0.18em] uppercase block mt-0.5 sm:mt-1">
                 Stays & Resorts
               </span>
             </div>
@@ -246,27 +246,27 @@ export default function Navbar({ onOpenAuth }) {
             <Link to="/packages" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all">PACKAGES</Link>
           </nav>
 
-          {/* Auth & Downslide Profile Menu Area */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Auth & Profile Area */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             
             {/* Mobile Nav Hamburger Toggle */}
             <button
               type="button"
               onClick={() => setMobileNavOpen(!mobileNavOpen)}
-              className="lg:hidden p-2 rounded-full bg-white border border-[#242429]/20 text-[#242429] hover:bg-slate-100 transition-all"
+              className="lg:hidden p-1.5 sm:p-2 rounded-full bg-white border border-[#242429]/20 text-[#242429] hover:bg-slate-100 transition-all shrink-0"
               aria-label="Toggle navigation"
             >
-              {mobileNavOpen ? <X size={16} /> : <Menu size={16} />}
+              {mobileNavOpen ? <X size={15} /> : <Menu size={15} />}
             </button>
 
             {currentUser ? (
               <div className="relative" ref={dropdownRef}>
                 
-                {/* 👤 Sleek User Capsule Button (Click to Downslide Menu) */}
+                {/* 👤 Sleek User Capsule Button */}
                 <button
                   type="button"
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                  className={`flex items-center gap-2 pl-1.5 pr-2.5 sm:pl-2 sm:pr-3.5 py-1 sm:py-1.5 rounded-full border transition-all shadow-sm ${
+                  className={`flex items-center gap-1.5 sm:gap-2.5 pl-1.5 pr-2.5 sm:pl-2 sm:pr-3.5 py-1 sm:py-1.5 rounded-full border transition-all shadow-sm shrink-0 ${
                     isDropdownOpen 
                       ? 'bg-[#ffffff] border-[#000000] ring-2 ring-[#242429]/10' 
                       : 'bg-[#ffffff] border-[#242429]/25 hover:border-[#242429]/60 hover:bg-[#f9f5f2]'
@@ -274,7 +274,7 @@ export default function Navbar({ onOpenAuth }) {
                   aria-expanded={isDropdownOpen}
                   aria-haspopup="true"
                 >
-                  {/* Avatar with status indicator */}
+                  {/* Avatar */}
                   <div className="relative w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[#242429] text-[#ffffff] flex items-center justify-center font-bold text-xs shadow-inner shrink-0 overflow-hidden">
                     {currentUser.avatar ? (
                       <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
@@ -284,20 +284,19 @@ export default function Navbar({ onOpenAuth }) {
                     <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-white" />
                   </div>
 
-                  {/* Name */}
-                  <span className="text-xs font-bold text-[#1f242e] font-editorial max-w-[90px] sm:max-w-[140px] truncate">
+                  {/* Name (hidden on tiny screens, shown on sm+) */}
+                  <span className="text-xs font-bold text-[#1f242e] font-editorial max-w-[70px] sm:max-w-[130px] truncate">
                     {currentUser.name || currentUser.email.split('@')[0]}
                   </span>
 
-                  {/* Unread dot indicator if unread notifications */}
+                  {/* Unread indicator */}
                   {unreadCount > 0 && (
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
                   )}
 
-                  {/* Animated Dropdown Chevron */}
                   <ChevronDown 
-                    size={13} 
-                    className={`text-[#242429]/70 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-black' : ''}`} 
+                    size={12} 
+                    className={`text-[#242429]/70 transition-transform duration-300 shrink-0 ${isDropdownOpen ? 'rotate-180 text-black' : ''}`} 
                   />
                 </button>
 
@@ -310,7 +309,7 @@ export default function Navbar({ onOpenAuth }) {
                     }}
                   >
                     
-                    {/* 👑 Header Profile Card */}
+                    {/* Header Card */}
                     <div className="p-3.5 rounded-2xl bg-gradient-to-br from-[#fbf8f5] to-[#f2ede6] border border-[#242429]/10 space-y-2">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-[#242429] text-white flex items-center justify-center font-bold text-sm shadow-md overflow-hidden shrink-0">
@@ -336,13 +335,10 @@ export default function Navbar({ onOpenAuth }) {
                       </div>
                     </div>
 
-                    {/* ═════════════════════════════════════════════════════ */}
-                    {/* 📑 DOWNSLIDE OPTIONS (DASHBOARD, PROFILE, NOTIFS)     */}
-                    {/* ═════════════════════════════════════════════════════ */}
                     {!showNotificationsView ? (
                       <div className="py-1 space-y-1">
                         
-                        {/* 1. DASHBOARD OPTION */}
+                        {/* Dashboard Option */}
                         <button
                           type="button"
                           onClick={() => handleNavigate(getDashboardPath(currentUser.role))}
@@ -364,7 +360,7 @@ export default function Navbar({ onOpenAuth }) {
                           <ChevronRight size={15} className="text-[#a1a1aa] group-hover:text-black group-hover:translate-x-0.5 transition-all" />
                         </button>
 
-                        {/* 2. PROFILE & SECURITY MODAL TRIGGER */}
+                        {/* Profile Option */}
                         <button
                           type="button"
                           onClick={handleOpenProfileModal}
@@ -379,14 +375,14 @@ export default function Navbar({ onOpenAuth }) {
                                 My Profile & Security
                               </span>
                               <span className="text-[10px] text-[#71717a] block font-mono">
-                                Photo upload, info & password reset
+                                Photo upload & password reset
                               </span>
                             </div>
                           </div>
                           <ChevronRight size={15} className="text-[#a1a1aa] group-hover:text-black group-hover:translate-x-0.5 transition-all" />
                         </button>
 
-                        {/* 3. NOTIFICATION OPTION */}
+                        {/* Notifications Option */}
                         <button
                           type="button"
                           onClick={() => setShowNotificationsView(true)}
@@ -420,10 +416,9 @@ export default function Navbar({ onOpenAuth }) {
                           </div>
                         </button>
 
-                        {/* Divider */}
                         <div className="h-px bg-[#242429]/10 my-1" />
 
-                        {/* 4. SIGN OUT OPTION */}
+                        {/* Sign Out Option */}
                         <button
                           type="button"
                           onClick={handleLogout}
@@ -439,9 +434,7 @@ export default function Navbar({ onOpenAuth }) {
 
                       </div>
                     ) : (
-                      /* ═════════════════════════════════════════════════ */
-                      /* 🔔 NOTIFICATIONS SUB-VIEW INSIDE DOWNSLIDE MENU    */
-                      /* ═════════════════════════════════════════════════ */
+                      /* Notifications Sub-View */
                       <div className="space-y-3 p-1 animate-in fade-in">
                         <div className="flex justify-between items-center border-b border-[#242429]/10 pb-2">
                           <button
@@ -466,9 +459,6 @@ export default function Navbar({ onOpenAuth }) {
                           <div className="py-6 text-center text-slate-500 space-y-1">
                             <Inbox size={24} className="mx-auto text-slate-300 mb-1" />
                             <p className="text-xs font-bold text-slate-700 font-editorial">No Notifications Yet</p>
-                            <p className="text-[10px] text-slate-400 max-w-[200px] mx-auto leading-tight font-mono">
-                              Login sessions, photo updates, password resets, bookings, cancellations, and support tickets will appear here.
-                            </p>
                           </div>
                         ) : (
                           <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
@@ -498,16 +488,17 @@ export default function Navbar({ onOpenAuth }) {
 
               </div>
             ) : (
+              /* Logged Out Buttons: Perfectly aligned for mobile & desktop */
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <button 
                   onClick={() => onOpenAuth('login')} 
-                  className="glass-button glass-button-secondary text-xs px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-1.5"
+                  className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-[#242429] text-white hover:bg-black font-editorial font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all shrink-0"
                 >
                   <LogIn size={13} /> Login
                 </button>
                 <button 
                   onClick={() => onOpenAuth('register')} 
-                  className="glass-button text-xs px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-1.5"
+                  className="hidden sm:flex px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-white border border-[#242429]/25 text-[#242429] hover:bg-slate-100 font-editorial font-bold text-xs items-center gap-1.5 shadow-sm transition-all shrink-0"
                 >
                   <UserPlus size={13} /> Register
                 </button>
@@ -523,36 +514,54 @@ export default function Navbar({ onOpenAuth }) {
             <Link 
               to="/" 
               onClick={() => setMobileNavOpen(false)}
-              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all"
+              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold"
             >
               OVERVIEW
             </Link>
             <Link 
               to="/explore" 
               onClick={() => setMobileNavOpen(false)}
-              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all"
+              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold"
             >
               EXPLORE
             </Link>
             <Link 
               to="/hotels" 
               onClick={() => setMobileNavOpen(false)}
-              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all"
+              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold"
             >
               STAYS & RESORTS
             </Link>
             <Link 
               to="/packages" 
               onClick={() => setMobileNavOpen(false)}
-              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all"
+              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold"
             >
               PACKAGES
             </Link>
+
+            {/* Quick Register link inside mobile drawer if logged out */}
+            {!currentUser && (
+              <div className="pt-2 border-t border-[#242429]/10 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => { setMobileNavOpen(false); onOpenAuth('login'); }}
+                  className="py-2.5 rounded-2xl bg-[#242429] text-white text-xs font-bold font-editorial flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <LogIn size={13} /> Sign In
+                </button>
+                <button
+                  onClick={() => { setMobileNavOpen(false); onOpenAuth('register'); }}
+                  className="py-2.5 rounded-2xl bg-white border border-[#242429]/25 text-[#242429] text-xs font-bold font-editorial flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <UserPlus size={13} /> Register
+                </button>
+              </div>
+            )}
           </div>
         )}
       </header>
 
-      {/* 👤 Interactive Profile & Security Modal */}
+      {/* 👤 Profile Modal */}
       <ProfileModal 
         isOpen={isProfileModalOpen} 
         onClose={() => setIsProfileModalOpen(false)} 

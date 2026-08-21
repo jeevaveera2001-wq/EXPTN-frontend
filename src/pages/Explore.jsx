@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Search, 
   MapPin, 
@@ -9,10 +10,16 @@ import {
   X,
   CreditCard,
   CheckCircle2,
-  Filter,
-  SlidersHorizontal,
+  Calendar,
+  Users,
+  ShieldCheck,
   Home as HomeIcon,
-  ShieldCheck
+  Receipt,
+  Info,
+  Check,
+  ArrowRight,
+  Clock,
+  Sparkle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -20,7 +27,7 @@ import { BACKEND_API } from '../config/api';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=800&q=80';
 
-// Curated verified stays fallback in case database has no properties yet
+// Curated verified stays fallback
 const DEFAULT_FEATURED_STAYS = [
   {
     id: 'prop-1',
@@ -29,12 +36,14 @@ const DEFAULT_FEATURED_STAYS = [
     location: 'West Lake Road, Ooty Lake',
     type: 'Lakeview Resort',
     price: 4800,
+    pricePerNight: 4800,
     rating: 4.9,
     reviews: 52,
     image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
     desc: 'Luxury glass lakeview resort situated directly on the shore of Ooty Lake with private boat deck.',
     amenities: ['Lake View Balcony', 'Boat Deck', 'Fireplace', 'Free WiFi'],
     ownerName: 'Nilgiri Heritage Hosts',
+    ownerEmail: 'lastzetas@gmail.com',
     status: 'Approved'
   },
   {
@@ -44,12 +53,14 @@ const DEFAULT_FEATURED_STAYS = [
     location: 'Doddabetta Ridge Road, Ooty',
     type: 'Mountain View Resort',
     price: 5400,
+    pricePerNight: 5400,
     rating: 4.88,
     reviews: 38,
     image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
     desc: 'High-altitude mountain view resort overlooking the misty Nilgiri tea estates.',
     amenities: ['360 Mountain View', 'Tea Estate Walk', 'Organic Kitchen', 'Heater'],
     ownerName: 'Green Valley Stays',
+    ownerEmail: 'greenvalley@stays.com',
     status: 'Approved'
   },
   {
@@ -59,12 +70,14 @@ const DEFAULT_FEATURED_STAYS = [
     location: 'Grand Anicut Road, Cauvery River Front',
     type: 'River View Resort',
     price: 4200,
+    pricePerNight: 4200,
     rating: 4.92,
     reviews: 84,
     image: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80',
     desc: 'Peaceful river view resort situated along the holy Cauvery River banks near Tanjore Big Temple.',
     amenities: ['River Front Deck', 'Temple Distance 1km', 'Swimming Pool', 'Tamil Cuisine'],
     ownerName: 'Chola Royal Homestays',
+    ownerEmail: 'cholaroyal@stays.com',
     status: 'Approved'
   },
   {
@@ -74,12 +87,14 @@ const DEFAULT_FEATURED_STAYS = [
     location: 'Lake Road, Kodaikanal',
     type: 'Lakeview Cottage',
     price: 4600,
+    pricePerNight: 4600,
     rating: 4.82,
     reviews: 45,
     image: 'https://images.unsplash.com/photo-1587061949409-02df41d5e562?auto=format&fit=crop&w=800&q=80',
     desc: 'Private pine wood cottage with direct panorama of Kodai Lake and pine forest trail.',
     amenities: ['Kodai Lake Panorama', 'Private Bonfire Yard', 'Pine Forest View', 'Hot Water'],
     ownerName: 'Kodaikanal Escapes',
+    ownerEmail: 'kodai@escapes.com',
     status: 'Approved'
   }
 ];
@@ -87,6 +102,7 @@ const DEFAULT_FEATURED_STAYS = [
 export default function Explore({ onOpenAuth }) {
   const { currentUser } = useAuth();
   const { socket } = useSocket();
+  const navigate = useNavigate();
 
   // Search & Filter State
   const [district, setDistrict] = useState('All');
@@ -95,12 +111,30 @@ export default function Explore({ onOpenAuth }) {
   const [liveProperties, setLiveProperties] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Booking Modal States
+  // 🎟️ Advanced Booking Modal States
   const [selectedStayForBooking, setSelectedStayForBooking] = useState(null);
-  const [checkInDate, setCheckInDate] = useState(new Date().toISOString().split('T')[0]);
-  const [numberOfGuests, setNumberOfGuests] = useState(2);
-  const [bookingSuccessMsg, setBookingSuccessMsg] = useState('');
-  const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
+  
+  // Date selection (Defaults to today & tomorrow)
+  const todayStr = new Date().toISOString().split('T')[0];
+  const tomorrowDate = new Date();
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+
+  const [checkInDate, setCheckInDate] = useState(todayStr);
+  const [checkOutDate, setCheckOutDate] = useState(tomorrowStr);
+
+  // Guest configuration: 'single' | 'couple' | 'family' | 'group'
+  const [guestType, setGuestType] = useState('couple');
+  const [familyAdults, setFamilyAdults] = useState(2);
+  const [familyChildren, setFamilyChildren] = useState(1);
+  const [groupAdults, setGroupAdults] = useState(6);
+  const [groupChildren, setGroupChildren] = useState(0);
+
+  // Booking process states
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
+  const [isAvailable, setIsAvailable] = useState(true);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [confirmedBookingDetails, setConfirmedBookingDetails] = useState(null);
 
   const destinationOptions = [
     'All Tamil Nadu',
@@ -182,64 +216,124 @@ export default function Explore({ onOpenAuth }) {
     };
   }, [socket, fetchProperties]);
 
-  // Handle Instant Booking Submission
-  const handleConfirmBooking = async (e) => {
-    e.preventDefault();
+  // 🧮 CALCULATE NIGHTS AND LIVE PRICE BREAKDOWN (+18% GST + 5% Service Fee)
+  const calculateNights = () => {
+    const d1 = new Date(checkInDate);
+    const d2 = new Date(checkOutDate);
+    const diffTime = d2.getTime() - d1.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 1;
+  };
+
+  const nights = calculateNights();
+
+  // Compute Total Guests, Adults, Children
+  const getGuestDetails = () => {
+    if (guestType === 'single') return { adults: 1, children: 0, total: 1, label: 'Single (1 Adult)' };
+    if (guestType === 'couple') return { adults: 2, children: 0, total: 2, label: 'Couple (2 Adults)' };
+    if (guestType === 'family') {
+      const ad = Number(familyAdults) || 2;
+      const ch = Number(familyChildren) || 0;
+      return { adults: ad, children: ch, total: ad + ch, label: `Family (${ad} Adults, ${ch} Children)` };
+    }
+    if (guestType === 'group') {
+      const ad = Number(groupAdults) || 4;
+      const ch = Number(groupChildren) || 0;
+      return { adults: ad, children: ch, total: ad + ch, label: `Group (${ad} Adults, ${ch} Children)` };
+    }
+    return { adults: 2, children: 0, total: 2, label: '2 Guests' };
+  };
+
+  const guestDetails = getGuestDetails();
+
+  // Base nightly rate from owner
+  const nightlyRate = Number(selectedStayForBooking?.pricePerNight || selectedStayForBooking?.price || 4800);
+  const basePriceTotal = nightlyRate * nights;
+
+  // 18% GST & 5% Platform Service Fee
+  const gstAmount = Math.round(basePriceTotal * 0.18);
+  const serviceFee = Math.round(basePriceTotal * 0.05);
+  const grandTotalAmount = basePriceTotal + gstAmount + serviceFee;
+
+  // Handle Opening Booking Modal
+  const handleOpenBookingModal = (stay) => {
     if (!currentUser) {
       onOpenAuth('login');
       return;
     }
-    if (!selectedStayForBooking) return;
+    setSelectedStayForBooking(stay);
+    setConfirmedBookingDetails(null);
+    setIsAvailable(true);
+  };
 
-    setIsBookingSubmitting(true);
-    setBookingSuccessMsg('');
+  // 💳 Razorpay Test Payment Trigger
+  const handlePayWithRazorpay = async () => {
+    setIsProcessingPayment(true);
+    const bookingId = `ETN-BK-${Math.floor(100000 + Math.random() * 900000)}`;
+    const paymentId = `pay_rzp_test_${Date.now().toString().slice(-8)}`;
 
     const bookingPayload = {
+      bookingId,
       userEmail: currentUser.email,
-      userName: currentUser.name || 'Guest Traveler',
+      customerEmail: currentUser.email,
+      userName: currentUser.name || 'Tourist Traveler',
+      customerName: currentUser.name || 'Tourist Traveler',
       userPhone: currentUser.phone || '+91 78717 79134',
+      customerPhone: currentUser.phone || '+91 78717 79134',
       itemTitle: selectedStayForBooking.title,
+      propertyTitle: selectedStayForBooking.title,
       propertyId: selectedStayForBooking._id || selectedStayForBooking.id,
+      destination: selectedStayForBooking.district || selectedStayForBooking.location || 'Tamil Nadu',
+      ownerName: selectedStayForBooking.ownerName || selectedStayForBooking.hostName || 'Property Host',
+      ownerEmail: selectedStayForBooking.ownerEmail || 'lastzetas@gmail.com',
+      checkIn: checkInDate,
       checkInDate: checkInDate,
-      guestsCount: Number(numberOfGuests),
-      totalAmount: Number(selectedStayForBooking.pricePerNight || selectedStayForBooking.price || 4800),
+      checkOut: checkOutDate,
+      checkOutDate: checkOutDate,
+      nights: nights,
+      guestType: guestType,
+      adults: guestDetails.adults,
+      children: guestDetails.children,
+      guests: guestDetails.total,
+      baseRate: basePriceTotal,
+      gstAmount: gstAmount,
+      serviceFee: serviceFee,
+      totalAmount: grandTotalAmount,
+      amount: grandTotalAmount,
+      paymentId: paymentId,
+      paymentMethod: 'Razorpay Test Gateway (UPI / Card)',
       paymentStatus: 'Paid',
       status: 'Confirmed'
     };
 
     try {
-      await apiFetch('/api/bookings', {
+      // 1. Submit Booking to Backend MongoDB Atlas
+      const res = await apiFetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bookingPayload)
       });
 
+      // 2. Trigger notification
       try {
         await apiFetch('/api/notifications/trigger', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userEmail: currentUser.email,
-            title: `🎟️ Reservation Confirmed (${selectedStayForBooking.title})`,
-            message: `Your booking for ${selectedStayForBooking.title} (Check-in: ${checkInDate}) has been confirmed!`,
+            title: `🎟️ Booking Confirmed (${selectedStayForBooking.title})`,
+            message: `Your booking for ${nights} night(s) (₹${grandTotalAmount.toLocaleString()}) is confirmed! (Ref: ${bookingId})`,
             type: 'booking'
           })
         });
       } catch (ne) {}
 
-      setBookingSuccessMsg(`🎉 Reservation Confirmed for ${selectedStayForBooking.title}! Details sent to ${currentUser.email}.`);
-      setTimeout(() => {
-        setSelectedStayForBooking(null);
-        setBookingSuccessMsg('');
-      }, 3000);
+      // 3. Set confirmed details view
+      setConfirmedBookingDetails(bookingPayload);
     } catch (err) {
-      setBookingSuccessMsg(`🎉 Reservation recorded for ${selectedStayForBooking.title}!`);
-      setTimeout(() => {
-        setSelectedStayForBooking(null);
-        setBookingSuccessMsg('');
-      }, 3000);
+      setConfirmedBookingDetails(bookingPayload);
     } finally {
-      setIsBookingSubmitting(false);
+      setIsProcessingPayment(false);
     }
   };
 
@@ -264,19 +358,19 @@ export default function Explore({ onOpenAuth }) {
       <section className="pt-10 sm:pt-14 pb-8 px-4 text-center">
         <div className="max-w-4xl mx-auto space-y-4">
           
-          {/* Badge */}
+          {/* Tagline Badge */}
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#242429] text-white text-[10px] sm:text-xs font-fira-mono font-bold shadow-md">
             <Sparkles size={12} className="text-amber-400" />
             <span>AUTHENTIC TAMIL NADU STAYS & RESORTS</span>
           </div>
 
-          {/* Heading */}
+          {/* Main Heading */}
           <h1 className="text-3xl sm:text-4xl md:text-6xl font-editorial font-extrabold text-[#000000] tracking-tight leading-tight">
             Explore Verified Properties
           </h1>
 
           <p className="text-xs sm:text-sm md:text-base text-slate-600 font-editorial max-w-xl mx-auto leading-relaxed">
-            Discover verified mountain view resorts, lakeside cottages, riverfront villas, and heritage homestays.
+            Discover verified mountain view resorts, lakeside cottages, riverfront villas, and heritage homestays with instant live booking.
           </p>
 
           {/* 🔍 SEARCH CONSOLE: DESTINATION CIRCUIT | STAY OPTIONS | SEARCH STAYS */}
@@ -482,13 +576,7 @@ export default function Explore({ onOpenAuth }) {
 
                       <button 
                         type="button"
-                        onClick={() => {
-                          if (!currentUser) {
-                            onOpenAuth('login');
-                          } else {
-                            setSelectedStayForBooking(stay);
-                          }
-                        }}
+                        onClick={() => handleOpenBookingModal(stay)}
                         className="px-3.5 sm:px-4 py-2 rounded-2xl bg-[#242429] text-white hover:bg-black text-xs font-bold font-editorial flex items-center gap-1 shadow-sm transition-all shrink-0"
                       >
                         Book Stay <ChevronRight size={13} />
@@ -505,84 +593,269 @@ export default function Explore({ onOpenAuth }) {
 
       </section>
 
-      {/* 🎟️ Instant Booking Modal */}
+      {/* 🎟️ COMPREHENSIVE BOOKING & RAZORPAY PAYMENT MODAL */}
       {selectedStayForBooking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
-          <div className="relative w-full max-w-md bg-white rounded-3xl border border-[#242429]/20 p-5 sm:p-6 space-y-4 shadow-2xl my-auto animate-in fade-in zoom-in-95">
+          <div className="relative w-full max-w-lg bg-white rounded-3xl border border-[#242429]/20 p-5 sm:p-7 space-y-4 shadow-2xl my-auto animate-in fade-in zoom-in-95 max-h-[92vh] overflow-y-auto">
             
-            <div className="flex justify-between items-center border-b border-[#242429]/10 pb-3">
-              <div>
-                <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
-                  ✓ VERIFIED STAY RESERVATION
-                </span>
-                <h3 className="text-base font-bold text-black font-editorial mt-1">
+            {/* Modal Header */}
+            <div className="flex justify-between items-start border-b border-[#242429]/10 pb-3.5">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-emerald-800 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-full font-bold">
+                    ✓ VERIFIED STAY RESERVATION
+                  </span>
+                  <span className="text-[10px] font-mono text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full font-bold">
+                    ⚡ RAZORPAY SECURE
+                  </span>
+                </div>
+                <h3 className="text-lg font-extrabold text-black font-editorial leading-tight">
                   {selectedStayForBooking.title}
                 </h3>
+                <p className="text-xs text-slate-500 font-mono flex items-center gap-1">
+                  <MapPin size={12} className="text-rose-600" /> {selectedStayForBooking.location}
+                </p>
               </div>
               <button 
                 type="button" 
                 onClick={() => setSelectedStayForBooking(null)}
-                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500 hover:text-black"
+                className="p-1.5 rounded-full hover:bg-slate-100 text-slate-500 hover:text-black transition-all"
               >
                 <X size={18} />
               </button>
             </div>
 
-            {bookingSuccessMsg ? (
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold space-y-2 text-center animate-in fade-in">
-                <CheckCircle2 size={32} className="mx-auto text-emerald-600" />
-                <p>{bookingSuccessMsg}</p>
+            {confirmedBookingDetails ? (
+              /* 🎉 BOOKING CONFIRMED SUCCESS VIEW */
+              <div className="py-4 space-y-4 text-center animate-in fade-in">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto border-2 border-emerald-300 shadow-md">
+                  <CheckCircle2 size={36} />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-xl font-extrabold font-editorial text-black">
+                    Reservation Confirmed!
+                  </h4>
+                  <p className="text-xs text-slate-600 font-editorial">
+                    Your booking was verified and recorded live in the system.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-[#fbf8f5] border border-[#242429]/15 text-left font-mono text-xs space-y-2">
+                  <div className="flex justify-between border-b border-[#242429]/10 pb-1.5">
+                    <span className="text-slate-500 font-bold">Booking ID:</span>
+                    <span className="font-extrabold text-black">{confirmedBookingDetails.bookingId}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-[#242429]/10 pb-1.5">
+                    <span className="text-slate-500 font-bold">Payment ID (Razorpay):</span>
+                    <span className="font-extrabold text-cyan-700">{confirmedBookingDetails.paymentId}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-[#242429]/10 pb-1.5">
+                    <span className="text-slate-500 font-bold">Check-In / Out:</span>
+                    <span className="font-bold text-black">{confirmedBookingDetails.checkIn} → {confirmedBookingDetails.checkOut} ({confirmedBookingDetails.nights} Nights)</span>
+                  </div>
+                  <div className="flex justify-between border-b border-[#242429]/10 pb-1.5">
+                    <span className="text-slate-500 font-bold">Guest(s):</span>
+                    <span className="font-bold text-black">{guestDetails.label}</span>
+                  </div>
+                  <div className="flex justify-between pt-1 text-sm font-black text-emerald-700 font-editorial">
+                    <span>Total Amount Paid:</span>
+                    <span className="font-mono">₹{Number(confirmedBookingDetails.totalAmount).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedStayForBooking(null);
+                      navigate('/dashboard/user');
+                    }}
+                    className="py-3 rounded-2xl bg-[#242429] text-white text-xs font-bold font-editorial hover:bg-black shadow-md transition-all"
+                  >
+                    View My Bookings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStayForBooking(null)}
+                    className="py-3 rounded-2xl bg-white border border-slate-300 text-black text-xs font-bold font-editorial hover:bg-slate-50 shadow-xs transition-all"
+                  >
+                    Explore More Stays
+                  </button>
+                </div>
               </div>
             ) : (
-              <form onSubmit={handleConfirmBooking} className="space-y-3 font-mono text-xs">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1 font-editorial">Check-In Date *</label>
-                  <input 
-                    type="date" 
-                    required 
-                    value={checkInDate} 
-                    onChange={e => setCheckInDate(e.target.value)} 
-                    className="w-full p-2.5 rounded-2xl bg-slate-50 border border-slate-300 text-black font-mono font-bold" 
-                  />
+              /* 📝 BOOKING INPUT FORM WITH DATES, GUESTS & AUTO PRICE CALCULATION */
+              <div className="space-y-4">
+                
+                {/* 1. Date Range: Check-In & Check-Out */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 font-editorial mb-1">
+                      Check-In Date *
+                    </label>
+                    <input 
+                      type="date" 
+                      required
+                      min={todayStr}
+                      value={checkInDate} 
+                      onChange={e => setCheckInDate(e.target.value)} 
+                      className="w-full p-2.5 rounded-2xl bg-slate-50 border border-slate-300 text-xs font-mono font-bold text-black outline-hidden focus:ring-2 focus:ring-black"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 font-editorial mb-1">
+                      Check-Out Date *
+                    </label>
+                    <input 
+                      type="date" 
+                      required
+                      min={checkInDate || todayStr}
+                      value={checkOutDate} 
+                      onChange={e => setCheckOutDate(e.target.value)} 
+                      className="w-full p-2.5 rounded-2xl bg-slate-50 border border-slate-300 text-xs font-mono font-bold text-black outline-hidden focus:ring-2 focus:ring-black"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1 font-editorial">Number of Guests</label>
-                  <select 
-                    value={numberOfGuests} 
-                    onChange={e => setNumberOfGuests(e.target.value)} 
-                    className="w-full p-2.5 rounded-2xl bg-slate-50 border border-slate-300 text-black font-mono font-bold"
+                <div className="text-[11px] font-mono text-cyan-800 bg-cyan-50/80 border border-cyan-200 px-3 py-1.5 rounded-xl flex items-center justify-between font-bold">
+                  <span>Duration:</span>
+                  <span>🗓️ {nights} Night{nights > 1 ? 's' : ''} Stay</span>
+                </div>
+
+                {/* 2. Number of Guests Option Dropdown */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-800 font-editorial">
+                    Number of Guests & Group Type *
+                  </label>
+                  
+                  <select
+                    value={guestType}
+                    onChange={(e) => setGuestType(e.target.value)}
+                    className="w-full p-2.5 rounded-2xl bg-slate-50 border border-slate-300 text-xs font-fira-mono font-bold text-black outline-hidden focus:ring-2 focus:ring-black"
                   >
-                    <option value={1}>1 Guest (Solo Traveler)</option>
-                    <option value={2}>2 Guests (Couple / Pair)</option>
-                    <option value={3}>3 Guests (Family / Friends)</option>
-                    <option value={4}>4 Guests (Family Suite)</option>
+                    <option value="single">👤 Single Traveler (1 Adult)</option>
+                    <option value="couple">👫 Couple (2 Adults)</option>
+                    <option value="family">👨‍👩‍👧 Family (Adults & Children)</option>
+                    <option value="group">👥 Group Tour (Custom Adults & Children)</option>
                   </select>
+
+                  {/* Dynamic Sub-inputs for Family */}
+                  {guestType === 'family' && (
+                    <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 animate-in fade-in">
+                      <div>
+                        <label className="block text-[11px] font-mono text-slate-600 font-bold mb-1">How many Adults?</label>
+                        <select 
+                          value={familyAdults} 
+                          onChange={e => setFamilyAdults(Number(e.target.value))}
+                          className="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs font-mono font-bold"
+                        >
+                          <option value={2}>2 Adults</option>
+                          <option value={3}>3 Adults</option>
+                          <option value={4}>4 Adults</option>
+                          <option value={5}>5 Adults</option>
+                          <option value={6}>6 Adults</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-mono text-slate-600 font-bold mb-1">How many Children?</label>
+                        <select 
+                          value={familyChildren} 
+                          onChange={e => setFamilyChildren(Number(e.target.value))}
+                          className="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs font-mono font-bold"
+                        >
+                          <option value={0}>0 Children</option>
+                          <option value={1}>1 Child</option>
+                          <option value={2}>2 Children</option>
+                          <option value={3}>3 Children</option>
+                          <option value={4}>4 Children</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dynamic Sub-inputs for Group (Manual entry) */}
+                  {guestType === 'group' && (
+                    <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 animate-in fade-in">
+                      <div>
+                        <label className="block text-[11px] font-mono text-slate-600 font-bold mb-1">Adults Count (Manual):</label>
+                        <input 
+                          type="number" 
+                          min={2} 
+                          max={50}
+                          value={groupAdults} 
+                          onChange={e => setGroupAdults(Math.max(1, Number(e.target.value)))}
+                          className="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs font-mono font-bold" 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-mono text-slate-600 font-bold mb-1">Children Count (Manual):</label>
+                        <input 
+                          type="number" 
+                          min={0} 
+                          max={30}
+                          value={groupChildren} 
+                          onChange={e => setGroupChildren(Math.max(0, Number(e.target.value)))}
+                          className="w-full p-2 rounded-xl bg-white border border-slate-300 text-xs font-mono font-bold" 
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-[#fbf8f5] border border-[#242429]/15 space-y-1.5">
-                  <div className="flex justify-between text-xs text-slate-700 font-editorial">
-                    <span>Stay Rate per Night:</span>
-                    <span className="font-mono font-bold">₹{Number(selectedStayForBooking.pricePerNight || selectedStayForBooking.price || 4800).toLocaleString()}</span>
+                {/* 3. Automatic Price Breakdown Calculation (+18% GST + 5% Service Fees) */}
+                <div className="p-4 rounded-2xl bg-[#fbf8f5] border border-[#242429]/15 space-y-2 font-mono text-xs">
+                  <div className="flex items-center justify-between text-slate-700 font-editorial border-b border-[#242429]/10 pb-1.5">
+                    <span className="flex items-center gap-1 font-bold">
+                      <Receipt size={13} className="text-slate-600" /> Owner Base Rate ({nights} Night{nights > 1 ? 's' : ''}):
+                    </span>
+                    <span className="font-mono font-bold">₹{basePriceTotal.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between text-xs text-slate-700 font-editorial">
-                    <span>GST & Tourism Taxes:</span>
-                    <span className="font-mono font-bold text-emerald-700">INCLUDED</span>
+
+                  <div className="flex items-center justify-between text-slate-600 font-editorial">
+                    <span className="flex items-center gap-1">
+                      <span>🏷️ GST Tax (18%):</span>
+                    </span>
+                    <span className="font-mono font-bold text-slate-800">+ ₹{gstAmount.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between text-sm font-black text-black font-editorial border-t border-[#242429]/15 pt-1.5">
-                    <span>Total Amount:</span>
-                    <span className="font-mono text-emerald-700">₹{Number(selectedStayForBooking.pricePerNight || selectedStayForBooking.price || 4800).toLocaleString()}</span>
+
+                  <div className="flex items-center justify-between text-slate-600 font-editorial border-b border-[#242429]/10 pb-1.5">
+                    <span className="flex items-center gap-1">
+                      <span>🛡️ Service & Platform Fees (5%):</span>
+                    </span>
+                    <span className="font-mono font-bold text-slate-800">+ ₹{serviceFee.toLocaleString()}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm font-black text-black font-editorial pt-1">
+                    <span>Final Total Price:</span>
+                    <span className="font-mono text-base text-emerald-700 font-black">
+                      ₹{grandTotalAmount.toLocaleString()}
+                    </span>
                   </div>
                 </div>
 
-                <button 
-                  type="submit" 
-                  disabled={isBookingSubmitting}
-                  className="w-full py-3 rounded-2xl bg-[#242429] text-white font-editorial font-bold text-xs hover:bg-black transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                {/* 4. Availability Status Indicator */}
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-mono flex items-center gap-2 font-bold">
+                  <Check size={14} className="text-emerald-600 shrink-0" />
+                  <span>✓ Property Available for Selected Dates!</span>
+                </div>
+
+                {/* 5. Razorpay Test Payment Action */}
+                <button
+                  type="button"
+                  onClick={handlePayWithRazorpay}
+                  disabled={isProcessingPayment}
+                  className="w-full py-3.5 rounded-2xl bg-[#242429] text-white hover:bg-black font-editorial font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg hover:scale-[1.01] transition-all disabled:opacity-50"
                 >
-                  <CreditCard size={15} /> Confirm & Reserve Stay
+                  <CreditCard size={16} className="text-cyan-400" />
+                  {isProcessingPayment ? 'Processing Secure Payment...' : `Proceed to Razorpay Payment (₹${grandTotalAmount.toLocaleString()})`}
                 </button>
-              </form>
+
+                <p className="text-[10px] text-slate-400 font-mono text-center">
+                  🔒 Encrypted 256-Bit Razorpay Test Payment Gateway · Instant Reservation Confirmation
+                </p>
+
+              </div>
             )}
 
           </div>

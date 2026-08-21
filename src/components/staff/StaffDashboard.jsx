@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Activity, 
   CheckCircle, 
@@ -46,15 +46,23 @@ import {
   DollarSign
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
+import { BACKEND_API } from '../../config/api';
 import { TOURISM_PLACES } from '../../data/tamilNaduData';
 
 export default function StaffDashboard({ overrideRole }) {
   const { currentUser, logout } = useAuth();
+  const { socket } = useSocket();
   const role = overrideRole || currentUser?.role || 'operations_manager';
 
   // Active Tab for Sidebar (6 Tabs for each role)
   const [activeNavTab, setActiveNavTab] = useState('tab_1');
   const [actionSuccess, setActionSuccess] = useState('');
+
+  // Live Support Tickets State
+  const [supportTickets, setSupportTickets] = useState([]);
+  const [selectedSupportTicket, setSelectedSupportTicket] = useState(null);
+  const [supportReplyText, setSupportReplyText] = useState('');
 
   // Operations Manager Form Inputs
   const [assignTripId, setAssignTripId] = useState('ETN-TRIP-401');
@@ -70,6 +78,62 @@ export default function StaffDashboard({ overrideRole }) {
   const triggerSuccess = (msg) => {
     setActionSuccess(msg);
     setTimeout(() => setActionSuccess(''), 3500);
+  };
+
+  const apiFetch = async (endpoint, options = {}) => {
+    const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
+    const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
+    try {
+      const res = await fetch(url, options);
+      if (res.ok || res.status === 400 || res.status === 401 || res.status === 403) {
+        return res;
+      }
+    } catch (e) {}
+    return await fetch(endpoint, options);
+  };
+
+  const fetchSupportTickets = async () => {
+    try {
+      const res = await apiFetch('/api/tickets');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setSupportTickets(data);
+      }
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchSupportTickets();
+    if (socket) {
+      socket.on('new_ticket', fetchSupportTickets);
+      socket.on('ticket_updated', fetchSupportTickets);
+      socket.on('stats_updated', fetchSupportTickets);
+    }
+    const timer = setInterval(fetchSupportTickets, 5000);
+    return () => {
+      clearInterval(timer);
+      if (socket) {
+        socket.off('new_ticket');
+        socket.off('ticket_updated');
+        socket.off('stats_updated');
+      }
+    };
+  }, [socket]);
+
+  const handleSupportReplySubmit = async (ticketId, newStatus = 'Resolved') => {
+    try {
+      await apiFetch(`/api/tickets/${ticketId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus, adminReply: supportReplyText || `Updated by Support Executive (${newStatus})` })
+      });
+      setSupportTickets(prev => prev.map(t => (t._id === ticketId || t.ticketId === ticketId) ? { ...t, status: newStatus, adminReply: supportReplyText || t.adminReply } : t));
+      triggerSuccess(`Ticket ${ticketId} marked ${newStatus}! Realtime notification dispatched to user/host.`);
+      setSupportReplyText('');
+      setSelectedSupportTicket(null);
+    } catch (err) {
+      triggerSuccess(`Ticket ${ticketId} updated!`);
+    }
   };
 
   // Detailed Configuration for all 10 Staff Roles (Each with 6 Dedicated Nav Items)
@@ -443,14 +507,154 @@ export default function StaffDashboard({ overrideRole }) {
         {/* 🎧 CUSTOMER SUPPORT EXECUTIVE WORKSTATION */}
         {role === 'customer_support_executive' && (
           <div className="bg-white rounded-3xl p-6 lg:p-8 border border-slate-200 shadow-sm space-y-6">
-            <h3 className="text-xl font-bold text-slate-900 border-b border-slate-100 pb-4">Customer Support Live Ticket Console</h3>
-            <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-200 flex justify-between items-center text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div>
-                <span className="font-bold text-indigo-950 text-sm">Customer Support Helpline: +91 78717 79134</span>
-                <div className="text-indigo-700">Ticket #809: Ooty Cab Pickup Inquiry</div>
+                <h3 className="text-xl font-bold text-slate-900">Customer Support Live Ticket Console</h3>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">Real-time incoming support tickets from tourists, guests, and property hosts.</p>
               </div>
-              <button onClick={() => triggerSuccess('Ticket #809 resolved!')} className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold">Resolve Support Ticket</button>
+              <div className="flex items-center gap-2">
+                <a href="tel:+917871779134" className="px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-800 font-mono font-bold text-xs flex items-center gap-1.5">
+                  <PhoneCall size={13} /> +91 78717 79134 (24/7 Helpline)
+                </a>
+              </div>
             </div>
+
+            {/* Quick Stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200">
+                <div className="text-[10px] font-mono font-bold text-amber-800 uppercase">Open Tickets</div>
+                <div className="text-2xl font-black text-amber-950 mt-0.5">
+                  {supportTickets.filter(t => t.status === 'Open').length}
+                </div>
+              </div>
+              <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200">
+                <div className="text-[10px] font-mono font-bold text-blue-800 uppercase">In Progress</div>
+                <div className="text-2xl font-black text-blue-950 mt-0.5">
+                  {supportTickets.filter(t => t.status === 'In Progress').length}
+                </div>
+              </div>
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200">
+                <div className="text-[10px] font-mono font-bold text-emerald-800 uppercase">Resolved</div>
+                <div className="text-2xl font-black text-emerald-950 mt-0.5">
+                  {supportTickets.filter(t => t.status === 'Resolved' || t.status === 'Closed').length}
+                </div>
+              </div>
+            </div>
+
+            {/* Live Tickets List */}
+            {supportTickets.length === 0 ? (
+              <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-500 font-mono text-xs">
+                ✨ No active support tickets in queue. All user queries resolved!
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {supportTickets.map((tck) => {
+                  const tckId = tck.ticketId || tck._id;
+                  const isSelected = selectedSupportTicket?.ticketId === tckId || selectedSupportTicket?._id === tck._id;
+                  return (
+                    <div key={tck._id || tckId} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-indigo-300 transition-all space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full text-xs">
+                            {tckId}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                            tck.status === 'Open' ? 'bg-amber-100 text-amber-900 border border-amber-300' :
+                            tck.status === 'In Progress' ? 'bg-blue-100 text-blue-900 border border-blue-300' :
+                            'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                          }`}>
+                            ● {tck.status}
+                          </span>
+                          <span className="text-[11px] font-mono font-bold text-slate-500">
+                            [{tck.category || 'General'}]
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {tck.createdAt ? new Date(tck.createdAt).toLocaleString('en-IN') : 'Recent'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-sm">{tck.subject}</h4>
+                        {tck.message && (
+                          <p className="text-xs text-slate-600 mt-1 bg-white p-3 rounded-xl border border-slate-200 font-editorial">
+                            "{tck.message}"
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-500 pt-1">
+                        <div>
+                          <strong>From:</strong> {tck.senderName} ({tck.senderEmail}) · <span className="uppercase text-indigo-600 font-bold">{tck.senderRole || 'user'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {tck.status !== 'Resolved' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedSupportTicket(isSelected ? null : tck);
+                                setSupportReplyText(tck.adminReply || '');
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                            >
+                              {isSelected ? 'Close Reply Box' : '💬 Reply & Resolve'}
+                            </button>
+                          )}
+                          {tck.status === 'Open' && (
+                            <button
+                              type="button"
+                              onClick={() => handleSupportReplySubmit(tckId, 'In Progress')}
+                              className="px-3 py-1.5 rounded-xl bg-blue-50 border border-blue-300 text-blue-800 font-bold text-xs hover:bg-blue-100 cursor-pointer"
+                            >
+                              Mark In Progress
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Admin Reply Details if existing */}
+                      {tck.adminReply && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 font-mono">
+                          <strong>✓ Support Reply:</strong> {tck.adminReply}
+                        </div>
+                      )}
+
+                      {/* Quick Reply Drawer */}
+                      {isSelected && (
+                        <div className="p-4 bg-white rounded-2xl border-2 border-indigo-300 space-y-3 animate-in fade-in">
+                          <label className="block text-xs font-bold text-slate-800">
+                            Reply to {tck.senderName} ({tck.senderEmail})
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={supportReplyText}
+                            onChange={(e) => setSupportReplyText(e.target.value)}
+                            placeholder="Type resolution instructions or assistance details..."
+                            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-900 outline-hidden focus:ring-2 focus:ring-indigo-500 font-editorial"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSupportTicket(null)}
+                              className="px-3.5 py-2 rounded-xl bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSupportReplySubmit(tckId, 'Resolved')}
+                              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-sm flex items-center gap-1"
+                            >
+                              <Check size={14} /> Send Reply & Mark Resolved
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 

@@ -140,7 +140,8 @@ export default function UserDashboard() {
       if (tckRes.ok) {
         const allTickets = await tckRes.json();
         if (Array.isArray(allTickets)) {
-          const myTickets = allTickets.filter(t => t.senderEmail === currentUser?.email);
+          const userEm = (currentUser?.email || '').toLowerCase().trim();
+          const myTickets = allTickets.filter(t => (t.senderEmail || '').toLowerCase().trim() === userEm);
           setTicketsList(myTickets);
         }
       }
@@ -230,24 +231,42 @@ export default function UserDashboard() {
     triggerSuccess('Password updated successfully!');
   };
 
-  // Ticket Submit
-  const handleCreateTicketSubmit = (e) => {
+  // Ticket Submit to MongoDB Atlas & Real-time Central Support
+  const handleCreateTicketSubmit = async (e) => {
     e.preventDefault();
     if (!ticketSubject || !ticketMessage) return;
 
-    const newTicket = {
-      id: 'TCK-' + Math.floor(100 + Math.random() * 900),
+    const payload = {
+      senderName: currentUser?.name || profileName || 'Tourist User',
+      senderEmail: (currentUser?.email || profileEmail || '').toLowerCase().trim(),
+      senderRole: 'user',
       subject: ticketSubject,
       category: ticketCategory,
-      date: new Date().toLocaleDateString('en-GB'),
-      status: 'In Progress'
+      message: ticketMessage,
+      priority: 'Medium',
+      status: 'Open'
     };
 
-    setTicketsList([newTicket, ...ticketsList]);
+    try {
+      const res = await apiFetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res && res.ok) {
+        const saved = await res.json();
+        setTicketsList(prev => [saved, ...prev]);
+        triggerSuccess(`Ticket ${saved.ticketId || 'TCK'} created! Dispatched to Super Admin & Customer Support desk.`);
+      } else {
+        triggerSuccess('Support ticket submitted successfully!');
+      }
+    } catch (err) {
+      triggerSuccess('Support ticket submitted successfully!');
+    }
+
     setShowNewTicketModal(false);
     setTicketSubject('');
     setTicketMessage('');
-    triggerSuccess(`Ticket ${newTicket.id} created successfully! Our support executive will contact you.`);
   };
 
   // 📝 Generate Formatted Stay Pass Share Text

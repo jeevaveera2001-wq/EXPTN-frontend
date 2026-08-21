@@ -112,7 +112,7 @@ export default function App() {
                 </Routes>
               </main>
             </div>
-            <Footer />
+            <Footer onOpenAuth={handleOpenAuth} />
 
             {/* Auth Modal with Login & Register Isolation and Google Verification Flow */}
             <AuthModal 

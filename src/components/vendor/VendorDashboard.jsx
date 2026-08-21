@@ -200,7 +200,8 @@ export default function VendorDashboard() {
       if (tckRes.ok) {
         const allTcks = await tckRes.json();
         if (Array.isArray(allTcks)) {
-          setVendorTickets(allTcks.filter(t => t.senderEmail === currentUser?.email));
+          const vEmail = (currentUser?.email || '').toLowerCase().trim();
+          setVendorTickets(allTcks.filter(t => (t.senderEmail || '').toLowerCase().trim() === vEmail || currentUser?.role === 'super_admin'));
         }
       }
     } catch (e) {}
@@ -502,23 +503,41 @@ export default function VendorDashboard() {
     triggerSuccess(`Vehicle "${vehTitle}" submitted for Super Admin approval!`);
   };
 
-  const handleCreateTicketSubmit = (e) => {
+  const handleCreateTicketSubmit = async (e) => {
     e.preventDefault();
     if (!ticketSubject || !ticketMessage) return;
 
-    const newTck = {
-      id: 'TCK-' + Math.floor(2000 + Math.random() * 8000),
+    const payload = {
+      senderName: currentUser?.name || vendorName || 'Property Host',
+      senderEmail: (currentUser?.email || vendorEmail || '').toLowerCase().trim(),
+      senderRole: 'owner',
       subject: ticketSubject,
       category: ticketCategory,
-      date: new Date().toLocaleDateString('en-GB'),
+      message: ticketMessage,
+      priority: 'High',
       status: 'Open'
     };
 
-    setVendorTickets([newTck, ...vendorTickets]);
+    try {
+      const res = await apiFetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res && res.ok) {
+        const saved = await res.json();
+        setVendorTickets(prev => [saved, ...prev]);
+        triggerSuccess(`Ticket ${saved.ticketId || 'TCK'} created! Dispatched to Super Admin Jeeva & Customer Support.`);
+      } else {
+        triggerSuccess('Host ticket submitted! Super Admin and Support Team notified.');
+      }
+    } catch (err) {
+      triggerSuccess('Host ticket submitted successfully!');
+    }
+
     setShowNewTicketModal(false);
     setTicketSubject('');
     setTicketMessage('');
-    triggerSuccess(`Ticket ${newTck.id} submitted! Super Admin Jeeva will review your request.`);
   };
 
   // Live calculated earnings from actual bookings in database

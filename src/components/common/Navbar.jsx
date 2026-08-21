@@ -246,7 +246,12 @@ export default function Navbar({ onOpenAuth }) {
               <Sparkles size={12} className="text-amber-500 shrink-0" />
               <span>PREMIUM & FEATURED STAYS & RESORTS</span>
             </Link>
-            <Link to="/packages" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all">PACKAGES</Link>
+            <Link to="/packages" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all flex items-center gap-1.5">
+              <span>PACKAGES</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-mono text-[9px] font-bold tracking-normal">
+                AVAILABLE SOON
+              </span>
+            </Link>
           </nav>
 
           {/* Auth & Profile Area */}
@@ -539,9 +544,12 @@ export default function Navbar({ onOpenAuth }) {
             <Link 
               to="/packages" 
               onClick={() => setMobileNavOpen(false)}
-              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold"
+              className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold flex items-center justify-between"
             >
-              PACKAGES
+              <span>PACKAGES</span>
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-mono text-[9px] font-bold tracking-normal">
+                AVAILABLE SOON
+              </span>
             </Link>
 
             {/* Quick Register link inside mobile drawer if logged out */}

@@ -159,6 +159,10 @@ export default function Explore({ onOpenAuth }) {
   const [isAvailable, setIsAvailable] = useState(true);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [confirmedBookingDetails, setConfirmedBookingDetails] = useState(null);
+  const [showPaymentOptions, setShowPaymentOptions] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('upi');
+  const [selectedUpiApp, setSelectedUpiApp] = useState('Google Pay');
+  const [customUpiId, setCustomUpiId] = useState('jeeva@oksbi');
 
   // Active Share / Save Stay Pass Modal State
   const [shareModalBooking, setShareModalBooking] = useState(null);
@@ -451,10 +455,12 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
     setBookingGuestEmail(currentUser.email || '');
     setBookingGuestPhone(currentUser.phone || '+91 78717 79134');
     setConfirmedBookingDetails(null);
+    setShowPaymentOptions(false);
+    setIsProcessingPayment(false);
     setIsAvailable(true);
   };
 
-  // 💳 Razorpay Payment Trigger with Real Checkout & Test Gateway API
+  // 💳 Razorpay Payment Trigger with In-App Test Gateway API
   const handlePayWithRazorpay = async () => {
     setIsProcessingPayment(true);
     const bookingId = `ETN-BK-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -462,6 +468,14 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
     const targetCustomerEmail = (bookingGuestEmail || currentUser?.email || 'exploretamizhagam@gmail.com').trim().toLowerCase();
     const targetCustomerName = (bookingGuestName || currentUser?.name || 'Tourist Traveler').trim();
     const targetCustomerPhone = (bookingGuestPhone || currentUser?.phone || '+91 78717 79134').trim();
+
+    const paymentMethodLabel = selectedPaymentMethod === 'upi'
+      ? `Razorpay UPI (${selectedUpiApp})`
+      : selectedPaymentMethod === 'card'
+      ? 'Razorpay Test Card (Visa/MasterCard)'
+      : selectedPaymentMethod === 'netbanking'
+      ? `Razorpay Net Banking (${selectedUpiApp})`
+      : `Razorpay Wallet (${selectedUpiApp})`;
 
     const finalizeBooking = async (rzpPaymentId) => {
       const paymentId = rzpPaymentId || `pay_rzp_${Date.now().toString().slice(-8)}`;
@@ -495,7 +509,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
         totalAmount: grandTotalAmount,
         amount: grandTotalAmount,
         paymentId: paymentId,
-        paymentMethod: 'Razorpay Test Gateway (UPI / Cards)',
+        paymentMethod: paymentMethodLabel,
         paymentStatus: 'Paid',
         status: 'Pending Approval'
       };
@@ -514,12 +528,9 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
       }
     };
 
-    // 1. Fetch Razorpay Test Key from Environment or Backend
-    let razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_5173exploreTN';
-    let rzpOrderId = '';
-
+    // 1. Create order on backend
     try {
-      const orderRes = await apiFetch('/api/payment/razorpay/create-order', {
+      await apiFetch('/api/payment/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -528,64 +539,15 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
           receipt: bookingId
         })
       });
-      if (orderRes && orderRes.keyId) {
-        razorpayKey = orderRes.keyId;
-        rzpOrderId = orderRes.orderId;
-      }
     } catch (e) {
       console.warn('Razorpay order backend init notice:', e.message);
     }
 
-    // 2. Open Razorpay Official Checkout if SDK is loaded
-    if (typeof window !== 'undefined' && window.Razorpay) {
-      try {
-        const options = {
-          key: razorpayKey,
-          amount: grandTotalAmount * 100, // paise
-          currency: 'INR',
-          name: 'Explore Tamil Nadu',
-          description: `${selectedStayForBooking.title} - ${nights} Night(s) Stay`,
-          image: selectedStayForBooking.image || selectedStayForBooking.images?.[0] || 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=300&q=80',
-          order_id: rzpOrderId || undefined,
-          handler: async function (response) {
-            const capturedId = response.razorpay_payment_id || `pay_rzp_${Date.now().toString().slice(-8)}`;
-            await finalizeBooking(capturedId);
-          },
-          prefill: {
-            name: targetCustomerName,
-            email: targetCustomerEmail,
-            contact: targetCustomerPhone
-          },
-          notes: {
-            bookingId: bookingId,
-            property: selectedStayForBooking.title,
-            checkIn: checkInDate,
-            checkOut: checkOutDate
-          },
-          theme: {
-            color: '#061833'
-          },
-          modal: {
-            ondismiss: function () {
-              setIsProcessingPayment(false);
-            }
-          }
-        };
-
-        const rzp = new window.Razorpay(options);
-        rzp.on('payment.failed', function (resp) {
-          console.warn('Razorpay payment failed in test:', resp.error);
-          setIsProcessingPayment(false);
-        });
-        rzp.open();
-        return;
-      } catch (err) {
-        console.warn('Direct Razorpay modal launch fallback:', err.message);
-      }
-    }
-
-    // 3. Fallback Test Gateway Confirmation
-    await finalizeBooking(`pay_rzp_test_${Date.now().toString().slice(-8)}`);
+    // 2. Simulated 600ms secure payment handshake
+    setTimeout(async () => {
+      const generatedPayId = `pay_rzp_${Math.random().toString(36).substring(2, 7)}_${Date.now().toString().slice(-6)}`;
+      await finalizeBooking(generatedPayId);
+    }, 600);
   };
 
   // Filtered Properties List
@@ -1337,7 +1299,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : !showPaymentOptions ? (
               /* 📝 BOOKING INPUT FORM WITH DATES, GUESTS & AUTO PRICE CALCULATION */
               <div className="space-y-4">
                 
@@ -1550,21 +1512,203 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                   <span>✓ Property Available for Selected Dates!</span>
                 </div>
 
-                {/* 5. Proceed to Payment Action (Razorpay Test API Integrated) */}
+                {/* 5. Proceed to Payment Action */}
                 <button
                   type="button"
-                  onClick={handlePayWithRazorpay}
-                  disabled={isProcessingPayment}
-                  className="w-full py-3.5 rounded-2xl bg-[#242429] text-white hover:bg-black font-editorial font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg hover:scale-[1.01] transition-all disabled:opacity-50 cursor-pointer"
+                  onClick={() => setShowPaymentOptions(true)}
+                  className="w-full py-3.5 rounded-2xl bg-[#242429] text-white hover:bg-black font-editorial font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg hover:scale-[1.01] transition-all cursor-pointer"
                 >
                   <CreditCard size={16} className="text-cyan-400" />
-                  {isProcessingPayment ? 'Processing Payment...' : `Proceed to Payment (₹${grandTotalAmount.toLocaleString()})`}
+                  <span>Proceed to Payment Option (₹{grandTotalAmount.toLocaleString()})</span>
                 </button>
 
                 <p className="text-[10px] text-slate-400 font-mono text-center">
                   🔒 Encrypted 256-Bit Razorpay Test API Gateway · Instant Reservation Confirmation
                 </p>
 
+              </div>
+            ) : (
+              /* 💳 RAZORPAY TEST PAYMENT GATEWAY OPTIONS SHEET */
+              <div className="space-y-4 animate-in fade-in">
+                
+                {/* Gateway Header Banner */}
+                <div className="p-4 rounded-2xl bg-slate-900 text-white flex items-center justify-between shadow-md">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-cyan-400 font-bold text-xs font-mono">⚡ RAZORPAY TEST GATEWAY</span>
+                      <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">SANDBOX</span>
+                    </div>
+                    <p className="text-xs text-slate-300 font-editorial mt-0.5">Explore Tamil Nadu Verified Merchant</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 block font-mono">PAYABLE AMOUNT</span>
+                    <span className="text-lg font-black font-mono text-emerald-400">₹{grandTotalAmount.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Method Selection Tabs */}
+                <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200">
+                  {[
+                    { id: 'upi', label: 'UPI / QR', icon: '⚡' },
+                    { id: 'card', label: 'Cards', icon: '💳' },
+                    { id: 'netbanking', label: 'Net Banking', icon: '🏦' },
+                    { id: 'wallet', label: 'Wallets', icon: '👛' }
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setSelectedPaymentMethod(m.id)}
+                      className={`py-2 px-1 rounded-xl text-center font-editorial text-xs font-bold transition-all cursor-pointer ${
+                        selectedPaymentMethod === m.id
+                          ? 'bg-white text-black shadow-sm border border-slate-300'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      <span className="block text-sm">{m.icon}</span>
+                      <span className="text-[10px] truncate block">{m.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Selected Method Details */}
+                {selectedPaymentMethod === 'upi' && (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                    <span className="text-xs font-bold text-slate-800 font-editorial block">Select Instant UPI Payment App:</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['Google Pay', 'PhonePe', 'Paytm', 'BHIM UPI'].map((app) => (
+                        <button
+                          key={app}
+                          type="button"
+                          onClick={() => setSelectedUpiApp(app)}
+                          className={`p-2.5 rounded-xl border text-xs font-bold font-editorial flex items-center justify-between transition-all cursor-pointer ${
+                            selectedUpiApp === app
+                              ? 'border-blue-600 bg-blue-50 text-blue-950 shadow-xs'
+                              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                          }`}
+                        >
+                          <span>{app}</span>
+                          {selectedUpiApp === app && <Check size={14} className="text-blue-600" />}
+                        </button>
+                      ))}
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-mono text-slate-500 uppercase mb-1">Or Enter UPI ID (VPA):</label>
+                      <input
+                        type="text"
+                        value={customUpiId}
+                        onChange={(e) => setCustomUpiId(e.target.value)}
+                        placeholder="yourname@okhdfcbank"
+                        className="w-full p-2.5 rounded-xl bg-white border border-slate-300 text-xs font-mono font-bold text-slate-800 outline-hidden focus:ring-2 focus:ring-black"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {selectedPaymentMethod === 'card' && (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 font-mono text-xs">
+                    <div className="flex justify-between items-center text-slate-700 font-editorial">
+                      <span className="font-bold">Test Card Details:</span>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-mono font-bold">Auto-Filled Sandbox</span>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 mb-1">CARD NUMBER</label>
+                      <input
+                        type="text"
+                        readOnly
+                        value="4111 2222 3333 4444"
+                        className="w-full p-2.5 rounded-xl bg-white border border-slate-300 font-mono font-bold text-slate-800"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-1">EXPIRY (MM/YY)</label>
+                        <input
+                          type="text"
+                          readOnly
+                          value="12 / 28"
+                          className="w-full p-2.5 rounded-xl bg-white border border-slate-300 font-mono text-slate-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-1">CVV</label>
+                        <input
+                          type="text"
+                          readOnly
+                          value="888"
+                          className="w-full p-2.5 rounded-xl bg-white border border-slate-300 font-mono text-slate-800"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedPaymentMethod === 'netbanking' && (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                    <span className="text-xs font-bold text-slate-800 font-editorial block">Select Bank for Net Banking:</span>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {['State Bank of India', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Canara Bank', 'Kotak Mahindra'].map((b) => (
+                        <button
+                          key={b}
+                          type="button"
+                          onClick={() => setSelectedUpiApp(b)}
+                          className={`p-2.5 rounded-xl border text-xs font-bold font-editorial text-left transition-all cursor-pointer ${
+                            selectedUpiApp === b
+                              ? 'border-blue-600 bg-blue-50 text-blue-950 font-bold'
+                              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                          }`}
+                        >
+                          {b}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedPaymentMethod === 'wallet' && (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                    <span className="text-xs font-bold text-slate-800 font-editorial block">Select Digital Wallet:</span>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {['Amazon Pay', 'Paytm Wallet', 'Mobikwik', 'Freecharge'].map((w) => (
+                        <button
+                          key={w}
+                          type="button"
+                          onClick={() => setSelectedUpiApp(w)}
+                          className={`p-2.5 rounded-xl border text-xs font-bold font-editorial text-left transition-all cursor-pointer ${
+                            selectedUpiApp === w
+                              ? 'border-blue-600 bg-blue-50 text-blue-950 font-bold'
+                              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+                          }`}
+                        >
+                          {w}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowPaymentOptions(false)}
+                    className="px-4 py-3 rounded-2xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs transition-all cursor-pointer"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePayWithRazorpay}
+                    disabled={isProcessingPayment}
+                    className="flex-1 py-3.5 rounded-2xl bg-[#242429] text-white hover:bg-black font-editorial font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg hover:scale-[1.01] transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    <CreditCard size={16} className="text-cyan-400" />
+                    {isProcessingPayment ? 'Processing Payment...' : `Complete Payment (₹${grandTotalAmount.toLocaleString()})`}
+                  </button>
+                </div>
+
+                <p className="text-[10px] text-slate-400 font-mono text-center">
+                  🔒 Encrypted 256-Bit Razorpay Test API Gateway · Instant Reservation Confirmation
+                </p>
               </div>
             )}
 

@@ -13,7 +13,8 @@ import {
   Building2, 
   HelpCircle,
   Clock,
-  Check
+  Check,
+  ChevronDown
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { BACKEND_API } from '../../config/api';
@@ -21,6 +22,12 @@ import { BACKEND_API } from '../../config/api';
 export default function Footer({ onOpenAuth }) {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+
+  // Mobile Accordion State (Collapsible single lines on mobile)
+  const [mobileExpanded, setMobileExpanded] = useState(null);
+  const toggleMobileSection = (sec) => {
+    setMobileExpanded(prev => (prev === sec ? null : sec));
+  };
 
   // Modals State
   const [showAboutModal, setShowAboutModal] = useState(false);
@@ -100,22 +107,188 @@ export default function Footer({ onOpenAuth }) {
 
   return (
     <>
-      <footer className="w-full bg-[#f9f5f2] text-[#242429] pt-16 pb-8 border-t border-[#242429]/20">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-10">
+      <footer className="w-full bg-[#f9f5f2] text-[#242429] pt-6 sm:pt-10 pb-5 sm:pb-6 border-t border-[#242429]/20">
+        
+        {/* 📱 MOBILE ACCORDION FOOTER (4 expandable single-line options only) */}
+        <div className="md:hidden px-4 space-y-2">
+          
+          {/* 1. Navigation Option */}
+          <div className="border border-[#242429]/15 rounded-2xl bg-white/90 overflow-hidden shadow-xs">
+            <button
+              type="button"
+              onClick={() => toggleMobileSection('nav')}
+              className="w-full flex items-center justify-between p-3.5 text-left font-fira-mono text-xs font-extrabold uppercase tracking-wider text-[#18181b] cursor-pointer"
+            >
+              <span>🧭 NAVIGATION</span>
+              <ChevronDown 
+                size={14} 
+                className={`text-slate-500 transition-transform duration-300 ${mobileExpanded === 'nav' ? 'rotate-180 text-black' : ''}`} 
+              />
+            </button>
+            {mobileExpanded === 'nav' && (
+              <div className="px-4 pb-3.5 pt-1 border-t border-[#242429]/10 space-y-2 text-xs font-fira-mono text-[#3e3e3e] animate-in fade-in">
+                <Link to="/" className="block py-1 text-slate-700 hover:text-black font-semibold">
+                  HOME
+                </Link>
+                <Link to="/hotels" className="block py-1 text-slate-700 hover:text-black font-semibold">
+                  EXPLORE STAYS
+                </Link>
+                <button 
+                  type="button" 
+                  onClick={() => setShowAboutModal(true)} 
+                  className="block w-full text-left py-1 text-slate-700 hover:text-black font-semibold cursor-pointer"
+                >
+                  ABOUT US
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setShowContactModal(true)} 
+                  className="block w-full text-left py-1 text-slate-700 hover:text-black font-semibold cursor-pointer"
+                >
+                  CONTACT US
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 2. Services Option */}
+          <div className="border border-[#242429]/15 rounded-2xl bg-white/90 overflow-hidden shadow-xs">
+            <button
+              type="button"
+              onClick={() => toggleMobileSection('services')}
+              className="w-full flex items-center justify-between p-3.5 text-left font-fira-mono text-xs font-extrabold uppercase tracking-wider text-[#18181b] cursor-pointer"
+            >
+              <span>🏨 SERVICES</span>
+              <ChevronDown 
+                size={14} 
+                className={`text-slate-500 transition-transform duration-300 ${mobileExpanded === 'services' ? 'rotate-180 text-black' : ''}`} 
+              />
+            </button>
+            {mobileExpanded === 'services' && (
+              <div className="px-4 pb-3.5 pt-1 border-t border-[#242429]/10 space-y-2 text-xs font-fira-mono text-[#3e3e3e] animate-in fade-in">
+                <Link to="/hotels?type=Homestay" className="block py-1 text-slate-700 hover:text-black font-semibold">
+                  HOMESTAYS
+                </Link>
+                <Link to="/hotels?type=Resort" className="block py-1 text-slate-700 hover:text-black font-semibold">
+                  RESORTS & VILLAS
+                </Link>
+                <button 
+                  type="button" 
+                  onClick={() => handleProtectedNav('/dashboard/vendor')} 
+                  className="block w-full text-left py-1 text-slate-700 hover:text-black font-semibold cursor-pointer"
+                >
+                  LIST YOUR PROPERTY
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => handleProtectedNav('/dashboard/vendor')} 
+                  className="block w-full text-left py-1 text-slate-700 hover:text-black font-semibold cursor-pointer"
+                >
+                  OWNER CENTRE
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 3. Support Option */}
+          <div className="border border-[#242429]/15 rounded-2xl bg-white/90 overflow-hidden shadow-xs">
+            <button
+              type="button"
+              onClick={() => toggleMobileSection('support')}
+              className="w-full flex items-center justify-between p-3.5 text-left font-fira-mono text-xs font-extrabold uppercase tracking-wider text-[#18181b] cursor-pointer"
+            >
+              <span>🎧 SUPPORT</span>
+              <ChevronDown 
+                size={14} 
+                className={`text-slate-500 transition-transform duration-300 ${mobileExpanded === 'support' ? 'rotate-180 text-black' : ''}`} 
+              />
+            </button>
+            {mobileExpanded === 'support' && (
+              <div className="px-4 pb-3.5 pt-1 border-t border-[#242429]/10 space-y-2 text-xs font-fira-mono text-[#3e3e3e] animate-in fade-in">
+                <button 
+                  type="button" 
+                  onClick={() => handleProtectedNav('/dashboard/user?tab=bookings')} 
+                  className="block w-full text-left py-1 text-slate-700 hover:text-black font-semibold cursor-pointer"
+                >
+                  MY BOOKINGS
+                </button>
+                <Link to="/hotels" className="block py-1 text-slate-700 hover:text-black font-semibold">
+                  SAVED STAYS
+                </Link>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    if (currentUser) {
+                      handleProtectedNav('/dashboard/user?tab=tickets');
+                    } else {
+                      setShowTicketModal(true);
+                    }
+                  }} 
+                  className="block w-full text-left py-1 text-slate-700 hover:text-black font-semibold cursor-pointer flex items-center justify-between"
+                >
+                  <span>SUPPORT TICKETS</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setShowContactModal(true)} 
+                  className="block w-full text-left py-1 text-slate-700 hover:text-black font-semibold cursor-pointer"
+                >
+                  HELP & CONTACT
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 4. Headquarters Option */}
+          <div className="border border-[#242429]/15 rounded-2xl bg-white/90 overflow-hidden shadow-xs">
+            <button
+              type="button"
+              onClick={() => toggleMobileSection('hq')}
+              className="w-full flex items-center justify-between p-3.5 text-left font-fira-mono text-xs font-extrabold uppercase tracking-wider text-[#18181b] cursor-pointer"
+            >
+              <span>📍 HEADQUARTERS</span>
+              <ChevronDown 
+                size={14} 
+                className={`text-slate-500 transition-transform duration-300 ${mobileExpanded === 'hq' ? 'rotate-180 text-black' : ''}`} 
+              />
+            </button>
+            {mobileExpanded === 'hq' && (
+              <div className="px-4 pb-3.5 pt-2 border-t border-[#242429]/10 space-y-2 text-xs font-fira-mono text-[#3e3e3e] animate-in fade-in">
+                <div className="flex items-center gap-2 text-slate-700">
+                  <MapPin size={13} className="text-rose-600 shrink-0" />
+                  <span>Tamil Nadu, India</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-700">
+                  <Phone size={13} className="text-cyan-600 shrink-0" />
+                  <a href="tel:+917871779134" className="hover:text-black">+91 78717 79134</a>
+                </div>
+                <div className="flex items-center gap-2 text-slate-700">
+                  <Mail size={13} className="text-emerald-600 shrink-0" />
+                  <a href="mailto:exploretamizhagam@gmail.com" className="hover:text-black truncate">exploretamizhagam@gmail.com</a>
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+
+        {/* 🖥️ DESKTOP 4-COLUMN FOOTER (Compact height on desktop >= md) */}
+        <div className="hidden md:grid max-w-7xl mx-auto px-6 grid-cols-4 gap-8">
           
           {/* 1. Navigation */}
           <div>
-            <span className="font-fira-mono text-[11px] font-bold uppercase tracking-[0.18em] text-[#919191] block mb-4">
+            <span className="font-fira-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#919191] block mb-3">
               NAVIGATION
             </span>
-            <ul className="space-y-2.5 text-xs font-fira-mono text-[#3e3e3e]">
+            <ul className="space-y-2 text-xs font-fira-mono text-[#3e3e3e]">
               <li>
-                <Link to="/" className="hover:text-[#000000] transition-colors no-underline block py-0.5">
+                <Link to="/" className="hover:text-[#000000] transition-colors no-underline block">
                   HOME
                 </Link>
               </li>
               <li>
-                <Link to="/hotels" className="hover:text-[#000000] transition-colors no-underline block py-0.5">
+                <Link to="/hotels" className="hover:text-[#000000] transition-colors no-underline block">
                   EXPLORE STAYS
                 </Link>
               </li>
@@ -123,7 +296,7 @@ export default function Footer({ onOpenAuth }) {
                 <button 
                   type="button" 
                   onClick={() => setShowAboutModal(true)} 
-                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block py-0.5"
+                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block"
                 >
                   ABOUT US
                 </button>
@@ -132,7 +305,7 @@ export default function Footer({ onOpenAuth }) {
                 <button 
                   type="button" 
                   onClick={() => setShowContactModal(true)} 
-                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block py-0.5"
+                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block"
                 >
                   CONTACT US
                 </button>
@@ -142,17 +315,17 @@ export default function Footer({ onOpenAuth }) {
 
           {/* 2. Services */}
           <div>
-            <span className="font-fira-mono text-[11px] font-bold uppercase tracking-[0.18em] text-[#919191] block mb-4">
+            <span className="font-fira-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#919191] block mb-3">
               SERVICES
             </span>
-            <ul className="space-y-2.5 text-xs font-fira-mono text-[#3e3e3e]">
+            <ul className="space-y-2 text-xs font-fira-mono text-[#3e3e3e]">
               <li>
-                <Link to="/hotels?type=Homestay" className="hover:text-[#000000] transition-colors no-underline block py-0.5">
+                <Link to="/hotels?type=Homestay" className="hover:text-[#000000] transition-colors no-underline block">
                   HOMESTAYS
                 </Link>
               </li>
               <li>
-                <Link to="/hotels?type=Resort" className="hover:text-[#000000] transition-colors no-underline block py-0.5">
+                <Link to="/hotels?type=Resort" className="hover:text-[#000000] transition-colors no-underline block">
                   RESORTS & VILLAS
                 </Link>
               </li>
@@ -160,7 +333,7 @@ export default function Footer({ onOpenAuth }) {
                 <button 
                   type="button" 
                   onClick={() => handleProtectedNav('/dashboard/vendor')} 
-                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block py-0.5"
+                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block"
                 >
                   LIST YOUR PROPERTY
                 </button>
@@ -169,7 +342,7 @@ export default function Footer({ onOpenAuth }) {
                 <button 
                   type="button" 
                   onClick={() => handleProtectedNav('/dashboard/vendor')} 
-                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block py-0.5"
+                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block"
                 >
                   OWNER CENTRE
                 </button>
@@ -179,21 +352,21 @@ export default function Footer({ onOpenAuth }) {
 
           {/* 3. Customer Support */}
           <div>
-            <span className="font-fira-mono text-[11px] font-bold uppercase tracking-[0.18em] text-[#919191] block mb-4">
+            <span className="font-fira-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#919191] block mb-3">
               SUPPORT
             </span>
-            <ul className="space-y-2.5 text-xs font-fira-mono text-[#3e3e3e]">
+            <ul className="space-y-2 text-xs font-fira-mono text-[#3e3e3e]">
               <li>
                 <button 
                   type="button" 
                   onClick={() => handleProtectedNav('/dashboard/user')} 
-                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block py-0.5"
+                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block"
                 >
                   MY BOOKINGS
                 </button>
               </li>
               <li>
-                <Link to="/hotels" className="hover:text-[#000000] transition-colors no-underline block py-0.5">
+                <Link to="/hotels" className="hover:text-[#000000] transition-colors no-underline block">
                   SAVED STAYS
                 </Link>
               </li>
@@ -207,7 +380,7 @@ export default function Footer({ onOpenAuth }) {
                     }
                     setShowTicketModal(true);
                   }} 
-                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block py-0.5 flex items-center gap-1"
+                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block flex items-center gap-1"
                 >
                   <span>SUPPORT TICKETS</span>
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
@@ -217,7 +390,7 @@ export default function Footer({ onOpenAuth }) {
                 <button 
                   type="button" 
                   onClick={() => setShowContactModal(true)} 
-                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block py-0.5"
+                  className="hover:text-[#000000] transition-colors no-underline text-left cursor-pointer block"
                 >
                   HELP & CONTACT
                 </button>
@@ -227,28 +400,22 @@ export default function Footer({ onOpenAuth }) {
 
           {/* 4. Contact Information */}
           <div>
-            <span className="font-fira-mono text-[11px] font-bold uppercase tracking-[0.18em] text-[#919191] block mb-4">
+            <span className="font-fira-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#919191] block mb-3">
               HEADQUARTERS
             </span>
-            <ul className="space-y-3.5 text-xs font-fira-mono text-[#3e3e3e]">
-              <li className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-[#ffffff] border border-[#242429]/20 flex items-center justify-center text-[#242429] flex-shrink-0 shadow-sm">
-                  <MapPin size={15} />
-                </div>
+            <ul className="space-y-2 text-xs font-fira-mono text-[#3e3e3e]">
+              <li className="flex items-center gap-2">
+                <MapPin size={13} className="text-rose-600 shrink-0" />
                 <span>Tamil Nadu, India</span>
               </li>
-              <li className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-[#ffffff] border border-[#242429]/20 flex items-center justify-center text-[#242429] flex-shrink-0 shadow-sm">
-                  <Phone size={15} />
-                </div>
+              <li className="flex items-center gap-2">
+                <Phone size={13} className="text-cyan-600 shrink-0" />
                 <a href="tel:+917871779134" className="hover:text-[#000000] transition-colors no-underline text-[#3e3e3e]">
                   +91 78717 79134
                 </a>
               </li>
-              <li className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-[#ffffff] border border-[#242429]/20 flex items-center justify-center text-[#242429] flex-shrink-0 shadow-sm">
-                  <Mail size={15} />
-                </div>
+              <li className="flex items-center gap-2">
+                <Mail size={13} className="text-emerald-600 shrink-0" />
                 <a href="mailto:exploretamizhagam@gmail.com" className="hover:text-[#000000] transition-colors no-underline text-[#3e3e3e] break-all">
                   exploretamizhagam@gmail.com
                 </a>
@@ -259,7 +426,7 @@ export default function Footer({ onOpenAuth }) {
         </div>
 
         {/* Footer Bottom Bar */}
-        <div className="max-w-7xl mx-auto px-6 mt-12 pt-6 border-t border-[#242429]/15 flex flex-col md:flex-row justify-between items-center font-fira-mono text-[11px] text-[#919191] gap-4">
+        <div className="max-w-7xl mx-auto px-6 mt-6 pt-4 border-t border-[#242429]/15 flex flex-col md:flex-row justify-between items-center font-fira-mono text-[10px] sm:text-[11px] text-[#919191] gap-2 sm:gap-4">
           <p className="flex items-center gap-2">
             <span>THIS SITE IS UNDER</span>
             <span className="font-bold text-[#000000] tracking-wide">VEERAWEBTECH</span>

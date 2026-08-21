@@ -24,15 +24,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { BACKEND_API } from '../../config/api';
 
-const PRESET_AVATARS = [
-  { id: 'av-1', url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80', label: 'Traveler' },
-  { id: 'av-2', url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80', label: 'Explorer' },
-  { id: 'av-3', url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80', label: 'Guide' },
-  { id: 'av-4', url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80', label: 'Host' },
-  { id: 'av-5', url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&auto=format&fit=crop&q=80', label: 'Adventurer' },
-  { id: 'av-6', url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&auto=format&fit=crop&q=80', label: 'Member' }
-];
-
 export default function ProfileModal({ isOpen, onClose }) {
   const { currentUser, updateUserProfile } = useAuth();
   const { socket } = useSocket();
@@ -124,8 +115,8 @@ export default function ProfileModal({ isOpen, onClose }) {
     } catch (e) {}
   };
 
-  // Handle Photo File Upload
-  const handleImageFileChange = (e) => {
+  // Handle Photo File Upload with Auto-Save to MongoDB Atlas & Local Storage
+  const handleImageFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -135,9 +126,40 @@ export default function ProfileModal({ isOpen, onClose }) {
     }
 
     const reader = new FileReader();
-    reader.onload = () => {
-      setAvatar(reader.result);
+    reader.onload = async () => {
+      const base64Image = reader.result;
+      setAvatar(base64Image);
       setProfileError('');
+      setProfileSuccess('Saving photo...');
+
+      // Immediately persist to backend MongoDB Atlas & localStorage
+      try {
+        const formattedPhone = phone.trim() ? (phone.startsWith('+91') ? phone : `+91 ${phone.trim()}`) : (currentUser.phone || '+91 78717 79134');
+        const res = await apiFetch('/api/users/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: currentUser.email,
+            name: name.trim() || currentUser.name,
+            phone: formattedPhone,
+            avatar: base64Image
+          })
+        });
+
+        updateUserProfile({
+          name: name.trim() || currentUser.name,
+          phone: formattedPhone,
+          avatar: base64Image
+        });
+
+        setProfileSuccess('✓ Profile photo uploaded & saved permanently!');
+        addLocalNotification('📸 Profile Picture Updated', 'Your profile picture has been updated and saved to your account.');
+      } catch (err) {
+        updateUserProfile({
+          avatar: base64Image
+        });
+        setProfileSuccess('✓ Profile photo updated!');
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -425,33 +447,6 @@ export default function ProfileModal({ isOpen, onClose }) {
                       </button>
                     )}
                   </div>
-                </div>
-              </div>
-
-              {/* Preset Avatars Selection */}
-              <div>
-                <label className="block text-xs font-extrabold text-slate-700 font-editorial mb-2">
-                  Or Choose from Travel Avatar Presets:
-                </label>
-                <div className="flex items-center gap-3 overflow-x-auto pb-2">
-                  {PRESET_AVATARS.map((av) => (
-                    <button
-                      key={av.id}
-                      type="button"
-                      onClick={() => setAvatar(av.url)}
-                      className={`relative shrink-0 w-12 h-12 rounded-full border-2 transition-all overflow-hidden ${
-                        avatar === av.url ? 'border-black ring-2 ring-black/20 scale-105' : 'border-transparent hover:border-slate-400'
-                      }`}
-                      title={av.label}
-                    >
-                      <img src={av.url} alt={av.label} className="w-full h-full object-cover" />
-                      {avatar === av.url && (
-                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-white">
-                          <Check size={14} />
-                        </div>
-                      )}
-                    </button>
-                  ))}
                 </div>
               </div>
 

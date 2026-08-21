@@ -448,8 +448,12 @@ export default function SuperAdminControlCenter() {
       {/* 📌 COLLAPSIBLE & EXPANDABLE SIDEBAR (DESKTOP & TABLET) */}
       <aside 
         className={`fixed inset-y-0 left-0 z-40 bg-[#0a101d] border-r border-slate-800/80 flex flex-col justify-between transition-all duration-300 ease-in-out ${
-          sidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full lg:w-0'
-        } ${mobileDrawerOpen ? '!w-72 !translate-x-0' : ''}`}
+          mobileDrawerOpen 
+            ? 'w-72 translate-x-0 shadow-2xl' 
+            : sidebarOpen 
+              ? '-translate-x-full lg:translate-x-0 lg:w-72' 
+              : '-translate-x-full lg:w-0'
+        }`}
       >
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
           

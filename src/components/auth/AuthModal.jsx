@@ -66,10 +66,9 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
 
     if (userData.role === 'super_admin' || userData.role === 'admin') {
       navigate('/dashboard/super-admin');
-    } else if (userData.role === 'owner' || userData.role === 'vendor' || userData.role === 'owner_and_vendor') {
-      navigate('/dashboard/vendor');
     } else {
-      navigate('/dashboard/user');
+      // Directs customers, property owners, and vendors directly to Explore page
+      navigate('/explore');
     }
   };
 

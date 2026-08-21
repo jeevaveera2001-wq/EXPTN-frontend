@@ -211,15 +211,15 @@ export default function StaffDashboard({ overrideRole }) {
   return (
     <div className="w-full min-h-screen bg-slate-100 flex overflow-hidden m-0">
       
-      {/* 📌 DEDICATED FULL-WIDTH SIDEBAR FOR EACH ROLE */}
-      <aside className="w-64 bg-[#051329] text-white flex flex-col justify-between p-6 border-r border-[#0d2347] flex-shrink-0 min-h-screen">
+      {/* 📌 STAFF SIDEBAR (Icons only on mobile, full text on PC & Tab) */}
+      <aside className="w-16 sm:w-20 md:w-64 bg-[#071933] text-white flex flex-col justify-between p-3 sm:p-4 md:p-6 border-r border-[#0d2347] flex-shrink-0 min-h-screen transition-all">
         <div>
-          {/* Staff Brand Header */}
-          <div className="flex items-center gap-3 mb-8 pb-6 border-b border-[#0d2347]">
-            <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center font-black shadow-inner">
+          {/* Header */}
+          <div className="flex items-center justify-center md:justify-start gap-3 mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[#0d2347]">
+            <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center font-black shadow-inner shrink-0">
               {currentConfig.icon}
             </div>
-            <div>
+            <div className="hidden md:block">
               <span className="text-xs font-extrabold text-white block leading-tight truncate max-w-[140px]">
                 {role.replace(/_/g, ' ').toUpperCase()}
               </span>
@@ -227,8 +227,8 @@ export default function StaffDashboard({ overrideRole }) {
             </div>
           </div>
 
-          {/* User Profile Badge */}
-          <div className="mb-6 p-3 rounded-2xl bg-[#0b2447] border border-[#16417d] text-xs">
+          {/* User Profile Badge (hidden on mobile, shown on PC/Tab) */}
+          <div className="hidden md:block mb-6 p-3 rounded-2xl bg-[#0b2447] border border-[#16417d] text-xs">
             <div className="text-[10px] font-mono text-gray-400 uppercase font-bold">Staff Session</div>
             <div className="font-extrabold text-white mt-0.5">{currentUser?.name || 'Staff Executive'}</div>
             <div className="text-[11px] text-cyan-300 truncate">{currentUser?.email || 'exploretamizhagam@gmail.com'}</div>
@@ -240,18 +240,20 @@ export default function StaffDashboard({ overrideRole }) {
               <button
                 key={item.id}
                 onClick={() => setActiveNavTab(item.id)}
-                className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all ${
+                title={item.label}
+                className={`w-full flex items-center justify-center md:justify-between p-3 md:px-3.5 md:py-3 rounded-2xl text-xs font-bold transition-all ${
                   activeNavTab === item.id 
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
                     : 'text-slate-300 hover:bg-[#0b2447] hover:text-white'
                 }`}
               >
-                <div className="flex items-center gap-2.5 truncate">
+                <div className="flex items-center gap-2.5">
                   {item.icon}
-                  <span className="truncate">{item.label}</span>
+                  {/* Icons only on mobile UI, letters on PC & Tab */}
+                  <span className="hidden md:inline truncate">{item.label}</span>
                 </div>
                 {item.badge && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold flex-shrink-0 ${
+                  <span className={`hidden md:inline px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold flex-shrink-0 ${
                     activeNavTab === item.id ? 'bg-white/20 text-white' : 'bg-[#123363] text-cyan-300'
                   }`}>
                     {item.badge}
@@ -264,7 +266,7 @@ export default function StaffDashboard({ overrideRole }) {
 
         {/* Sidebar Footer Controls (No logout here, available in top user menu) */}
         <div className="pt-6 border-t border-[#0e2e5c]">
-          <div className="flex items-center gap-2 text-[11px] font-mono text-emerald-400">
+          <div className="flex items-center justify-center md:justify-start gap-2 text-[11px] font-mono text-emerald-400">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             <span>MongoDB Workstation Live</span>
           </div>

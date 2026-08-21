@@ -213,15 +213,15 @@ export default function UserDashboard() {
   return (
     <div className="w-full min-h-screen bg-slate-100 flex overflow-hidden m-0">
       
-      {/* 📌 TOURIST GUEST SIDEBAR */}
-      <aside className="w-64 bg-[#061833] text-white flex flex-col justify-between p-6 border-r border-[#0d2a58] flex-shrink-0 min-h-screen">
+      {/* 📌 TOURIST GUEST SIDEBAR (Icons only on mobile, full text on PC & Tab) */}
+      <aside className="w-16 sm:w-20 md:w-64 bg-[#061833] text-white flex flex-col justify-between p-3 sm:p-4 md:p-6 border-r border-[#0d2a58] flex-shrink-0 min-h-screen transition-all">
         <div>
           {/* Brand & User Profile Header */}
-          <div className="flex items-center gap-3 mb-8 pb-6 border-b border-[#0d2a58]">
-            <div className="relative w-12 h-12 rounded-2xl overflow-hidden border-2 border-blue-400 shadow-md">
+          <div className="flex items-center justify-center md:justify-start gap-3 mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[#0d2a58]">
+            <div className="relative w-10 h-10 md:w-12 md:h-12 rounded-2xl overflow-hidden border-2 border-blue-400 shadow-md shrink-0">
               <img src={profileAvatar} alt={profileName} className="w-full h-full object-cover" />
             </div>
-            <div>
+            <div className="hidden md:block">
               <span className="text-sm font-extrabold text-white block leading-tight truncate max-w-[130px]">{profileName}</span>
               <span className="text-[10px] font-mono text-cyan-400 block font-bold mt-0.5">Tourist Member</span>
             </div>
@@ -233,7 +233,8 @@ export default function UserDashboard() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all ${
+                title={item.label}
+                className={`w-full flex items-center justify-center md:justify-between p-3 md:px-3.5 md:py-3 rounded-2xl text-xs font-bold transition-all ${
                   activeTab === item.id 
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
                     : 'text-slate-300 hover:bg-[#0b2754] hover:text-white'
@@ -241,10 +242,11 @@ export default function UserDashboard() {
               >
                 <div className="flex items-center gap-3">
                   {item.icon}
-                  <span>{item.label}</span>
+                  {/* Icons only on mobile UI, letters on PC & Tab */}
+                  <span className="hidden md:inline">{item.label}</span>
                 </div>
                 {item.badge !== undefined && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold ${
+                  <span className={`hidden md:inline px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold ${
                     activeTab === item.id ? 'bg-white/20 text-white' : 'bg-[#123875] text-cyan-300'
                   }`}>
                     {item.badge}

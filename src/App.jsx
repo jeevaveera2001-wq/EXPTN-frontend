@@ -7,6 +7,7 @@ import Footer from './components/common/Footer';
 import AuthModal from './components/auth/AuthModal';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import Home from './pages/Home';
+import Explore from './pages/Explore';
 import Dashboard from './pages/Dashboard';
 import SuperAdminControlCenter from './components/admin/SuperAdminControlCenter';
 import StaffDashboard from './components/staff/StaffDashboard';
@@ -46,9 +47,9 @@ export default function App() {
                 <Routes>
                   {/* Main Public Routes */}
                   <Route path="/" element={<Home onOpenAuth={handleOpenAuth} />} />
-                  <Route path="/explore" element={<Home onOpenAuth={handleOpenAuth} />} />
-                  <Route path="/hotels" element={<Home onOpenAuth={handleOpenAuth} />} />
-                  <Route path="/packages" element={<Home onOpenAuth={handleOpenAuth} />} />
+                  <Route path="/explore" element={<Explore onOpenAuth={handleOpenAuth} />} />
+                  <Route path="/hotels" element={<Explore onOpenAuth={handleOpenAuth} />} />
+                  <Route path="/packages" element={<Explore onOpenAuth={handleOpenAuth} />} />
 
                   {/* Direct Auth Action Routes */}
                   <Route path="/login" element={<Home onOpenAuth={() => handleOpenAuth('login')} />} />

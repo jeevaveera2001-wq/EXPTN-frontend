@@ -129,7 +129,7 @@ export default function Explore({ onOpenAuth }) {
   const [district, setDistrict] = useState('All');
   const [stayType, setStayType] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [liveProperties, setLiveProperties] = useState([]);
+  const [liveProperties, setLiveProperties] = useState(DEFAULT_FEATURED_STAYS);
   const [loading, setLoading] = useState(true);
 
   // 🎟️ Advanced Booking Modal States
@@ -705,6 +705,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6">
             {displayedProperties.map((stay) => {
               const stayPrice = stay.pricePerNight || stay.price || 4800;
+              const stayImg = (stay.images && stay.images[0]) || stay.image || FALLBACK_IMAGE;
               const stayAmenities = stay.amenities || ['Mountain View', 'Free WiFi', 'Private Balcony', 'Organic Dining'];
               
               return (

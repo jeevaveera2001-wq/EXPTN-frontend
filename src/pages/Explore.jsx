@@ -454,63 +454,138 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
     setIsAvailable(true);
   };
 
-  // 💳 Razorpay Payment Trigger with Real Checkout & Fallback Test Gateway
+  // 💳 Razorpay Payment Trigger with Real Checkout & Test Gateway API
   const handlePayWithRazorpay = async () => {
     setIsProcessingPayment(true);
     const bookingId = `ETN-BK-${Math.floor(100000 + Math.random() * 900000)}`;
-    const paymentId = `pay_rzp_${Date.now().toString().slice(-8)}`;
 
     const targetCustomerEmail = (bookingGuestEmail || currentUser?.email || 'exploretamizhagam@gmail.com').trim().toLowerCase();
     const targetCustomerName = (bookingGuestName || currentUser?.name || 'Tourist Traveler').trim();
     const targetCustomerPhone = (bookingGuestPhone || currentUser?.phone || '+91 78717 79134').trim();
 
-    const bookingPayload = {
-      bookingId,
-      userEmail: targetCustomerEmail,
-      customerEmail: targetCustomerEmail,
-      userName: targetCustomerName,
-      customerName: targetCustomerName,
-      userPhone: targetCustomerPhone,
-      customerPhone: targetCustomerPhone,
-      itemTitle: selectedStayForBooking.title,
-      propertyTitle: selectedStayForBooking.title,
-      propertyId: selectedStayForBooking._id || selectedStayForBooking.id,
-      destination: selectedStayForBooking.district || selectedStayForBooking.location || 'Tamil Nadu',
-      ownerName: selectedStayForBooking.ownerName || selectedStayForBooking.hostName || 'Property Host',
-      ownerEmail: selectedStayForBooking.ownerEmail || 'lastzetas@gmail.com',
-      checkIn: checkInDate,
-      checkInDate: checkInDate,
-      checkOut: checkOutDate,
-      checkOutDate: checkOutDate,
-      nights: nights,
-      guestType: guestType,
-      adults: guestDetails.adults,
-      children: guestDetails.children,
-      guests: guestDetails.total,
-      baseRate: basePriceTotal,
-      gstAmount: gstAmount,
-      serviceFee: serviceFee,
-      totalAmount: grandTotalAmount,
-      amount: grandTotalAmount,
-      paymentId: paymentId,
-      paymentMethod: 'Razorpay Payment Gateway (UPI / Cards)',
-      paymentStatus: 'Paid',
-      status: 'Pending Approval'
+    const finalizeBooking = async (rzpPaymentId) => {
+      const paymentId = rzpPaymentId || `pay_rzp_${Date.now().toString().slice(-8)}`;
+
+      const bookingPayload = {
+        bookingId,
+        userEmail: targetCustomerEmail,
+        customerEmail: targetCustomerEmail,
+        userName: targetCustomerName,
+        customerName: targetCustomerName,
+        userPhone: targetCustomerPhone,
+        customerPhone: targetCustomerPhone,
+        itemTitle: selectedStayForBooking.title,
+        propertyTitle: selectedStayForBooking.title,
+        propertyId: selectedStayForBooking._id || selectedStayForBooking.id,
+        destination: selectedStayForBooking.district || selectedStayForBooking.location || 'Tamil Nadu',
+        ownerName: selectedStayForBooking.ownerName || selectedStayForBooking.hostName || 'Property Host',
+        ownerEmail: selectedStayForBooking.ownerEmail || 'lastzetas@gmail.com',
+        checkIn: checkInDate,
+        checkInDate: checkInDate,
+        checkOut: checkOutDate,
+        checkOutDate: checkOutDate,
+        nights: nights,
+        guestType: guestType,
+        adults: guestDetails.adults,
+        children: guestDetails.children,
+        guests: guestDetails.total,
+        baseRate: basePriceTotal,
+        gstAmount: gstAmount,
+        serviceFee: serviceFee,
+        totalAmount: grandTotalAmount,
+        amount: grandTotalAmount,
+        paymentId: paymentId,
+        paymentMethod: 'Razorpay Test Gateway (UPI / Cards)',
+        paymentStatus: 'Paid',
+        status: 'Pending Approval'
+      };
+
+      try {
+        await apiFetch('/api/bookings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bookingPayload)
+        });
+        setConfirmedBookingDetails(bookingPayload);
+      } catch (err) {
+        setConfirmedBookingDetails(bookingPayload);
+      } finally {
+        setIsProcessingPayment(false);
+      }
     };
 
+    // 1. Fetch Razorpay Test Key from Environment or Backend
+    let razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_5173exploreTN';
+    let rzpOrderId = '';
+
     try {
-      // 1. Submit Booking to Backend with 'Pending Approval' status
-      await apiFetch('/api/bookings', {
+      const orderRes = await apiFetch('/api/payment/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bookingPayload)
+        body: JSON.stringify({
+          amount: grandTotalAmount,
+          currency: 'INR',
+          receipt: bookingId
+        })
       });
-      setConfirmedBookingDetails(bookingPayload);
-    } catch (err) {
-      setConfirmedBookingDetails(bookingPayload);
-    } finally {
-      setIsProcessingPayment(false);
+      if (orderRes && orderRes.keyId) {
+        razorpayKey = orderRes.keyId;
+        rzpOrderId = orderRes.orderId;
+      }
+    } catch (e) {
+      console.warn('Razorpay order backend init notice:', e.message);
     }
+
+    // 2. Open Razorpay Official Checkout if SDK is loaded
+    if (typeof window !== 'undefined' && window.Razorpay) {
+      try {
+        const options = {
+          key: razorpayKey,
+          amount: grandTotalAmount * 100, // paise
+          currency: 'INR',
+          name: 'Explore Tamil Nadu',
+          description: `${selectedStayForBooking.title} - ${nights} Night(s) Stay`,
+          image: selectedStayForBooking.image || selectedStayForBooking.images?.[0] || 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=300&q=80',
+          order_id: rzpOrderId || undefined,
+          handler: async function (response) {
+            const capturedId = response.razorpay_payment_id || `pay_rzp_${Date.now().toString().slice(-8)}`;
+            await finalizeBooking(capturedId);
+          },
+          prefill: {
+            name: targetCustomerName,
+            email: targetCustomerEmail,
+            contact: targetCustomerPhone
+          },
+          notes: {
+            bookingId: bookingId,
+            property: selectedStayForBooking.title,
+            checkIn: checkInDate,
+            checkOut: checkOutDate
+          },
+          theme: {
+            color: '#061833'
+          },
+          modal: {
+            ondismiss: function () {
+              setIsProcessingPayment(false);
+            }
+          }
+        };
+
+        const rzp = new window.Razorpay(options);
+        rzp.on('payment.failed', function (resp) {
+          console.warn('Razorpay payment failed in test:', resp.error);
+          setIsProcessingPayment(false);
+        });
+        rzp.open();
+        return;
+      } catch (err) {
+        console.warn('Direct Razorpay modal launch fallback:', err.message);
+      }
+    }
+
+    // 3. Fallback Test Gateway Confirmation
+    await finalizeBooking(`pay_rzp_test_${Date.now().toString().slice(-8)}`);
   };
 
   // Filtered Properties List
@@ -1475,19 +1550,19 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                   <span>✓ Property Available for Selected Dates!</span>
                 </div>
 
-                {/* 5. Razorpay Test Payment Action */}
+                {/* 5. Proceed to Payment Action (Razorpay Test API Integrated) */}
                 <button
                   type="button"
                   onClick={handlePayWithRazorpay}
                   disabled={isProcessingPayment}
-                  className="w-full py-3.5 rounded-2xl bg-[#242429] text-white hover:bg-black font-editorial font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg hover:scale-[1.01] transition-all disabled:opacity-50"
+                  className="w-full py-3.5 rounded-2xl bg-[#242429] text-white hover:bg-black font-editorial font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg hover:scale-[1.01] transition-all disabled:opacity-50 cursor-pointer"
                 >
                   <CreditCard size={16} className="text-cyan-400" />
-                  {isProcessingPayment ? 'Processing Secure Payment...' : `Proceed to Razorpay Payment (₹${grandTotalAmount.toLocaleString()})`}
+                  {isProcessingPayment ? 'Processing Payment...' : `Proceed to Payment (₹${grandTotalAmount.toLocaleString()})`}
                 </button>
 
                 <p className="text-[10px] text-slate-400 font-mono text-center">
-                  🔒 Encrypted 256-Bit Razorpay Test Payment Gateway · Instant Reservation Confirmation
+                  🔒 Encrypted 256-Bit Razorpay Test API Gateway · Instant Reservation Confirmation
                 </p>
 
               </div>

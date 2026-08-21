@@ -550,18 +550,12 @@ export default function VendorDashboard() {
           </nav>
         </div>
 
-        {/* Sidebar Footer Controls */}
-        <div className="pt-6 border-t border-[#0e2e5c] space-y-3">
+        {/* Sidebar Footer Controls (No logout here, available in top user menu) */}
+        <div className="pt-6 border-t border-[#0e2e5c]">
           <div className="flex items-center gap-2 text-[11px] font-mono text-emerald-400">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>Razorpay Payouts Active</span>
+            <span>Verified Host & Fleet Provider</span>
           </div>
-          <button 
-            onClick={logout}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-all"
-          >
-            <LogOut size={14} /> Sign Out Vendor
-          </button>
         </div>
       </aside>
 

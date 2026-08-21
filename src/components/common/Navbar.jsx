@@ -245,14 +245,14 @@ export default function Navbar({ onOpenAuth }) {
           
           {/* Brand Logo Seal */}
           <Link to={isInternalRole ? getDashboardPath(currentUser.role) : '/'} className="flex items-center gap-2 sm:gap-3.5 no-underline group shrink-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-[#ffffff] border border-[#242429] flex items-center justify-center p-0.5 sm:p-1 shadow-sm group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-full bg-[#ffffff] border border-[#242429] flex items-center justify-center p-0.5 sm:p-1 shadow-sm group-hover:scale-105 transition-transform shrink-0">
               <img src="/logo.png" alt="Explore Tamil Nadu Logo" className="w-full h-full object-cover rounded-full" />
             </div>
             <div className="min-w-0">
-              <span className="text-sm sm:text-lg font-editorial font-bold tracking-tight text-[#000000] block leading-none truncate max-w-[120px] sm:max-w-none">
+              <span className="text-xs sm:text-lg font-editorial font-bold tracking-tight text-[#000000] block leading-none whitespace-nowrap">
                 Explore Tamil Nadu
               </span>
-              <span className="font-fira-mono text-[7px] sm:text-[9px] font-medium text-[#919191] tracking-[0.12em] sm:tracking-[0.18em] uppercase block mt-0.5 sm:mt-1">
+              <span className="font-fira-mono text-[7px] sm:text-[9px] font-medium text-[#919191] tracking-[0.10em] sm:tracking-[0.18em] uppercase block mt-0.5 sm:mt-1">
                 Stays & Resorts
               </span>
             </div>

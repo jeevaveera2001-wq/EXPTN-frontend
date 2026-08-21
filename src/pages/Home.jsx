@@ -51,28 +51,28 @@ export default function Home({ onOpenAuth }) {
     <div>
       
       {/* 🌲 Kobu Editorial Hero Banner with Glassmorphism */}
-      <section className="w-full py-16 sm:py-24 px-4 text-center">
+      <section className="w-full py-8 sm:py-20 px-3 sm:px-4 text-center">
         <div className="max-w-4xl mx-auto">
 
           {/* Fira Mono Printed Tagline Badge */}
-          <div className="museum-badge mx-auto mb-5 sm:mb-6 shadow-md text-[10px] sm:text-xs">
+          <div className="museum-badge mx-auto mb-3 sm:mb-6 shadow-md text-[9px] sm:text-xs py-1 px-3 sm:px-4">
             EST. TAMIL NADU • EDITORIAL TRAVEL MAGAZINE
           </div>
 
-          <h1 className="text-4xl sm:text-5xl md:text-7xl font-editorial font-extrabold tracking-tight leading-tight text-[#070707] drop-shadow-[0_2px_12px_rgba(249,245,242,0.9)] mb-4 sm:mb-6">
-            Discover Authentic <br />
+          <h1 className="text-2xl sm:text-4xl md:text-6xl font-editorial font-extrabold tracking-tight leading-snug sm:leading-tight text-[#070707] drop-shadow-[0_2px_12px_rgba(249,245,242,0.9)] mb-2 sm:mb-4">
+            Discover Authentic <br className="hidden sm:inline" />
             <span className="italic font-serif font-normal text-[#242429]">Stays & Luxury Resorts</span> in Tamil Nadu
           </h1>
 
-          <p className="text-sm sm:text-lg md:text-xl text-[#16161a] font-medium mb-8 sm:mb-10 max-w-2xl mx-auto leading-relaxed font-editorial drop-shadow-[0_1px_8px_rgba(249,245,242,0.95)]">
+          <p className="text-xs sm:text-base md:text-lg text-[#16161a] font-medium mb-4 sm:mb-8 max-w-2xl mx-auto leading-relaxed font-editorial drop-shadow-[0_1px_8px_rgba(249,245,242,0.95)]">
             Curated mountain view cottages, serene lakefront villas, and heritage homestays across the Western Ghats and Tamil circuits.
           </p>
 
           {/* Search Console leading directly to Explore */}
-          <form onSubmit={handleSearchNavigate} className="glass-panel p-4 sm:p-6 max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 text-left border border-[#242429]/20 shadow-2xl rounded-3xl">
+          <form onSubmit={handleSearchNavigate} className="glass-panel p-3 sm:p-6 max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-4 text-left border border-[#242429]/20 shadow-2xl rounded-2xl sm:rounded-3xl">
             <div>
-              <label className="block font-fira-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] text-[#919191] mb-1.5">Destination Circuit</label>
-              <select className="glass-input text-xs font-fira-mono" value={district} onChange={e => setDistrict(e.target.value)}>
+              <label className="block font-fira-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] text-[#919191] mb-1">Destination Circuit</label>
+              <select className="glass-input text-xs font-fira-mono py-2" value={district} onChange={e => setDistrict(e.target.value)}>
                 {destinationOptions.map(dest => (
                   <option key={dest} value={dest}>{dest}</option>
                 ))}
@@ -80,14 +80,14 @@ export default function Home({ onOpenAuth }) {
             </div>
 
             <div>
-              <label className="block font-fira-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] text-[#919191] mb-1.5">Stay Category</label>
-              <select className="glass-input text-xs font-fira-mono" value={stayType} onChange={e => setStayType(e.target.value)}>
+              <label className="block font-fira-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] text-[#919191] mb-1">Stay Category</label>
+              <select className="glass-input text-xs font-fira-mono py-2" value={stayType} onChange={e => setStayType(e.target.value)}>
                 {stayCategories.map(c => <option key={c.name} value={c.name}>{c.label}</option>)}
               </select>
             </div>
 
             <div className="flex items-end">
-              <button type="submit" className="glass-button w-full h-[45px] text-xs font-bold font-editorial flex items-center justify-center gap-2">
+              <button type="submit" className="glass-button w-full h-[40px] sm:h-[45px] text-xs font-bold font-editorial flex items-center justify-center gap-2">
                 <Search size={14} /> Search Stays
               </button>
             </div>
@@ -96,24 +96,26 @@ export default function Home({ onOpenAuth }) {
         </div>
       </section>
 
-      {/* Main Content Area: Overview Catalog (NO Verified Properties here - they belong strictly in Explore) */}
-      <div className="max-w-7xl mx-auto px-4">
+      {/* Main Content Area: Overview Catalog */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-4">
 
         {/* 🛕 Destinations Catalog Section */}
-        <section className="pb-16 pt-4">
-          <div className="text-center mb-8 border-b border-[#242429]/15 pb-6">
-            <span className="font-fira-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.18em] text-[#919191] block mb-1">DISCOVER DESTINATIONS</span>
-            <h2 className="text-3xl md:text-4xl font-editorial font-bold text-[#000000]">Explore Tamil Nadu Tourism Circuits</h2>
-            <p className="text-sm text-[#3e3e3e] mt-2 font-editorial">Hill stations, waterfalls, ancient temples, wildlife, and heritage circuits.</p>
+        <section className="pb-12 sm:pb-16 pt-2 sm:pt-4">
+          <div className="text-center mb-6 sm:mb-8 border-b border-[#242429]/15 pb-4 sm:pb-6">
+            <span className="font-fira-mono text-[9px] sm:text-[11px] font-bold uppercase tracking-[0.18em] text-[#919191] block mb-1">DISCOVER DESTINATIONS</span>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-editorial font-bold text-[#000000]">Explore Tamil Nadu Tourism Circuits</h2>
+            <p className="text-xs sm:text-sm text-[#3e3e3e] mt-1 sm:mt-2 font-editorial">Hill stations, waterfalls, ancient temples, wildlife, and heritage circuits.</p>
           </div>
 
-          {/* 10 Category Tabs */}
-          <div className="flex gap-2 overflow-x-auto pb-4 mb-10 justify-center flex-wrap">
+          {/* 10 Category Tabs: Horizontal scroll on mobile, wrap on desktop */}
+          <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-3 mb-6 sm:mb-10 sm:justify-center sm:flex-wrap no-scrollbar px-1">
             {TAMIL_NADU_CATEGORIES.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => setSelectedPlaceCategory(cat.id)}
-                className={`glass-button font-fira-mono text-[11px] px-4 py-2 flex items-center gap-2 ${selectedPlaceCategory === cat.id ? '' : 'glass-button-secondary'}`}
+                className={`glass-button font-fira-mono text-[10px] sm:text-[11px] px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-1.5 shrink-0 whitespace-nowrap rounded-full transition-all ${
+                  selectedPlaceCategory === cat.id ? 'ring-1 ring-[#242429] bg-[#242429] text-white shadow-sm' : 'glass-button-secondary'
+                }`}
               >
                 <span>{cat.icon}</span> {cat.name.toUpperCase()}
               </button>

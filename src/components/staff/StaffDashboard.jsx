@@ -275,21 +275,29 @@ export default function StaffDashboard({ overrideRole }) {
   const currentConfig = roleConfigs[role] || roleConfigs.operations_manager;
 
   return (
-    <div className="w-full min-h-screen bg-slate-100 flex overflow-hidden m-0">
+    <div className="w-full min-h-screen bg-slate-100 flex flex-col md:flex-row overflow-x-hidden m-0">
       
-      {/* 📌 STAFF SIDEBAR (Icons only on mobile, full text on PC & Tab) */}
-      <aside className="w-16 sm:w-20 md:w-64 bg-[#071933] text-white flex flex-col justify-between p-3 sm:p-4 md:p-6 border-r border-[#0d2347] flex-shrink-0 min-h-screen transition-all">
-        <div>
+      {/* 📌 STAFF SIDEBAR: Horizontal tabs on mobile, full sidebar on PC & Tab */}
+      <aside className="w-full md:w-64 bg-[#071933] text-white flex md:flex-col justify-between p-3 sm:p-4 md:p-6 border-b md:border-b-0 md:border-r border-[#0d2347] flex-shrink-0 md:min-h-screen transition-all">
+        <div className="w-full">
           {/* Header */}
-          <div className="flex items-center justify-center md:justify-start gap-3 mb-6 md:mb-8 pb-4 md:pb-6 border-b border-[#0d2347]">
-            <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center font-black shadow-inner shrink-0">
-              {currentConfig.icon}
+          <div className="flex items-center justify-between md:justify-start gap-3 mb-2 md:mb-8 pb-2 md:pb-6 border-b border-[#0d2347]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl md:rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center font-black shadow-inner shrink-0">
+                {currentConfig.icon}
+              </div>
+              <div>
+                <span className="text-xs font-extrabold text-white block leading-tight truncate max-w-[140px] md:max-w-none">
+                  {role.replace(/_/g, ' ').toUpperCase()}
+                </span>
+                <span className="text-[9px] md:text-[10px] font-mono text-cyan-400 block font-bold mt-0.5">Workstation Desk</span>
+              </div>
             </div>
-            <div className="hidden md:block">
-              <span className="text-xs font-extrabold text-white block leading-tight truncate max-w-[140px]">
-                {role.replace(/_/g, ' ').toUpperCase()}
-              </span>
-              <span className="text-[10px] font-mono text-cyan-400 block font-bold mt-0.5">Workstation Desk</span>
+            
+            {/* Live Indicator on Mobile */}
+            <div className="md:hidden flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-800/50">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              <span>Live Desk</span>
             </div>
           </div>
 
@@ -300,26 +308,25 @@ export default function StaffDashboard({ overrideRole }) {
             <div className="text-[11px] text-cyan-300 truncate">{currentUser?.email || 'exploretamizhagam@gmail.com'}</div>
           </div>
 
-          {/* 6 Dedicated Nav Items */}
-          <nav className="space-y-1.5">
+          {/* 6 Dedicated Nav Items: Horizontal on mobile, vertical list on desktop */}
+          <nav className="flex md:flex-col gap-1.5 overflow-x-auto no-scrollbar py-1 md:py-0">
             {currentConfig.navItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setActiveNavTab(item.id)}
                 title={item.label}
-                className={`w-full flex items-center justify-center md:justify-between p-3 md:px-3.5 md:py-3 rounded-2xl text-xs font-bold transition-all ${
+                className={`flex items-center justify-between px-3 py-1.5 md:px-3.5 md:py-3 rounded-xl md:rounded-2xl text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
                   activeNavTab === item.id 
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
-                    : 'text-slate-300 hover:bg-[#0b2447] hover:text-white'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' 
+                    : 'text-slate-300 hover:bg-[#0b2447] hover:text-white bg-slate-900/50 md:bg-transparent'
                 }`}
               >
-                <div className="flex items-center gap-2.5">
-                  {item.icon}
-                  {/* Icons only on mobile UI, letters on PC & Tab */}
-                  <span className="hidden md:inline truncate">{item.label}</span>
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0">{item.icon}</span>
+                  <span className="truncate">{item.label}</span>
                 </div>
                 {item.badge && (
-                  <span className={`hidden md:inline px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold flex-shrink-0 ${
+                  <span className={`hidden md:inline ml-2 px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold flex-shrink-0 ${
                     activeNavTab === item.id ? 'bg-white/20 text-white' : 'bg-[#123363] text-cyan-300'
                   }`}>
                     {item.badge}
@@ -330,9 +337,9 @@ export default function StaffDashboard({ overrideRole }) {
           </nav>
         </div>
 
-        {/* Sidebar Footer Controls (No logout here, available in top user menu) */}
-        <div className="pt-6 border-t border-[#0e2e5c]">
-          <div className="flex items-center justify-center md:justify-start gap-2 text-[11px] font-mono text-emerald-400">
+        {/* Sidebar Footer Controls */}
+        <div className="hidden md:block pt-6 border-t border-[#0e2e5c]">
+          <div className="flex items-center justify-start gap-2 text-[11px] font-mono text-emerald-400">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             <span>MongoDB Workstation Live</span>
           </div>
@@ -340,12 +347,12 @@ export default function StaffDashboard({ overrideRole }) {
       </aside>
 
       {/* 💻 MAIN STAFF WORKSTATION CONTENT AREA */}
-      <main className="flex-1 p-6 lg:p-10 bg-slate-50 overflow-y-auto min-h-screen">
+      <main className="flex-1 p-3.5 sm:p-6 lg:p-10 bg-slate-50 overflow-y-auto min-h-screen">
         
         {/* Top Header Status Bar */}
-        <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-200">
+        <div className="flex justify-between items-center mb-4 sm:mb-8 pb-3 sm:pb-4 border-b border-slate-200">
           <div>
-            <span className={`px-3 py-1 rounded-full text-xs font-extrabold border uppercase tracking-wider font-mono ${currentConfig.badgeColor}`}>
+            <span className={`px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-extrabold border uppercase tracking-wider font-mono ${currentConfig.badgeColor}`}>
               {role.replace(/_/g, ' ')} Workstation
             </span>
             <h2 className="text-2xl font-black text-slate-900 mt-2 capitalize">

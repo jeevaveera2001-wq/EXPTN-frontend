@@ -1,14 +1,14 @@
 export const TAMIL_NADU_CATEGORIES = [
-  { id: 'top15', name: '⭐ Top 15 Must-Visit', icon: '⭐' },
-  { id: 'hills', name: '🏞️ Hill Stations', icon: '🏞️' },
-  { id: 'beaches', name: '🏖️ Beaches & Coastal', icon: '🏖️' },
-  { id: 'waterfalls', name: '🌊 Waterfalls', icon: '🌊' },
-  { id: 'temples', name: '🛕 Famous Temples', icon: '🛕' },
-  { id: 'wildlife', name: '🌿 Wildlife & Nature', icon: '🌿' },
-  { id: 'heritage', name: '🏛️ Heritage & Culture', icon: '🏛️' },
-  { id: 'adventure', name: '🚤 Adventure & Activities', icon: '🚤' },
-  { id: 'churches', name: '⛪ Christian Churches & Basilicas', icon: '⛪' },
-  { id: 'mosques', name: '🕌 Famous Mosques & Dargahs', icon: '🕌' }
+  { id: 'top15', name: 'Top 15 Must-Visit', icon: '⭐' },
+  { id: 'hills', name: 'Hill Stations', icon: '🏞️' },
+  { id: 'beaches', name: 'Beaches & Coastal', icon: '🏖️' },
+  { id: 'waterfalls', name: 'Waterfalls', icon: '🌊' },
+  { id: 'temples', name: 'Famous Temples', icon: '🛕' },
+  { id: 'wildlife', name: 'Wildlife & Nature', icon: '🌿' },
+  { id: 'heritage', name: 'Heritage & Culture', icon: '🏛️' },
+  { id: 'adventure', name: 'Adventure & Activities', icon: '🚤' },
+  { id: 'churches', name: 'Christian Churches & Basilicas', icon: '⛪' },
+  { id: 'mosques', name: 'Famous Mosques & Dargahs', icon: '🕌' }
 ];
 
 export const TOURISM_PLACES = [

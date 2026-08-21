@@ -578,17 +578,17 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
     <div className="min-h-screen pb-24 bg-gradient-to-b from-[#f9f5f2] via-[#f5efe9] to-[#eee8e0]">
       
       {/* 🧭 HEADING & SEARCH CONSOLE SECTION */}
-      <section className="pt-10 sm:pt-14 pb-8 px-4 text-center">
-        <div className="max-w-5xl mx-auto space-y-4">
+      <section className="pt-6 sm:pt-14 pb-6 sm:pb-8 px-3 sm:px-4 text-center">
+        <div className="max-w-5xl mx-auto space-y-3 sm:space-y-4">
           
           {/* Tagline Badge */}
-          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#242429] text-white text-[10px] sm:text-xs font-fira-mono font-bold shadow-md">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#242429] text-white text-[9px] sm:text-xs font-fira-mono font-bold shadow-md">
             <Sparkles size={12} className="text-amber-400" />
             <span>✨ PREMIUM & FEATURED STAYS & LUXURY RESORTS</span>
           </div>
 
           {/* Main Heading */}
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-editorial font-extrabold text-[#000000] tracking-tight leading-tight">
+          <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-editorial font-extrabold text-[#000000] tracking-tight leading-tight">
             Exclusive Luxury Stays & Resorts
           </h1>
 
@@ -597,17 +597,17 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
           </p>
 
           {/* 🔍 SEARCH CONSOLE: DESTINATION CIRCUIT | STAY OPTIONS | SEARCH STAYS */}
-          <div className="mt-6 p-4 sm:p-5 rounded-3xl bg-white/95 backdrop-blur-md border border-[#242429]/20 shadow-xl grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
+          <div className="mt-4 sm:mt-6 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl bg-white/95 backdrop-blur-md border border-[#242429]/20 shadow-xl grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 text-left">
             
             {/* 1. Destination Circuit */}
             <div>
-              <label className="block font-fira-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1.5 flex items-center gap-1">
+              <label className="block font-fira-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1 flex items-center gap-1">
                 <MapPin size={11} className="text-rose-600" /> Destination Circuit
               </label>
               <select 
                 value={district} 
                 onChange={(e) => setDistrict(e.target.value)}
-                className="w-full p-2.5 sm:p-3 rounded-2xl bg-slate-50 border border-slate-300 text-xs font-fira-mono font-bold text-black focus:ring-2 focus:ring-black outline-hidden cursor-pointer"
+                className="w-full p-2 sm:p-3 rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-300 text-xs font-fira-mono font-bold text-black focus:ring-2 focus:ring-black outline-hidden cursor-pointer"
               >
                 {destinationOptions.map(opt => (
                   <option key={opt} value={opt}>{opt}</option>
@@ -617,13 +617,13 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
 
             {/* 2. All Stay Options */}
             <div>
-              <label className="block font-fira-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1.5 flex items-center gap-1">
+              <label className="block font-fira-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 mb-1 flex items-center gap-1">
                 <HomeIcon size={11} className="text-cyan-700" /> Stay / Resort Type
               </label>
               <select 
                 value={stayType} 
                 onChange={(e) => setStayType(e.target.value)}
-                className="w-full p-2.5 sm:p-3 rounded-2xl bg-slate-50 border border-slate-300 text-xs font-fira-mono font-bold text-black focus:ring-2 focus:ring-black outline-hidden cursor-pointer"
+                className="w-full p-2 sm:p-3 rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-300 text-xs font-fira-mono font-bold text-black focus:ring-2 focus:ring-black outline-hidden cursor-pointer"
               >
                 {stayCategories.map(cat => (
                   <option key={cat.name} value={cat.name}>{cat.icon} {cat.label}</option>
@@ -639,7 +639,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                   const el = document.getElementById('verified-properties-grid');
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }}
-                className="w-full h-[44px] sm:h-[48px] rounded-2xl bg-[#242429] text-white hover:bg-black text-xs font-bold font-editorial flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+                className="w-full h-[40px] sm:h-[48px] rounded-xl sm:rounded-2xl bg-[#242429] text-white hover:bg-black text-xs font-bold font-editorial flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
               >
                 <Search size={14} /> Search Stays ({displayedProperties.length})
               </button>
@@ -648,13 +648,13 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
           </div>
 
           {/* Quick Stay Option Category Pills */}
-          <div className="flex gap-2 overflow-x-auto pb-2 pt-2 justify-center flex-wrap">
+          <div className="flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 pt-2 sm:justify-center sm:flex-wrap no-scrollbar px-1">
             {stayCategories.map(cat => (
               <button
                 key={cat.name}
                 type="button"
                 onClick={() => setStayType(cat.name)}
-                className={`px-3 sm:px-4 py-1.5 rounded-full text-[11px] font-fira-mono font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
+                className={`px-3 sm:px-4 py-1.5 rounded-full text-[10px] sm:text-[11px] font-fira-mono font-bold flex items-center gap-1.5 shrink-0 whitespace-nowrap transition-all shadow-xs cursor-pointer ${
                   stayType === cat.name 
                     ? 'bg-[#242429] text-white ring-2 ring-black/20' 
                     : 'bg-white/80 hover:bg-white text-slate-700 border border-slate-300'
@@ -670,19 +670,19 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
       </section>
 
       {/* 🏡 VERIFIED PROPERTIES: ALL PROPERTIES LISTED UNDER HEADING */}
-      <section id="verified-properties-grid" className="max-w-7xl mx-auto px-3 sm:px-6 pt-4">
+      <section id="verified-properties-grid" className="max-w-7xl mx-auto px-3 sm:px-6 pt-2 sm:pt-4">
         
         {/* 📍 PARTICULAR AREA CIRCUIT QUICK SELECTOR BAR */}
-        <div className="mb-6 bg-white/95 backdrop-blur-md p-3.5 sm:p-4 rounded-3xl border border-[#242429]/15 shadow-sm space-y-2.5">
+        <div className="mb-4 sm:mb-6 bg-white/95 backdrop-blur-md p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-[#242429]/15 shadow-sm space-y-2">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
             <span className="text-[10px] sm:text-xs font-fira-mono font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-              <MapPin size={13} className="text-rose-600" /> Click A Particular Area Circuit:
+              <MapPin size={13} className="text-rose-600 shrink-0" /> Click A Particular Area Circuit:
             </span>
             <span className="text-xs font-editorial font-extrabold text-black">
               {district === 'All' || district === 'All Tamil Nadu' ? '✨ Showing Stays Across All Tamil Nadu Areas' : `📍 Exact Stays in ${district} (${displayedProperties.length})`}
             </span>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1.5 no-scrollbar flex-wrap sm:flex-nowrap">
+          <div className="flex gap-2 overflow-x-auto pb-1.5 no-scrollbar flex-nowrap">
             {areaCircuits.map(circuit => {
               const isSelected = (circuit.id === 'All' && (district === 'All' || district === 'All Tamil Nadu')) || district === circuit.id || district.includes(circuit.id);
               return (
@@ -690,7 +690,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                   key={circuit.id}
                   type="button"
                   onClick={() => setDistrict(circuit.id)}
-                  className={`px-3.5 py-2 rounded-2xl text-xs font-editorial font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer shadow-xs ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-editorial font-bold flex items-center gap-1.5 transition-all shrink-0 whitespace-nowrap cursor-pointer shadow-xs ${
                     isSelected
                       ? 'bg-[#242429] text-white ring-2 ring-black/20 scale-[1.02]'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200'

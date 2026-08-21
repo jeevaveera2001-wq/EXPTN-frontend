@@ -68,45 +68,45 @@ export default function Packages({ onOpenAuth }) {
     <div className="min-h-screen pb-24 bg-gradient-to-b from-[#f9f5f2] via-[#f5efe9] to-[#eee8e0]">
       
       {/* Hero Section */}
-      <section className="pt-12 sm:pt-16 pb-10 px-4 text-center">
-        <div className="max-w-4xl mx-auto space-y-4">
+      <section className="pt-8 sm:pt-16 pb-6 sm:pb-10 px-3 sm:px-4 text-center">
+        <div className="max-w-4xl mx-auto space-y-3 sm:space-y-4">
           
           {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-xs font-mono font-bold shadow-sm">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-[9px] sm:text-xs font-mono font-bold shadow-sm">
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
             <span>🚀 ALL-INCLUSIVE TOUR PACKAGES · AVAILABLE SOON</span>
           </div>
 
-          <h1 className="text-3xl sm:text-5xl md:text-6xl font-editorial font-extrabold text-black tracking-tight leading-tight">
+          <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-editorial font-extrabold text-black tracking-tight leading-tight">
             Curated Tamil Nadu Expeditions
           </h1>
 
-          <p className="text-sm sm:text-base md:text-lg text-slate-600 font-editorial max-w-2xl mx-auto leading-relaxed">
+          <p className="text-xs sm:text-base md:text-lg text-slate-600 font-editorial max-w-2xl mx-auto leading-relaxed">
             We are handcrafting complete all-inclusive multi-day travel packages combining <strong>verified 5-star stays</strong>, <strong>licensed native tour guides</strong>, and <strong>private chauffeur transport</strong>.
           </p>
 
           {/* Early Access Notification Form */}
-          <div className="pt-4 max-w-xl mx-auto">
+          <div className="pt-2 sm:pt-4 max-w-xl mx-auto">
             {!isSubscribed ? (
-              <form onSubmit={handleNotifySubmit} className="p-3 sm:p-4 rounded-3xl bg-white/95 backdrop-blur-md border border-[#242429]/20 shadow-xl flex flex-col sm:flex-row gap-2">
+              <form onSubmit={handleNotifySubmit} className="p-2.5 sm:p-4 rounded-2xl sm:rounded-3xl bg-white/95 backdrop-blur-md border border-[#242429]/20 shadow-xl flex flex-col sm:flex-row gap-2">
                 <input
                   type="email"
                   required
                   value={notifyEmail}
                   onChange={(e) => setNotifyEmail(e.target.value)}
                   placeholder="Enter your email for early package access..."
-                  className="flex-1 px-4 py-3 rounded-2xl bg-slate-50 border border-slate-300 text-xs font-mono font-bold text-black outline-hidden focus:ring-2 focus:ring-black"
+                  className="flex-1 px-3.5 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-300 text-xs font-mono font-bold text-black outline-hidden focus:ring-2 focus:ring-black"
                 />
                 <button
                   type="submit"
-                  className="px-6 py-3 rounded-2xl bg-[#242429] text-white hover:bg-black font-editorial font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer shrink-0"
+                  className="px-5 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl bg-[#242429] text-white hover:bg-black font-editorial font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer shrink-0"
                 >
                   <Bell size={14} className="text-amber-400" />
                   <span>Notify Me at Launch</span>
                 </button>
               </form>
             ) : (
-              <div className="p-4 rounded-3xl bg-emerald-50 border border-emerald-300 text-emerald-950 font-editorial font-bold text-xs flex items-center justify-center gap-2 shadow-sm animate-in fade-in">
+              <div className="p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-emerald-50 border border-emerald-300 text-emerald-950 font-editorial font-bold text-xs flex items-center justify-center gap-2 shadow-sm animate-in fade-in">
                 <Check size={16} className="text-emerald-600" />
                 <span>You're on the priority early-access list! We'll notify you the moment packages launch.</span>
               </div>

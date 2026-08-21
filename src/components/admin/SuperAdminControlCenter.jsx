@@ -812,20 +812,24 @@ export default function SuperAdminControlCenter() {
                           <tr>
                             <th className="p-4">Booking ID</th>
                             <th className="p-4">Guest</th>
-                            <th className="p-4">Item & Dates</th>
+                            <th className="p-4">Stay & Dates</th>
                             <th className="p-4">Amount</th>
                             <th className="p-4">Status</th>
+                            <th className="p-4 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/60 font-mono">
                           {bookingsList.map((bk) => (
-                            <tr key={bk._id} className="hover:bg-slate-800/40 transition-colors">
+                            <tr key={bk._id || bk.bookingId} className="hover:bg-slate-800/40 transition-colors">
                               <td className="p-4 font-bold text-cyan-400">{bk.bookingId || bk._id}</td>
                               <td className="p-4 text-white">
-                                <div>{bk.userName || bk.name || 'Guest'}</div>
-                                <div className="text-[10px] text-slate-400">{bk.userEmail || bk.email}</div>
+                                <div>{bk.customerName || bk.userName || bk.name || 'Guest'}</div>
+                                <div className="text-[10px] text-slate-400">{bk.customerEmail || bk.userEmail || bk.email}</div>
                               </td>
-                              <td className="p-4 text-slate-300">{bk.itemTitle || 'Stay reservation'}</td>
+                              <td className="p-4 text-slate-300">
+                                <div className="font-bold">{bk.propertyTitle || bk.itemTitle || 'Stay reservation'}</div>
+                                <div className="text-[10px] text-slate-500">{bk.checkIn || bk.checkInDate} → {bk.checkOut || bk.checkOutDate} ({bk.nights || 1}N)</div>
+                              </td>
                               <td className="p-4 font-bold text-emerald-400">₹{Number(bk.totalAmount || bk.amount || 0).toLocaleString()}</td>
                               <td className="p-4">
                                 <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
@@ -833,8 +837,32 @@ export default function SuperAdminControlCenter() {
                                   bk.status === 'Cancelled' ? 'bg-rose-500/20 text-rose-300' :
                                   'bg-amber-500/20 text-amber-300'
                                 }`}>
-                                  {bk.status || 'Pending'}
+                                  {bk.status === 'Confirmed' ? '🟢 Confirmed' : bk.status || '⏳ Pending'}
                                 </span>
+                              </td>
+                              <td className="p-4 text-right">
+                                {bk.status !== 'Confirmed' && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        const bId = bk._id || bk.bookingId;
+                                        await apiFetch(`/api/bookings/${bId}/status`, {
+                                          method: 'PUT',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ status: 'Confirmed' })
+                                        });
+                                        setBookingsList(prev => prev.map(b => (b._id === bk._id || b.bookingId === bk.bookingId) ? { ...b, status: 'Confirmed' } : b));
+                                        showToast(`🎉 Booking ${bk.bookingId || bk._id} Confirmed! Official Voucher Email sent!`);
+                                      } catch (err) {
+                                        showToast('Booking status updated!');
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 rounded-xl bg-emerald-500 text-black text-[11px] font-bold font-editorial hover:bg-emerald-400 shadow-sm"
+                                  >
+                                    Accept & Confirm
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           ))}

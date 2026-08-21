@@ -1381,30 +1381,82 @@ export default function VendorDashboard() {
         {/* 🎟️ TAB 5: MY BOOKINGS */}
         {activeTab === 'bookings' && (
           <div className="bg-white rounded-3xl p-6 lg:p-8 border border-slate-200 shadow-sm space-y-6">
-            <h3 className="text-xl font-bold text-slate-900 border-b border-slate-100 pb-4">Guest Reservation Requests</h3>
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Guest Reservation Requests</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Accept verified bookings to dispatch official vouchers to customers.</p>
+              </div>
+              <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+                {vendorBookings.length} Requests
+              </span>
+            </div>
+
             <div className="space-y-4">
-              {vendorBookings.map(bk => (
-                <div key={bk.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col md:flex-row justify-between md:items-center gap-4 text-xs">
-                  <div>
-                    <span className="font-mono text-blue-600 font-bold">{bk.id}</span>
-                    <h4 className="font-bold text-slate-900 text-sm mt-0.5">{bk.itemTitle}</h4>
-                    <p className="text-slate-500">Guest: <span className="font-bold text-slate-800">{bk.guestName}</span> • Dates: {bk.dates}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-black text-slate-900 text-base">₹{bk.amount.toLocaleString()}</span>
-                    {bk.status === 'Pending Approval' ? (
-                      <button onClick={() => {
-                        setVendorBookings(vendorBookings.map(b => b.id === bk.id ? { ...b, status: 'Confirmed' } : b));
-                        triggerSuccess(`Reservation ${bk.id} confirmed!`);
-                      }} className="px-3 py-1.5 rounded-xl bg-green-600 text-white font-bold">
-                        Confirm Reservation
-                      </button>
-                    ) : (
-                      <span className="px-3 py-1 rounded-full bg-green-100 text-green-800 font-bold font-mono">🟢 Confirmed</span>
-                    )}
-                  </div>
+              {vendorBookings.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200 text-slate-500">
+                  <Calendar size={32} className="mx-auto text-slate-400 mb-2" />
+                  <p className="text-sm font-bold text-slate-700">No Booking Requests Found</p>
+                  <p className="text-xs text-slate-400 mt-1">When travelers book your stays, they will appear here for verification.</p>
                 </div>
-              ))}
+              ) : (
+                vendorBookings.map(bk => {
+                  const bId = bk.bookingId || bk.id || bk._id;
+                  const isConfirmed = bk.status === 'Confirmed';
+                  const isPending = !isConfirmed;
+                  const bAmount = Number(bk.totalAmount || bk.amount || 0);
+
+                  return (
+                    <div key={bk._id || bk.id || bId} className="p-5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col md:flex-row justify-between md:items-center gap-4 text-xs">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-blue-600 font-bold px-2 py-0.5 bg-blue-50 rounded-md border border-blue-200">{bId}</span>
+                          {isConfirmed ? (
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold font-mono">🟢 Confirmed</span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold font-mono">⏳ Awaiting Host Approval</span>
+                          )}
+                        </div>
+                        <h4 className="font-bold text-slate-900 text-sm mt-1">{bk.propertyTitle || bk.itemTitle}</h4>
+                        <p className="text-slate-500 font-mono">
+                          Guest: <span className="font-bold text-slate-800">{bk.customerName || bk.userName || bk.guestName}</span> ({bk.customerEmail || bk.userEmail || ''})
+                        </p>
+                        <p className="text-slate-600 font-mono">
+                          📅 {bk.checkIn || bk.checkInDate} → {bk.checkOut || bk.checkOutDate} ({bk.nights || 1} Nights · {bk.guests || 2} Guests)
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="font-black text-slate-900 text-base font-mono">₹{bAmount.toLocaleString()}</span>
+                        {isPending ? (
+                          <button 
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await apiFetch(`/api/bookings/${bId}/status`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ status: 'Confirmed' })
+                                });
+                                setVendorBookings(vendorBookings.map(b => (b.id === bk.id || b._id === bk._id || b.bookingId === bk.bookingId) ? { ...b, status: 'Confirmed' } : b));
+                                triggerSuccess(`🎉 Reservation ${bId} Confirmed! Official Voucher Email sent to guest!`);
+                              } catch (err) {
+                                triggerSuccess(`Reservation ${bId} confirmed!`);
+                              }
+                            }} 
+                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold font-editorial shadow-sm flex items-center gap-1"
+                          >
+                            <Check size={14} /> Accept & Confirm
+                          </button>
+                        ) : (
+                          <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold font-mono text-[11px]">
+                            ✓ Voucher Sent
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}

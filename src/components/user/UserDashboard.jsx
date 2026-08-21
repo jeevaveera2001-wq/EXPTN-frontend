@@ -103,7 +103,11 @@ export default function UserDashboard() {
       if (res.ok) {
         const allBookings = await res.json();
         if (Array.isArray(allBookings)) {
-          const myBookings = allBookings.filter(b => b.userEmail === currentUser?.email || b.email === currentUser?.email);
+          const userEm = (currentUser?.email || '').toLowerCase().trim();
+          const myBookings = allBookings.filter(b => {
+            const cEm = (b.userEmail || b.customerEmail || b.email || '').toLowerCase().trim();
+            return cEm === userEm;
+          });
           setBookingsList(myBookings);
         }
       }
@@ -326,42 +330,74 @@ export default function UserDashboard() {
             </div>
 
             <div className="space-y-4">
-              {bookingsList.map((bk) => (
-                <div key={bk.id} className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row justify-between md:items-center gap-6">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono font-extrabold text-blue-600 text-xs px-2.5 py-1 bg-blue-50 rounded-lg border border-blue-200">
-                        {bk.id}
-                      </span>
-                      <span className={`px-3 py-0.5 rounded-full text-xs font-bold font-mono ${
-                        bk.status === 'Confirmed' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        🟢 {bk.status}
-                      </span>
-                    </div>
-                    <h4 className="text-lg font-black text-slate-900">{bk.title}</h4>
-                    <p className="text-xs text-slate-500 font-mono">📍 {bk.location} • 👥 {bk.guests}</p>
-                    <div className="text-xs font-semibold text-slate-700">
-                      📅 Dates: <span className="font-bold text-slate-900">{bk.checkIn} → {bk.checkOut}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col md:items-end gap-3 pt-4 md:pt-0 border-t md:border-0 border-slate-100">
-                    <div className="text-right">
-                      <div className="text-2xl font-black text-slate-900">₹{bk.amount.toLocaleString()}</div>
-                      <div className="text-[11px] font-bold text-emerald-600">{bk.paymentStatus}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => triggerSuccess(`PDF Invoice for ${bk.id} downloaded!`)}
-                        className="px-4 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 flex items-center gap-1.5"
-                      >
-                        <Download size={14} /> Download PDF Receipt
-                      </button>
-                    </div>
-                  </div>
+              {bookingsList.length === 0 ? (
+                <div className="p-8 text-center bg-white rounded-3xl border border-slate-200 text-slate-500">
+                  <Calendar size={36} className="mx-auto text-slate-400 mb-2" />
+                  <p className="text-sm font-bold text-slate-700">No Reservations Found</p>
+                  <p className="text-xs text-slate-400 mt-1">Book your favorite luxury stay on Explore page to view it here.</p>
                 </div>
-              ))}
+              ) : (
+                bookingsList.map((bk) => {
+                  const isConfirmed = bk.status === 'Confirmed';
+                  const isPending = bk.status === 'Pending Verification' || bk.status === 'Pending Approval' || bk.status === 'Pending' || !bk.status;
+                  const bkId = bk.bookingId || bk.id || 'ETN-BK-REF';
+                  const bkTitle = bk.itemTitle || bk.propertyTitle || bk.title || 'Verified Luxury Stay';
+                  const bkLocation = bk.destination || bk.location || 'Tamil Nadu';
+                  const bkAmount = Number(bk.totalAmount || bk.amount || 0);
+
+                  return (
+                    <div key={bk._id || bk.id || bkId} className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row justify-between md:items-center gap-6">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono font-extrabold text-blue-600 text-xs px-2.5 py-1 bg-blue-50 rounded-lg border border-blue-200">
+                            {bkId}
+                          </span>
+                          {isConfirmed ? (
+                            <span className="px-3 py-0.5 rounded-full text-xs font-bold font-mono bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                              🟢 Confirmed & Verified
+                            </span>
+                          ) : isPending ? (
+                            <span className="px-3 py-0.5 rounded-full text-xs font-bold font-mono bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                              ⏳ Pending Host Verification
+                            </span>
+                          ) : (
+                            <span className="px-3 py-0.5 rounded-full text-xs font-bold font-mono bg-slate-100 text-slate-700">
+                              {bk.status}
+                            </span>
+                          )}
+                        </div>
+                        
+                        <h4 className="text-lg font-black text-slate-900">{bkTitle}</h4>
+                        <p className="text-xs text-slate-500 font-mono">📍 {bkLocation} • 👥 {bk.guests || 2} Guests ({bk.guestType || 'Stay'})</p>
+                        <div className="text-xs font-semibold text-slate-700">
+                          📅 Dates: <span className="font-bold text-slate-900">{bk.checkIn || bk.checkInDate} → {bk.checkOut || bk.checkOutDate}</span> ({bk.nights || 1} Night{bk.nights > 1 ? 's' : ''})
+                        </div>
+
+                        {isPending && (
+                          <div className="text-[11px] text-amber-800 bg-amber-50/80 border border-amber-200 px-3 py-1.5 rounded-xl font-mono">
+                            ℹ️ Host is validating room allocation. You will receive an official confirmation email once accepted.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col md:items-end gap-3 pt-4 md:pt-0 border-t md:border-0 border-slate-100">
+                        <div className="text-right">
+                          <div className="text-2xl font-black text-slate-900">₹{bkAmount.toLocaleString()}</div>
+                          <div className="text-[11px] font-bold text-emerald-600">✓ {bk.paymentStatus || 'Paid via Razorpay'}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => triggerSuccess(`PDF Invoice for ${bkId} downloaded!`)}
+                            className="px-4 py-2 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 flex items-center gap-1.5"
+                          >
+                            <Download size={14} /> Download PDF Receipt
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}

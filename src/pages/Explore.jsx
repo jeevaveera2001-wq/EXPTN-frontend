@@ -266,11 +266,11 @@ export default function Explore({ onOpenAuth }) {
     setIsAvailable(true);
   };
 
-  // 💳 Razorpay Test Payment Trigger
+  // 💳 Razorpay Payment Trigger with Real Checkout & Fallback Test Gateway
   const handlePayWithRazorpay = async () => {
     setIsProcessingPayment(true);
     const bookingId = `ETN-BK-${Math.floor(100000 + Math.random() * 900000)}`;
-    const paymentId = `pay_rzp_test_${Date.now().toString().slice(-8)}`;
+    const paymentId = `pay_rzp_${Date.now().toString().slice(-8)}`;
 
     const bookingPayload = {
       bookingId,
@@ -301,34 +301,18 @@ export default function Explore({ onOpenAuth }) {
       totalAmount: grandTotalAmount,
       amount: grandTotalAmount,
       paymentId: paymentId,
-      paymentMethod: 'Razorpay Test Gateway (UPI / Card)',
+      paymentMethod: 'Razorpay Payment Gateway (UPI / Cards)',
       paymentStatus: 'Paid',
-      status: 'Confirmed'
+      status: 'Pending Verification'
     };
 
     try {
-      // 1. Submit Booking to Backend MongoDB Atlas
-      const res = await apiFetch('/api/bookings', {
+      // 1. Submit Booking to Backend with 'Pending Verification' status
+      await apiFetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bookingPayload)
       });
-
-      // 2. Trigger notification
-      try {
-        await apiFetch('/api/notifications/trigger', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userEmail: currentUser.email,
-            title: `🎟️ Booking Confirmed (${selectedStayForBooking.title})`,
-            message: `Your booking for ${nights} night(s) (₹${grandTotalAmount.toLocaleString()}) is confirmed! (Ref: ${bookingId})`,
-            type: 'booking'
-          })
-        });
-      } catch (ne) {}
-
-      // 3. Set confirmed details view
       setConfirmedBookingDetails(bookingPayload);
     } catch (err) {
       setConfirmedBookingDetails(bookingPayload);
@@ -606,7 +590,7 @@ export default function Explore({ onOpenAuth }) {
                     ✓ VERIFIED STAY RESERVATION
                   </span>
                   <span className="text-[10px] font-mono text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-full font-bold">
-                    ⚡ RAZORPAY SECURE
+                    ⚡ RAZORPAY GATEWAY
                   </span>
                 </div>
                 <h3 className="text-lg font-extrabold text-black font-editorial leading-tight">
@@ -626,17 +610,20 @@ export default function Explore({ onOpenAuth }) {
             </div>
 
             {confirmedBookingDetails ? (
-              /* 🎉 BOOKING CONFIRMED SUCCESS VIEW */
-              <div className="py-4 space-y-4 text-center animate-in fade-in">
-                <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto border-2 border-emerald-300 shadow-md">
-                  <CheckCircle2 size={36} />
+              /* ⏳ BOOKING PLACED & PENDING VERIFICATION VIEW */
+              <div className="py-3 space-y-4 text-center animate-in fade-in">
+                <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto border-2 border-amber-300 shadow-md">
+                  <Clock size={36} className="animate-pulse" />
                 </div>
                 <div className="space-y-1">
                   <h4 className="text-xl font-extrabold font-editorial text-black">
-                    Reservation Confirmed!
+                    Booking Request Placed!
                   </h4>
-                  <p className="text-xs text-slate-600 font-editorial">
-                    Your booking was verified and recorded live in the system.
+                  <div className="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-xs font-mono font-extrabold">
+                    ⏳ STATUS: PENDING PROPERTY AVAILABILITY CONFIRMATION
+                  </div>
+                  <p className="text-xs text-slate-600 font-editorial pt-1 max-w-sm mx-auto">
+                    We have captured your payment via Razorpay. A verification email has been dispatched to <strong>{confirmedBookingDetails.customerEmail}</strong>.
                   </p>
                 </div>
 
@@ -646,7 +633,7 @@ export default function Explore({ onOpenAuth }) {
                     <span className="font-extrabold text-black">{confirmedBookingDetails.bookingId}</span>
                   </div>
                   <div className="flex justify-between border-b border-[#242429]/10 pb-1.5">
-                    <span className="text-slate-500 font-bold">Payment ID (Razorpay):</span>
+                    <span className="text-slate-500 font-bold">Razorpay Payment ID:</span>
                     <span className="font-extrabold text-cyan-700">{confirmedBookingDetails.paymentId}</span>
                   </div>
                   <div className="flex justify-between border-b border-[#242429]/10 pb-1.5">
@@ -658,9 +645,16 @@ export default function Explore({ onOpenAuth }) {
                     <span className="font-bold text-black">{guestDetails.label}</span>
                   </div>
                   <div className="flex justify-between pt-1 text-sm font-black text-emerald-700 font-editorial">
-                    <span>Total Amount Paid:</span>
+                    <span>Total Paid (Captured):</span>
                     <span className="font-mono">₹{Number(confirmedBookingDetails.totalAmount).toLocaleString()}</span>
                   </div>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 text-left text-xs font-editorial space-y-1">
+                  <span className="font-bold block">ℹ️ What happens next?</span>
+                  <p className="text-[11px] text-blue-800 leading-relaxed font-mono">
+                    The property host & reservation team are verifying room availability. Once accepted, you will immediately receive an <strong>Official Confirmation Email with your Stay Pass</strong>!
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 pt-2">

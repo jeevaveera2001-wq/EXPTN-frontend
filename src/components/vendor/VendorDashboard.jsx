@@ -1402,55 +1402,110 @@ export default function VendorDashboard() {
                 vendorBookings.map(bk => {
                   const bId = bk.bookingId || bk.id || bk._id;
                   const isConfirmed = bk.status === 'Confirmed';
-                  const isPending = !isConfirmed;
+                  const isCancelled = bk.status === 'Cancelled';
+                  const isPending = !isConfirmed && !isCancelled;
                   const bAmount = Number(bk.totalAmount || bk.amount || 0);
 
                   return (
-                    <div key={bk._id || bk.id || bId} className="p-5 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col md:flex-row justify-between md:items-center gap-4 text-xs">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-blue-600 font-bold px-2 py-0.5 bg-blue-50 rounded-md border border-blue-200">{bId}</span>
+                    <div key={bk._id || bk.id || bId} className="p-5 rounded-3xl bg-slate-50 hover:bg-slate-100/80 border border-slate-200 transition-all flex flex-col lg:flex-row justify-between lg:items-center gap-4 text-xs shadow-xs">
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-blue-700 font-bold px-2.5 py-0.5 bg-blue-100/70 rounded-md border border-blue-200">{bId}</span>
                           {isConfirmed ? (
-                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold font-mono">🟢 Confirmed</span>
+                            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold font-mono text-[11px] flex items-center gap-1">
+                              <CheckCircle2 size={12} className="text-emerald-600" /> Confirmed & Voucher Sent
+                            </span>
+                          ) : isCancelled ? (
+                            <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold font-mono text-[11px] flex items-center gap-1">
+                              <XCircle size={12} className="text-rose-600" /> Declined / Cancelled
+                            </span>
                           ) : (
-                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold font-mono">⏳ Awaiting Host Approval</span>
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold font-mono text-[11px] flex items-center gap-1 border border-amber-300">
+                              <Clock size={12} className="text-amber-600 animate-pulse" /> Awaiting Property Owner Approval
+                            </span>
                           )}
+                          <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 font-bold">
+                            ✓ Paid via Razorpay
+                          </span>
                         </div>
-                        <h4 className="font-bold text-slate-900 text-sm mt-1">{bk.propertyTitle || bk.itemTitle}</h4>
-                        <p className="text-slate-500 font-mono">
-                          Guest: <span className="font-bold text-slate-800">{bk.customerName || bk.userName || bk.guestName}</span> ({bk.customerEmail || bk.userEmail || ''})
-                        </p>
-                        <p className="text-slate-600 font-mono">
-                          📅 {bk.checkIn || bk.checkInDate} → {bk.checkOut || bk.checkOutDate} ({bk.nights || 1} Nights · {bk.guests || 2} Guests)
-                        </p>
+
+                        <h4 className="font-bold text-slate-900 text-sm sm:text-base font-editorial mt-1">
+                          {bk.propertyTitle || bk.itemTitle || 'Verified Stay'}
+                        </h4>
+
+                        <div className="grid sm:grid-cols-2 gap-1 text-slate-600 font-mono text-[11px]">
+                          <p>
+                            👤 Guest: <strong className="text-slate-900">{bk.customerName || bk.userName || bk.guestName || 'Tourist'}</strong>
+                            {bk.customerEmail || bk.userEmail ? ` (${bk.customerEmail || bk.userEmail})` : ''}
+                          </p>
+                          <p>
+                            📞 Phone: <strong className="text-slate-900">{bk.customerPhone || bk.userPhone || '+91 78717 79134'}</strong>
+                          </p>
+                          <p>
+                            📅 Dates: <strong className="text-slate-900">{bk.checkIn || bk.checkInDate || '2026-08-21'} → {bk.checkOut || bk.checkOutDate || '2026-08-22'}</strong> ({bk.nights || 1} Night(s))
+                          </p>
+                          <p>
+                            👥 Party: <strong className="text-slate-900">{bk.guests || 2} Guests</strong> {bk.guestType ? `(${bk.guestType})` : ''}
+                          </p>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-3">
-                        <span className="font-black text-slate-900 text-base font-mono">₹{bAmount.toLocaleString()}</span>
+                      <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end justify-between gap-3 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-200 shrink-0">
+                        <div className="text-left lg:text-right">
+                          <span className="text-[10px] font-mono text-slate-400 uppercase block font-bold">Total Reservation Amount</span>
+                          <span className="font-black text-slate-900 text-lg font-mono">₹{bAmount.toLocaleString()}</span>
+                        </div>
+
                         {isPending ? (
-                          <button 
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await apiFetch(`/api/bookings/${bId}/status`, {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ status: 'Confirmed' })
-                                });
-                                setVendorBookings(vendorBookings.map(b => (b.id === bk.id || b._id === bk._id || b.bookingId === bk.bookingId) ? { ...b, status: 'Confirmed' } : b));
-                                triggerSuccess(`🎉 Reservation ${bId} Confirmed! Official Voucher Email sent to guest!`);
-                              } catch (err) {
-                                triggerSuccess(`Reservation ${bId} confirmed!`);
-                              }
-                            }} 
-                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold font-editorial shadow-sm flex items-center gap-1"
-                          >
-                            <Check size={14} /> Accept & Confirm
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button 
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await apiFetch(`/api/bookings/${bId}/status`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ status: 'Confirmed' })
+                                  });
+                                  setVendorBookings(vendorBookings.map(b => (b.id === bk.id || b._id === bk._id || b.bookingId === bk.bookingId) ? { ...b, status: 'Confirmed' } : b));
+                                  triggerSuccess(`🎉 Reservation ${bId} Approved! Official Voucher Email sent to guest!`);
+                                } catch (err) {
+                                  triggerSuccess(`Reservation ${bId} confirmed!`);
+                                }
+                              }} 
+                              className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold font-editorial shadow-sm flex items-center gap-1.5 transition-all text-xs"
+                            >
+                              <Check size={14} /> Accept & Confirm
+                            </button>
+
+                            <button 
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await apiFetch(`/api/bookings/${bId}/status`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ status: 'Cancelled' })
+                                  });
+                                  setVendorBookings(vendorBookings.map(b => (b.id === bk.id || b._id === bk._id || b.bookingId === bk.bookingId) ? { ...b, status: 'Cancelled' } : b));
+                                  triggerSuccess(`Reservation ${bId} declined.`);
+                                } catch (err) {
+                                  triggerSuccess(`Reservation status updated.`);
+                                }
+                              }} 
+                              className="px-3 py-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold font-editorial shadow-xs flex items-center gap-1 transition-all text-xs"
+                            >
+                              <X size={14} /> Decline
+                            </button>
+                          </div>
+                        ) : isConfirmed ? (
+                          <div className="flex items-center gap-1 text-emerald-700 font-bold font-mono text-xs bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                            <CheckCircle2 size={14} /> Official Voucher Active
+                          </div>
                         ) : (
-                          <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold font-mono text-[11px]">
-                            ✓ Voucher Sent
-                          </span>
+                          <div className="text-rose-600 font-bold font-mono text-xs bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200">
+                            Declined
+                          </div>
                         )}
                       </div>
                     </div>

@@ -1,2723 +1,5540 @@
-import express from 'express';
-import jwt from 'jsonwebtoken';
-import mongoose from 'mongoose';
-import nodemailer from 'nodemailer';
-import Razorpay from 'razorpay';
-import { OAuth2Client } from 'google-auth-library';
-import { connectDB } from '../config/db.js';
-import { User } from '../models/User.js';
-import { Property } from '../models/Property.js';
-import { Booking } from '../models/Booking.js';
-import { Vehicle } from '../models/Vehicle.js';
-import { Ticket } from '../models/Ticket.js';
-import { protect, authorizeRoles } from '../middleware/authMiddleware.js';
+import express from "express";
+import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+import nodemailer from "nodemailer";
+import Razorpay from "razorpay";
+import { OAuth2Client } from "google-auth-library";
+
+import { connectDB } from "../config/db.js";
+import { User } from "../models/User.js";
+import { Property } from "../models/Property.js";
+import { Booking } from "../models/Booking.js";
+import { Vehicle } from "../models/Vehicle.js";
+import { Ticket } from "../models/Ticket.js";
+
+import {
+  protect,
+  authorizeRoles,
+} from "../middleware/authMiddleware.js";
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'explore_tamilnadu_secret_key_2026';
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
-// Fast Health Check Endpoint on router
-router.get('/health', (req, res) => {
-  const dbReady = mongoose.connection.readyState === 1;
-  res.status(dbReady ? 200 : 503).json({
-    status: dbReady ? 'healthy' : 'degraded',
-    database: dbReady ? 'connected' : 'disconnected',
-    uptime: Math.floor(process.uptime()),
-    timestamp: new Date().toISOString()
-  });
+const JWT_SECRET = process.env.JWT_SECRET;
+const GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID || "";
+
+const googleClient = new OAuth2Client(
+  GOOGLE_CLIENT_ID
+);
+
+// -------------------------------------------------------
+// DATABASE CONNECTION RECOVERY
+// -------------------------------------------------------
+
+// The main server should connect to MongoDB during startup.
+// This middleware only starts a background reconnect if the
+// database connection is unexpectedly lost.
+//
+// It does not make every request wait for connectDB().
+let reconnectPromise = null;
+
+router.use((req, res, next) => {
+  if (
+    mongoose.connection.readyState === 0 &&
+    !reconnectPromise
+  ) {
+    reconnectPromise = connectDB()
+      .catch((error) => {
+        console.error(
+          "MongoDB background reconnect failed:",
+          error.message
+        );
+      })
+      .finally(() => {
+        reconnectPromise = null;
+      });
+  }
+
+  next();
 });
 
-// Token Generator
+// -------------------------------------------------------
+// TOKEN GENERATOR
+// -------------------------------------------------------
+
 const generateToken = (id) => {
-  return jwt.sign({ id }, JWT_SECRET, { expiresIn: '30d' });
+  if (!JWT_SECRET) {
+    throw new Error(
+      "JWT_SECRET is not configured"
+    );
+  }
+
+  return jwt.sign(
+    { id },
+    JWT_SECRET,
+    {
+      expiresIn: "30d",
+    }
+  );
 };
 
-// In-memory fallback store
+// -------------------------------------------------------
+// IN-MEMORY FALLBACK STORES
+// -------------------------------------------------------
+
 const memoryUsers = new Map();
 const memoryProperties = [];
 const memoryVehicles = [];
 const memoryTickets = [];
 const memoryBookings = [];
 
-// System Maintenance & Upgrade State
+// -------------------------------------------------------
+// SYSTEM MAINTENANCE STATE
+// -------------------------------------------------------
+
 let systemMaintenanceState = {
   isMaintenance: false,
-  message: 'Explore Tamil Nadu is undergoing scheduled system upgrades for high-speed performance, live database caching, and enhanced reservation security.',
-  estimatedTime: '30 Minutes',
-  upgradeTitle: 'Platform Upgrade & Performance Optimization in Progress',
-  updatedAt: new Date()
+
+  message:
+    "Explore Tamil Nadu is undergoing scheduled " +
+    "system upgrades for high-speed performance, " +
+    "live database caching, and enhanced " +
+    "reservation security.",
+
+  estimatedTime: "30 Minutes",
+
+  upgradeTitle:
+    "Platform Upgrade & Performance " +
+    "Optimization in Progress",
+
+  updatedAt: new Date(),
 };
 
-// Helper to broadcast socket events immediately
-const broadcast = (req, event, data) => {
+// -------------------------------------------------------
+// SOCKET EVENT BROADCASTER
+// -------------------------------------------------------
+
+const broadcast = (
+  req,
+  event,
+  data
+) => {
   try {
-    const io = req?.app?.get('io');
+    const io = req?.app?.get("io");
+
     if (io) {
       io.emit(event, data);
     }
-  } catch (err) {
-    console.warn('Socket broadcast warning:', err.message);
+  } catch (error) {
+    console.warn(
+      "Socket broadcast warning:",
+      error.message
+    );
   }
 };
 
-// Helper to find user in DB or memory
-const findUserByEmail = async (email) => {
-  if (!email) return null;
-  const normalized = email.toLowerCase().trim();
+// -------------------------------------------------------
+// FIND USER BY EMAIL
+// -------------------------------------------------------
+
+const findUserByEmail = async (
+  email
+) => {
+  if (!email) {
+    return null;
+  }
+
+  const normalized = String(email)
+    .toLowerCase()
+    .trim();
+
   try {
-    if (mongoose.connection.readyState === 1) {
-      const u = await User.findOne({ email: { $regex: new RegExp(`^${normalized}$`, 'i') } }).maxTimeMS(3000);
-      if (u) return u;
+    if (
+      mongoose.connection.readyState === 1
+    ) {
+      const user = await User.findOne({
+        email: normalized,
+      })
+        .select(
+          "_id name email phone avatar " +
+          "role isVerified password"
+        )
+        .lean()
+        .maxTimeMS(3000);
+
+      if (user) {
+        return user;
+      }
     }
-  } catch (e) {}
-  for (const [em, u] of memoryUsers.entries()) {
-    if (em.toLowerCase() === normalized) return u;
+  } catch (error) {
+    console.error(
+      "Find user by email failed:",
+      error.message
+    );
   }
+
+  for (
+    const [storedEmail, user]
+    of memoryUsers.entries()
+  ) {
+    if (
+      storedEmail.toLowerCase() ===
+      normalized
+    ) {
+      return user;
+    }
+  }
+
   return null;
 };
 
-// --- HIGH PERFORMANCE IN-MEMORY ROUTE CACHING ---
-const routeCache = new Map();
-const CACHE_TTL_MS = 30000; // 30 seconds
+// -------------------------------------------------------
+// GMAIL TRANSPORTER
+// -------------------------------------------------------
 
-const getCached = (key) => {
-  const entry = routeCache.get(key);
-  if (entry && Date.now() - entry.timestamp < CACHE_TTL_MS) {
-    return entry.data;
-  }
-  routeCache.delete(key);
-  return null;
-};
-
-const setCached = (key, data) => {
-  routeCache.set(key, { data, timestamp: Date.now() });
-};
-
-const clearCacheByPrefix = (prefix) => {
-  for (const key of routeCache.keys()) {
-    if (key.startsWith(prefix)) {
-      routeCache.delete(key);
-    }
-  }
-};
-
-// --- IMAGE URL SANITIZATION (PREVENT BASE64 BLOAT) ---
-const DEFAULT_HOTEL_IMG = 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=800&q=80';
-const DEFAULT_VEHICLE_IMG = 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80';
-
-const sanitizeImage = (img, fallback = DEFAULT_HOTEL_IMG) => {
-  if (!img || typeof img !== 'string') return fallback;
-  const trimmed = img.trim();
-  if (trimmed.startsWith('data:image/') || trimmed.length > 1000) {
-    return fallback;
-  }
-  return trimmed;
-};
-
-const sanitizeImagesArray = (images, fallback = DEFAULT_HOTEL_IMG) => {
-  if (!Array.isArray(images) || images.length === 0) {
-    return [fallback];
-  }
-  const cleaned = images.map(img => sanitizeImage(img, fallback)).filter(Boolean);
-  return cleaned.length > 0 ? cleaned : [fallback];
-};
-
-// Reusable High-Speed Authenticated Gmail Transporter (Direct SSL Port 465)
 const getGmailTransporter = () => {
-  const user = (process.env.SMTP_EMAIL || 'exploretamizhagam@gmail.com').trim();
-  const pass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASSWORD || '').replace(/\s+/g, '');
+  const user = String(
+    process.env.SMTP_EMAIL || ""
+  ).trim();
+
+  const pass = String(
+    process.env.GMAIL_APP_PASSWORD ||
+    process.env.SMTP_PASSWORD ||
+    ""
+  ).replace(/\s+/g, "");
+
+  if (!user || !pass) {
+    throw new Error(
+      "SMTP_EMAIL and GMAIL_APP_PASSWORD " +
+      "must be configured"
+    );
+  }
+
   return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
+    host: "smtp.gmail.com",
     port: 465,
     secure: true,
-    auth: { user, pass },
-    tls: { rejectUnauthorized: false }
+
+    auth: {
+      user,
+      pass,
+    },
+
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+
+    tls: {
+      rejectUnauthorized: true,
+    },
   });
 };
 
-// Generic Universal Mail Dispatcher (Direct Gmail SMTP + Google Apps Script Webhook Fallback)
-const sendDirectMail = async ({ to, subject, html }) => {
-  if (!to) return null;
-  const normalizedTo = String(to).trim().toLowerCase();
-  if (!normalizedTo || !normalizedTo.includes('@')) return null;
+// -------------------------------------------------------
+// GENERIC EMAIL DISPATCHER
+// -------------------------------------------------------
 
-  const smtpUser = (process.env.SMTP_EMAIL || 'exploretamizhagam@gmail.com').trim();
-
-  // 1. Primary Engine: Direct High-Speed Gmail SMTP (Port 465 SSL)
-  try {
-    const transporter = getGmailTransporter();
-    const info = await transporter.sendMail({
-      from: `"Explore Tamil Nadu Official" <${smtpUser}>`,
-      to: normalizedTo,
-      subject,
-      html
-    });
-    console.log(`✅ [GMAIL SMTP DELIVERED] "${subject}" sent to ${normalizedTo} (ID: ${info.messageId})`);
-    return info;
-  } catch (smtpErr) {
-    console.warn(`⚠️ Gmail SMTP delivery note for ${normalizedTo} (${smtpErr.message}). Attempting Google Apps Script webhook...`);
+const sendDirectMail = async ({
+  to,
+  subject,
+  html,
+}) => {
+  if (!to) {
+    return null;
   }
 
-  // 2. Secondary Fallback: Google Apps Script Webhook (Port 443 HTTPS)
-  const defaultGoogleScriptUrl = 'https://script.google.com/macros/s/AKfycbwyEdpqDFBeRH4ovQUNJOPoB10lZtuEVzGFy8qBkdacvdtt-J_AE2kUSNvDoeCiW-rr/exec';
-  const googleScriptUrl = process.env.GOOGLE_SCRIPT_MAIL_URL || defaultGoogleScriptUrl;
+  const normalizedTo = String(to)
+    .trim()
+    .toLowerCase();
+
+  if (
+    !normalizedTo ||
+    !normalizedTo.includes("@")
+  ) {
+    return null;
+  }
+
+  const smtpUser = String(
+    process.env.SMTP_EMAIL || ""
+  ).trim();
+
+  // Primary email method: Gmail SMTP
+  if (
+    smtpUser &&
+    (
+      process.env.GMAIL_APP_PASSWORD ||
+      process.env.SMTP_PASSWORD
+    )
+  ) {
+    try {
+      const transporter =
+        getGmailTransporter();
+
+      const info =
+        await transporter.sendMail({
+          from:
+            `"Explore Tamil Nadu Official" ` +
+            `<${smtpUser}>`,
+
+          to: normalizedTo,
+          subject,
+          html,
+        });
+
+      console.log(
+        "Email delivered successfully:",
+        info.messageId
+      );
+
+      return info;
+    } catch (smtpError) {
+      console.warn(
+        "Gmail SMTP delivery failed:",
+        smtpError.message
+      );
+    }
+  }
+
+  // Secondary email method:
+  // Google Apps Script webhook
+  const googleScriptUrl = String(
+    process.env
+      .GOOGLE_SCRIPT_MAIL_URL || ""
+  ).trim();
 
   if (googleScriptUrl) {
     try {
-      const gRes = await fetch(googleScriptUrl, {
-        method: 'POST',
-        redirect: 'follow',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ to: normalizedTo, subject, html })
-      });
-      const gData = await gRes.text();
-      console.log(`✅ [GOOGLE APPS SCRIPT DELIVERED] "${subject}" sent to ${normalizedTo}:`, gData);
-      return gData;
-    } catch (gErr) {
-      console.error(`❌ All email dispatch channels failed for ${normalizedTo}:`, gErr.message);
+      const controller =
+        new AbortController();
+
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        15000
+      );
+
+      try {
+        const response = await fetch(
+          googleScriptUrl,
+          {
+            method: "POST",
+            redirect: "follow",
+
+            headers: {
+              "Content-Type":
+                "text/plain;charset=utf-8",
+            },
+
+            body: JSON.stringify({
+              to: normalizedTo,
+              subject,
+              html,
+            }),
+
+            signal: controller.signal,
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `Webhook returned ${response.status}`
+          );
+        }
+
+        const result =
+          await response.text();
+
+        console.log(
+          "Email delivered through webhook"
+        );
+
+        return result;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    } catch (webhookError) {
+      console.error(
+        "Email webhook failed:",
+        webhookError.message
+      );
     }
   }
+
+  console.error(
+    "No email delivery method succeeded"
+  );
+
   return null;
 };
 
-// 🔐 Authentication OTP Verification Email
-const sendVerificationMail = async (toEmail, recipientName, code) => {
+// -------------------------------------------------------
+// AUTHENTICATION OTP EMAIL
+// -------------------------------------------------------
+
+const sendVerificationMail = async (
+  toEmail,
+  recipientName,
+  code
+) => {
+  const safeRecipientName =
+    recipientName || "Traveler";
+
   const mailHtml = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 16px; border: 1px solid #242429;">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <h1 style="color: #070707; font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -0.5px;">Explore Tamil Nadu</h1>
-        <p style="color: #919191; font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 6px;">Authentic Stays & Tourism Platform</p>
-      </div>
-      <div style="background-color: #ffffff; padding: 28px; border-radius: 12px; border: 1px solid rgba(36,36,41,0.15); text-align: center;">
-        <h2 style="color: #242429; font-size: 18px; font-weight: 700; margin-top: 0;">Email Verification Required</h2>
-        <p style="color: #3e3e3e; font-size: 13px; line-height: 1.6; margin-bottom: 20px;">
-          Hello <strong>${recipientName || 'Traveler'}</strong>, welcome to Explore Tamil Nadu! Please use the 6-digit verification code below to verify your email address:
+    <div
+      style="
+        font-family:
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+        max-width: 560px;
+        margin: 0 auto;
+        background-color: #f9f5f2;
+        padding: 32px;
+        border-radius: 16px;
+        border: 1px solid #242429;
+      "
+    >
+      <div
+        style="
+          text-align: center;
+          margin-bottom: 24px;
+        "
+      >
+        <h1
+          style="
+            color: #070707;
+            font-size: 24px;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: -0.5px;
+          "
+        >
+          Explore Tamil Nadu
+        </h1>
+
+        <p
+          style="
+            color: #919191;
+            font-size: 11px;
+            font-family: monospace;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 6px;
+          "
+        >
+          Authentic Stays & Tourism Platform
         </p>
-        <div style="display: inline-block; background-color: #242429; color: #ffffff; font-size: 32px; font-weight: 800; letter-spacing: 8px; padding: 14px 28px; border-radius: 10px; font-family: monospace; margin: 8px 0 20px 0;">
+      </div>
+
+      <div
+        style="
+          background-color: #ffffff;
+          padding: 28px;
+          border-radius: 12px;
+          border:
+            1px solid rgba(36,36,41,0.15);
+          text-align: center;
+        "
+      >
+        <h2
+          style="
+            color: #242429;
+            font-size: 18px;
+            font-weight: 700;
+            margin-top: 0;
+          "
+        >
+          Email Verification Required
+        </h2>
+
+        <p
+          style="
+            color: #3e3e3e;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+          "
+        >
+          Hello
+          <strong>
+            ${safeRecipientName}
+          </strong>,
+          welcome to Explore Tamil Nadu.
+          Use the following six-digit code to
+          verify your email address.
+        </p>
+
+        <div
+          style="
+            display: inline-block;
+            background-color: #242429;
+            color: #ffffff;
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: 8px;
+            padding: 14px 28px;
+            border-radius: 10px;
+            font-family: monospace;
+            margin: 8px 0 20px 0;
+          "
+        >
           ${code}
         </div>
-        <p style="color: #919191; font-size: 11px; line-height: 1.5; margin: 0;">
-          This verification code is valid for 15 minutes. If you did not request this verification, you can safely ignore this email.
+
+        <p
+          style="
+            color: #919191;
+            font-size: 11px;
+            line-height: 1.5;
+            margin: 0;
+          "
+        >
+          This verification code is valid
+          for 15 minutes. If you did not
+          request this verification, you can
+          safely ignore this email.
         </p>
       </div>
-      <div style="text-align: center; margin-top: 24px; color: #919191; font-size: 11px; font-family: monospace;">
-        &copy; 2026 Explore Tamil Nadu Tourism Portal · +91 78717 79134
+
+      <div
+        style="
+          text-align: center;
+          margin-top: 24px;
+          color: #919191;
+          font-size: 11px;
+          font-family: monospace;
+        "
+      >
+        &copy; 2026 Explore Tamil Nadu
+        Tourism Portal
       </div>
     </div>
   `;
 
   await sendDirectMail({
     to: toEmail,
-    subject: `🔐 Your 6-Digit Verification Code: ${code} - Explore Tamil Nadu`,
-    html: mailHtml
+
+    subject:
+      `Your 6-Digit Verification Code: ` +
+      `${code} - Explore Tamil Nadu`,
+
+    html: mailHtml,
+  });
+};
+// -------------------------------------------------------
+// EMAIL HTML HELPERS
+// -------------------------------------------------------
+
+const escapeHtml = (value) => {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+};
+
+const formatCurrency = (value) => {
+  const amount = Number(value || 0);
+
+  return amount.toLocaleString("en-IN", {
+    maximumFractionDigits: 2,
   });
 };
 
-// ⏳ 1. Booking Request Received Email (Pending Verification)
-const sendBookingPendingMail = async (booking) => {
-  const customerEmail = (booking.customerEmail || booking.userEmail || booking.email || '').trim().toLowerCase();
-  const hostEmail = (booking.ownerEmail || booking.providerEmail || booking.hostEmail || '').trim().toLowerCase();
-  const adminEmail = 'exploretamizhagam@gmail.com';
+const createEmailLayout = ({
+  title,
+  subtitle,
+  content,
+}) => {
+  return `
+    <div
+      style="
+        font-family:
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          Arial,
+          sans-serif;
+        max-width: 620px;
+        margin: 0 auto;
+        padding: 30px;
+        background: #f9f5f2;
+        border: 1px solid #242429;
+        border-radius: 18px;
+      "
+    >
+      <div
+        style="
+          text-align: center;
+          margin-bottom: 22px;
+        "
+      >
+        <h1
+          style="
+            margin: 0;
+            color: #070707;
+            font-size: 25px;
+            font-weight: 900;
+          "
+        >
+          Explore Tamil Nadu
+        </h1>
+
+        <p
+          style="
+            margin: 6px 0 0;
+            color: #777777;
+            font-family: monospace;
+            font-size: 11px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+          "
+        >
+          ${escapeHtml(subtitle)}
+        </p>
+      </div>
+
+      <div
+        style="
+          padding: 27px;
+          background: #ffffff;
+          border:
+            1px solid rgba(36,36,41,0.14);
+          border-radius: 14px;
+        "
+      >
+        <h2
+          style="
+            margin: 0 0 18px;
+            color: #111827;
+            font-size: 20px;
+            text-align: center;
+          "
+        >
+          ${escapeHtml(title)}
+        </h2>
+
+        ${content}
+      </div>
+
+      <p
+        style="
+          margin: 22px 0 0;
+          color: #8b8b8b;
+          text-align: center;
+          font-family: monospace;
+          font-size: 11px;
+        "
+      >
+        &copy; 2026 Explore Tamil Nadu
+        Reservations Platform
+        <br />
+        Support: +91 78717 79134
+      </p>
+    </div>
+  `;
+};
+
+const createInformationRow = (
+  label,
+  value,
+  options = {}
+) => {
+  const color =
+    options.color || "#111827";
+
+  return `
+    <tr>
+      <td
+        style="
+          padding: 10px 0;
+          border-bottom: 1px solid #e5e7eb;
+          color: #6b7280;
+          font-size: 12px;
+          font-weight: 700;
+          vertical-align: top;
+        "
+      >
+        ${escapeHtml(label)}
+      </td>
+
+      <td
+        style="
+          padding: 10px 0;
+          border-bottom: 1px solid #e5e7eb;
+          color: ${color};
+          font-size: 12px;
+          font-weight: 800;
+          text-align: right;
+          vertical-align: top;
+        "
+      >
+        ${escapeHtml(value)}
+      </td>
+    </tr>
+  `;
+};
+
+// -------------------------------------------------------
+// NORMALIZE BOOKING INFORMATION
+// -------------------------------------------------------
+
+const getBookingInformation = (
+  booking
+) => {
+  const customerEmail = String(
+    booking.customerEmail ||
+    booking.userEmail ||
+    booking.email ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const vendorEmail = String(
+    booking.ownerEmail ||
+    booking.providerEmail ||
+    booking.hostEmail ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const adminEmail = String(
+    process.env.ADMIN_EMAIL ||
+    "exploretamizhagam@gmail.com"
+  )
+    .trim()
+    .toLowerCase();
 
   const isCab = Boolean(
-    booking.type === 'cab' ||
-    booking.itemType === 'vehicle' ||
-    booking.bookingType === 'cab' ||
+    booking.type === "cab" ||
+    booking.itemType === "vehicle" ||
+    booking.bookingType === "cab" ||
     booking.vehicleRegNo ||
     booking.regNo ||
     booking.pickupLocation
   );
 
-  const title = booking.itemTitle || booking.propertyTitle || booking.title || (isCab ? 'Cab Transport' : 'Resort Stay');
-  const totalAmount = Number(booking.totalAmount || booking.amount || 0);
+  const title =
+    booking.itemTitle ||
+    booking.propertyTitle ||
+    booking.title ||
+    (
+      isCab
+        ? "Cab Transport"
+        : "Resort Stay"
+    );
 
-  console.log(`🚀 [PENDING BOOKING EMAIL] ID: ${booking.bookingId} | Type: ${isCab ? 'Cab' : 'Stay'} | Guest: ${customerEmail} | Host: ${hostEmail}`);
+  const bookingId =
+    booking.bookingId ||
+    booking._id ||
+    booking.id ||
+    "Booking Reference";
 
-  let detailsTable = '';
+  const customerName =
+    booking.customerName ||
+    booking.userName ||
+    booking.name ||
+    "Traveler";
+
+  const totalAmount = Number(
+    booking.totalAmount ||
+    booking.amount ||
+    0
+  );
+
+  return {
+    customerEmail,
+    vendorEmail,
+    adminEmail,
+    isCab,
+    title,
+    bookingId,
+    customerName,
+    totalAmount,
+  };
+};
+
+const createBookingDetailsTable = (
+  booking,
+  information
+) => {
+  const {
+    isCab,
+    title,
+    totalAmount,
+  } = information;
+
+  let rows = "";
+
   if (isCab) {
-    detailsTable = `
-      <tr style="border-bottom: 1px solid #f3f4f6;">
-        <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Vehicle / Cab:</td>
-        <td style="padding: 10px 0; color: #111827; font-weight: 800; text-align: right;">${title} (${booking.vehicleRegNo || booking.regNo || 'Assigned Fleet'})</td>
-      </tr>
-      <tr style="border-bottom: 1px solid #f3f4f6;">
-        <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Pickup & Drop Route:</td>
-        <td style="padding: 10px 0; color: #111827; text-align: right;">${booking.pickupLocation || 'Pickup Stand'} ➔ ${booking.dropLocation || 'Sightseeing Tour'}</td>
-      </tr>
-      <tr style="border-bottom: 1px solid #f3f4f6;">
-        <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Date & Time:</td>
-        <td style="padding: 10px 0; color: #111827; font-weight: bold; text-align: right;">${booking.pickupDate || booking.checkIn || booking.checkInDate || 'Scheduled Date'} at ${booking.pickupTime || '09:00 AM'}</td>
-      </tr>
-      <tr style="border-bottom: 1px solid #f3f4f6;">
-        <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Assigned Chauffeur:</td>
-        <td style="padding: 10px 0; color: #111827; text-align: right;">${booking.driverName || 'Assigned Driver'} (${booking.driverPhone || '+91 78717 79134'})</td>
-      </tr>
-      <tr style="border-bottom: 1px solid #f3f4f6;">
-        <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Passengers:</td>
-        <td style="padding: 10px 0; color: #111827; text-align: right;">${booking.passengerCount || booking.guests || 4} Passenger(s)</td>
-      </tr>
-    `;
+    rows += createInformationRow(
+      "Vehicle / Cab",
+      `${title} (${
+        booking.vehicleRegNo ||
+        booking.regNo ||
+        "Assigned Fleet"
+      })`
+    );
+
+    rows += createInformationRow(
+      "Pickup and Drop",
+      `${
+        booking.pickupLocation ||
+        "Pickup location"
+      } → ${
+        booking.dropLocation ||
+        "Destination"
+      }`
+    );
+
+    rows += createInformationRow(
+      "Pickup Schedule",
+      `${
+        booking.pickupDate ||
+        booking.checkIn ||
+        booking.checkInDate ||
+        "Scheduled date"
+      } at ${
+        booking.pickupTime ||
+        "09:00 AM"
+      }`
+    );
+
+    rows += createInformationRow(
+      "Driver",
+      `${
+        booking.driverName ||
+        "Driver will be assigned"
+      } ${
+        booking.driverPhone
+          ? `(${booking.driverPhone})`
+          : ""
+      }`
+    );
+
+    rows += createInformationRow(
+      "Passengers",
+      `${
+        booking.passengerCount ||
+        booking.guests ||
+        1
+      } passenger(s)`
+    );
   } else {
-    detailsTable = `
-      <tr style="border-bottom: 1px solid #f3f4f6;">
-        <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Property / Stay:</td>
-        <td style="padding: 10px 0; color: #111827; font-weight: 800; text-align: right;">${title}</td>
-      </tr>
-      <tr style="border-bottom: 1px solid #f3f4f6;">
-        <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Location:</td>
-        <td style="padding: 10px 0; color: #111827; text-align: right;">${booking.destination || booking.location || 'Tamil Nadu'}</td>
-      </tr>
-      <tr style="border-bottom: 1px solid #f3f4f6;">
-        <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Check-In & Check-Out:</td>
-        <td style="padding: 10px 0; color: #111827; font-weight: bold; text-align: right;">${booking.checkIn || booking.checkInDate} → ${booking.checkOut || booking.checkOutDate} (${booking.nights || 1} Night(s))</td>
-      </tr>
-      <tr style="border-bottom: 1px solid #f3f4f6;">
-        <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Guest Details:</td>
-        <td style="padding: 10px 0; color: #111827; text-align: right;">${booking.guests || 2} Guest(s)</td>
-      </tr>
-    `;
+    rows += createInformationRow(
+      "Property / Stay",
+      title
+    );
+
+    rows += createInformationRow(
+      "Location",
+      booking.destination ||
+      booking.location ||
+      "Tamil Nadu"
+    );
+
+    rows += createInformationRow(
+      "Check-in",
+      booking.checkIn ||
+      booking.checkInDate ||
+      "Selected date"
+    );
+
+    rows += createInformationRow(
+      "Check-out",
+      booking.checkOut ||
+      booking.checkOutDate ||
+      "Selected date"
+    );
+
+    rows += createInformationRow(
+      "Guests",
+      `${
+        booking.guests ||
+        booking.guestCount ||
+        1
+      } guest(s)`
+    );
+
+    rows += createInformationRow(
+      "Nights",
+      `${
+        booking.nights || 1
+      } night(s)`
+    );
   }
 
-  const customerMailHtml = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 20px; border: 1px solid #242429;">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <h1 style="color: #070707; font-size: 24px; font-weight: 800; margin: 0;">Explore Tamil Nadu</h1>
-        <p style="color: #919191; font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px;">${isCab ? 'Cab Transport Booking' : 'Stay & Resort Reservation'}</p>
-      </div>
+  rows += createInformationRow(
+    "Payment ID",
+    booking.paymentId ||
+    booking.razorpayPaymentId ||
+    "Pending payment reference",
+    {
+      color: "#0284c7",
+    }
+  );
 
-      <div style="background-color: #ffffff; padding: 28px; border-radius: 16px; border: 1px solid rgba(36,36,41,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-        <div style="text-align: center; margin-bottom: 20px;">
-          <span style="display: inline-block; background-color: #fef3c7; color: #92400e; font-size: 11px; font-weight: 800; font-family: monospace; padding: 6px 14px; border-radius: 20px; border: 1px solid #fde68a;">
-            ⏳ STATUS: PENDING HOST AVAILABILITY CONFIRMATION
-          </span>
-        </div>
+  rows += createInformationRow(
+    "Total Amount",
+    `₹${formatCurrency(totalAmount)}`,
+    {
+      color: "#059669",
+    }
+  );
 
-        <h2 style="color: #111827; font-size: 19px; font-weight: 800; margin: 0 0 10px 0; text-align: center;">
-          Booking Request Received: ${booking.bookingId}
-        </h2>
+  return `
+    <table
+      style="
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+        font-family: monospace;
+      "
+    >
+      ${rows}
+    </table>
+  `;
+};
 
-        <p style="color: #4b5563; font-size: 13px; line-height: 1.6; margin-bottom: 20px; text-align: center;">
-          Hello <strong>${booking.customerName || booking.userName || 'Traveler'}</strong>, we have safely received your reservation request and payment of <strong>₹${totalAmount.toLocaleString()}</strong> via Razorpay.
-          The host is validating allocation for your selected schedule.
-        </p>
+// -------------------------------------------------------
+// BOOKING PENDING EMAIL
+// -------------------------------------------------------
 
-        <table style="width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 20px; font-family: monospace;">
-          ${detailsTable}
-          <tr style="border-bottom: 1px solid #f3f4f6;">
-            <td style="padding: 10px 0; color: #6b7280; font-weight: bold;">Payment Method:</td>
-            <td style="padding: 10px 0; color: #0284c7; font-weight: bold; text-align: right;">Razorpay (${booking.paymentId || 'Captured'})</td>
-          </tr>
-          <tr>
-            <td style="padding: 12px 0; color: #111827; font-size: 14px; font-weight: 800;">Total Paid:</td>
-            <td style="padding: 12px 0; color: #059669; font-size: 16px; font-weight: 900; text-align: right;">₹${totalAmount.toLocaleString()}</td>
-          </tr>
-        </table>
+const sendBookingPendingMail = async (
+  booking
+) => {
+  const information =
+    getBookingInformation(booking);
 
-        <div style="background-color: #f8fafc; border-left: 4px solid #f59e0b; padding: 14px; border-radius: 8px; font-size: 12px; color: #334155; line-height: 1.5;">
-          <strong>ℹ️ What Happens Next?</strong> Once confirmed by the host, you will automatically receive an <strong>Official Confirmation Email with your travel voucher/driver pass</strong>.
-        </div>
-      </div>
+  const {
+    customerEmail,
+    vendorEmail,
+    adminEmail,
+    isCab,
+    title,
+    bookingId,
+    customerName,
+    totalAmount,
+  } = information;
 
-      <div style="text-align: center; margin-top: 24px; color: #9ca3af; font-size: 11px; font-family: monospace;">
-        &copy; 2026 Explore Tamil Nadu Reservations Platform · +91 78717 79134
-      </div>
+  const detailsTable =
+    createBookingDetailsTable(
+      booking,
+      information
+    );
+
+  const customerContent = `
+    <div style="text-align: center;">
+      <span
+        style="
+          display: inline-block;
+          padding: 7px 15px;
+          color: #92400e;
+          background: #fef3c7;
+          border: 1px solid #fde68a;
+          border-radius: 20px;
+          font-family: monospace;
+          font-size: 11px;
+          font-weight: 900;
+        "
+      >
+        PENDING HOST CONFIRMATION
+      </span>
+    </div>
+
+    <p
+      style="
+        color: #4b5563;
+        font-size: 13px;
+        line-height: 1.7;
+        text-align: center;
+      "
+    >
+      Hello
+      <strong>
+        ${escapeHtml(customerName)}
+      </strong>,
+      your booking request has been received.
+      The provider is checking availability
+      for your selected schedule.
+    </p>
+
+    <p
+      style="
+        color: #111827;
+        font-size: 13px;
+        text-align: center;
+      "
+    >
+      Booking reference:
+      <strong>
+        ${escapeHtml(bookingId)}
+      </strong>
+    </p>
+
+    ${detailsTable}
+
+    <div
+      style="
+        margin-top: 20px;
+        padding: 14px;
+        color: #334155;
+        background: #f8fafc;
+        border-left: 4px solid #f59e0b;
+        border-radius: 8px;
+        font-size: 12px;
+        line-height: 1.6;
+      "
+    >
+      You will receive another email when
+      the provider confirms your booking.
     </div>
   `;
 
   if (customerEmail) {
     await sendDirectMail({
       to: customerEmail,
-      subject: `⏳ Booking Request Received: ${booking.bookingId} - ${title}`,
-      html: customerMailHtml
+
+      subject:
+        `Booking Request Received: ` +
+        `${bookingId} - ${title}`,
+
+      html: createEmailLayout({
+        title: "Booking Request Received",
+
+        subtitle:
+          isCab
+            ? "Cab Transport Booking"
+            : "Stay Reservation",
+
+        content: customerContent,
+      }),
     });
   }
 
-  // Host notification email
-  const hostRecipients = [hostEmail, adminEmail].filter(Boolean);
-  for (const recipient of hostRecipients) {
-    const hostHtml = `
-      <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; background: #fff; padding: 24px; border: 1px solid #ddd; border-radius: 12px;">
-        <h2 style="color: #b45309; margin-top: 0;">🔔 New ${isCab ? 'Cab Booking' : 'Stay Reservation'} Awaiting Approval</h2>
-        <p><strong>Booking ID:</strong> ${booking.bookingId}</p>
-        <p><strong>Item / Service:</strong> ${title}</p>
-        <p><strong>Customer:</strong> ${booking.customerName || booking.userName} (${customerEmail}, ${booking.customerPhone || ''})</p>
-        <p><strong>Total Amount:</strong> ₹${totalAmount.toLocaleString()}</p>
-        <p>Please log in to your vendor dashboard to review and confirm this booking.</p>
-      </div>
-    `;
+  const providerContent = `
+    <p
+      style="
+        color: #4b5563;
+        font-size: 13px;
+        line-height: 1.7;
+      "
+    >
+      A new ${
+        isCab
+          ? "cab booking"
+          : "stay reservation"
+      } requires review.
+    </p>
+
+    <p>
+      <strong>Booking ID:</strong>
+      ${escapeHtml(bookingId)}
+    </p>
+
+    <p>
+      <strong>Customer:</strong>
+      ${escapeHtml(customerName)}
+    </p>
+
+    <p>
+      <strong>Customer Email:</strong>
+      ${escapeHtml(customerEmail)}
+    </p>
+
+    <p>
+      <strong>Total Amount:</strong>
+      ₹${formatCurrency(totalAmount)}
+    </p>
+
+    ${detailsTable}
+
+    <p
+      style="
+        margin-top: 20px;
+        color: #92400e;
+        font-weight: 800;
+      "
+    >
+      Log in to the dashboard to confirm
+      or reject this request.
+    </p>
+  `;
+
+  const recipients = [
+    ...new Set(
+      [
+        vendorEmail,
+        adminEmail,
+      ].filter(Boolean)
+    ),
+  ];
+
+  for (
+    const recipient
+    of recipients
+  ) {
     await sendDirectMail({
       to: recipient,
-      subject: `🔔 ACTION REQUIRED: New Booking ${booking.bookingId} for ${title}`,
-      html: hostHtml
+
+      subject:
+        `Action Required: Booking ` +
+        `${bookingId} for ${title}`,
+
+      html: createEmailLayout({
+        title: "New Booking Awaiting Review",
+        subtitle: "Provider Notification",
+        content: providerContent,
+      }),
     });
   }
 };
 
-// 🎉 2. Official Booking Confirmed Voucher & Pass Email (Dispatched to Guest, Vendor & Super Admin)
-const sendBookingConfirmedMail = async (booking) => {
-  const customerEmail = (booking.customerEmail || booking.userEmail || booking.email || '').trim().toLowerCase();
-  const vendorEmail = (booking.ownerEmail || booking.providerEmail || booking.hostEmail || '').trim().toLowerCase();
-  const adminEmail = 'exploretamizhagam@gmail.com';
+// -------------------------------------------------------
+// BOOKING CONFIRMED EMAIL
+// -------------------------------------------------------
 
-  const isCab = Boolean(
-    booking.type === 'cab' ||
-    booking.itemType === 'vehicle' ||
-    booking.bookingType === 'cab' ||
-    booking.vehicleRegNo ||
-    booking.regNo ||
-    booking.pickupLocation
-  );
+const sendBookingConfirmedMail = async (
+  booking
+) => {
+  const information =
+    getBookingInformation(booking);
 
-  const title = booking.itemTitle || booking.propertyTitle || booking.title || (isCab ? 'Cab Transport' : 'Resort Stay');
-  const totalAmount = Number(booking.totalAmount || booking.amount || 0);
+  const {
+    customerEmail,
+    vendorEmail,
+    adminEmail,
+    isCab,
+    title,
+    bookingId,
+    customerName,
+  } = information;
 
-  console.log(`🚀 [DISPATCHING CONFIRMATION EMAILS] Booking: ${booking.bookingId} | Type: ${isCab ? 'Cab' : 'Stay'} | Guest: ${customerEmail} | Host: ${vendorEmail}`);
+  const detailsTable =
+    createBookingDetailsTable(
+      booking,
+      information
+    );
 
-  let passDetailsHtml = '';
-  if (isCab) {
-    passDetailsHtml = `
-      <tr style="border-top: 1px solid #e2e8f0;">
-        <td style="padding: 8px 0; color: #64748b;">Vehicle & Plate:</td>
-        <td style="padding: 8px 0; color: #0f172a; font-weight: bold; text-align: right;">${title} (${booking.vehicleRegNo || booking.regNo || 'TN-VERIFIED'})</td>
-      </tr>
-      <tr style="border-top: 1px solid #e2e8f0;">
-        <td style="padding: 8px 0; color: #64748b;">Pickup Route:</td>
-        <td style="padding: 8px 0; color: #0f172a; text-align: right;">${booking.pickupLocation || 'Pickup Stand'} ➔ ${booking.dropLocation || 'Sightseeing Tour'}</td>
-      </tr>
-      <tr style="border-top: 1px solid #e2e8f0;">
-        <td style="padding: 8px 0; color: #64748b;">Pickup Schedule:</td>
-        <td style="padding: 8px 0; color: #047857; font-weight: bold; text-align: right;">${booking.pickupDate || booking.checkIn || booking.checkInDate || 'Scheduled Date'} at ${booking.pickupTime || '09:00 AM'}</td>
-      </tr>
-      <tr style="border-top: 1px solid #e2e8f0;">
-        <td style="padding: 8px 0; color: #64748b;">Assigned Driver:</td>
-        <td style="padding: 8px 0; color: #0f172a; font-weight: bold; text-align: right;">${booking.driverName || 'Assigned Driver'} (${booking.driverPhone || '+91 78717 79134'})</td>
-      </tr>
-      <tr style="border-top: 1px solid #e2e8f0;">
-        <td style="padding: 8px 0; color: #64748b;">Passengers:</td>
-        <td style="padding: 8px 0; color: #0f172a; text-align: right;">${booking.passengerCount || booking.guests || 4} Passenger(s)</td>
-      </tr>
-      <tr style="border-top: 1px solid #e2e8f0;">
-        <td style="padding: 8px 0; color: #64748b;">Payment Status:</td>
-        <td style="padding: 8px 0; color: #0284c7; font-weight: bold; text-align: right;">PAID via Razorpay (${booking.paymentId || 'Completed'})</td>
-      </tr>
-      <tr style="border-top: 2px solid #cbd5e1;">
-        <td style="padding: 10px 0; color: #0f172a; font-size: 14px; font-weight: 900;">Total Fare Paid:</td>
-        <td style="padding: 10px 0; color: #059669; font-size: 18px; font-weight: 900; text-align: right;">₹${totalAmount.toLocaleString()}</td>
-      </tr>
-    `;
-  } else {
-    passDetailsHtml = `
-      <tr style="border-top: 1px solid #e2e8f0;">
-        <td style="padding: 8px 0; color: #64748b;">Host / Property:</td>
-        <td style="padding: 8px 0; color: #0f172a; font-weight: bold; text-align: right;">${title} (${booking.ownerName || 'Property Host'})</td>
-      </tr>
-      <tr style="border-top: 1px solid #e2e8f0;">
-        <td style="padding: 8px 0; color: #64748b;">Location:</td>
-        <td style="padding: 8px 0; color: #0f172a; text-align: right;">${booking.destination || booking.location || 'Tamil Nadu'}</td>
-      </tr>
-      <tr style="border-top: 1px solid #e2e8f0;">
-        <td style="padding: 8px 0; color: #64748b;">Check-In & Check-Out:</td>
-        <td style="padding: 8px 0; color: #047857; font-weight: bold; text-align: right;">${booking.checkIn || booking.checkInDate} → ${booking.checkOut || booking.checkOutDate} (${booking.nights || 1} Night(s))</td>
-      </tr>
-      <tr style="border-top: 1px solid #e2e8f0;">
-        <td style="padding: 8px 0; color: #64748b;">Guests:</td>
-        <td style="padding: 8px 0; color: #0f172a; text-align: right;">${booking.guests || 2} Guest(s)</td>
-      </tr>
-      <tr style="border-top: 1px solid #e2e8f0;">
-        <td style="padding: 8px 0; color: #64748b;">Razorpay Payment:</td>
-        <td style="padding: 8px 0; color: #0284c7; font-weight: bold; text-align: right;">PAID (${booking.paymentId || 'Completed'})</td>
-      </tr>
-      <tr style="border-top: 2px solid #cbd5e1;">
-        <td style="padding: 10px 0; color: #0f172a; font-size: 14px; font-weight: 900;">Total Paid:</td>
-        <td style="padding: 10px 0; color: #059669; font-size: 18px; font-weight: 900; text-align: right;">₹${totalAmount.toLocaleString()}</td>
-      </tr>
-    `;
-  }
+  const guestContent = `
+    <div style="text-align: center;">
+      <span
+        style="
+          display: inline-block;
+          padding: 8px 17px;
+          color: #065f46;
+          background: #d1fae5;
+          border: 1px solid #a7f3d0;
+          border-radius: 20px;
+          font-family: monospace;
+          font-size: 11px;
+          font-weight: 900;
+        "
+      >
+        OFFICIAL BOOKING CONFIRMED
+      </span>
+    </div>
 
-  // 1. Guest Pass HTML
-  const guestMailHtml = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 20px; border: 1px solid #242429;">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <h1 style="color: #070707; font-size: 24px; font-weight: 800; margin: 0;">Explore Tamil Nadu</h1>
-        <p style="color: #919191; font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px;">${isCab ? 'Official Cab Transport Pass' : 'Official Hotel Voucher'}</p>
+    <p
+      style="
+        color: #4b5563;
+        font-size: 13px;
+        line-height: 1.7;
+        text-align: center;
+      "
+    >
+      Dear
+      <strong>
+        ${escapeHtml(customerName)}
+      </strong>,
+      your ${
+        isCab
+          ? "cab booking"
+          : "stay reservation"
+      } has been officially confirmed.
+    </p>
+
+    <div
+      style="
+        margin: 20px 0;
+        padding: 18px;
+        text-align: center;
+        background: #f8fafc;
+        border: 2px dashed #059669;
+        border-radius: 12px;
+      "
+    >
+      <div
+        style="
+          color: #64748b;
+          font-family: monospace;
+          font-size: 10px;
+          font-weight: 800;
+        "
+      >
+        BOOKING REFERENCE
       </div>
 
-      <div style="background-color: #ffffff; padding: 28px; border-radius: 16px; border: 1px solid rgba(36,36,41,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-        <div style="text-align: center; margin-bottom: 20px;">
-          <span style="display: inline-block; background-color: #d1fae5; color: #065f46; font-size: 12px; font-weight: 900; font-family: monospace; padding: 8px 18px; border-radius: 20px; border: 1px solid #a7f3d0;">
-            🎉 OFFICIAL BOOKING CONFIRMED
-          </span>
-        </div>
-
-        <h2 style="color: #111827; font-size: 21px; font-weight: 900; margin: 0 0 8px 0; text-align: center;">
-          ${title}
-        </h2>
-
-        <p style="color: #4b5563; font-size: 13px; line-height: 1.6; margin-bottom: 20px; text-align: center;">
-          Dear <strong>${booking.customerName || booking.userName || 'Traveler'}</strong>, your ${isCab ? 'cab transport booking' : 'stay reservation'} has been <strong>officially confirmed</strong>! Please present this confirmation pass or your Booking ID.
-        </p>
-
-        <div style="background-color: #f8fafc; border: 2px dashed #059669; border-radius: 14px; padding: 20px; margin-bottom: 24px;">
-          <div style="text-align: center; margin-bottom: 16px;">
-            <span style="font-size: 11px; color: #64748b; font-family: monospace; font-weight: bold;">OFFICIAL BOOKING REFERENCE ID</span>
-            <div style="font-size: 26px; font-weight: 900; color: #0f172a; font-family: monospace; letter-spacing: 2px;">
-              ${booking.bookingId}
-            </div>
-          </div>
-
-          <table style="width: 100%; border-collapse: collapse; font-size: 12px; font-family: monospace;">
-            ${passDetailsHtml}
-          </table>
-        </div>
-
-        <div style="text-align: center;">
-          <a href="https://frontend-blond-iota-kzel6q4tzd.vercel.app/dashboard/user" style="display: inline-block; background-color: #242429; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: bold; padding: 12px 24px; border-radius: 24px;">
-            Open My Bookings Dashboard
-          </a>
-        </div>
+      <div
+        style="
+          margin-top: 6px;
+          color: #0f172a;
+          font-family: monospace;
+          font-size: 23px;
+          font-weight: 900;
+          letter-spacing: 1px;
+        "
+      >
+        ${escapeHtml(bookingId)}
       </div>
+    </div>
 
-      <div style="text-align: center; margin-top: 24px; color: #9ca3af; font-size: 11px; font-family: monospace;">
-        &copy; 2026 Explore Tamil Nadu Reservations Platform · +91 78717 79134
-      </div>
+    ${detailsTable}
+
+    <div
+      style="
+        margin-top: 22px;
+        text-align: center;
+      "
+    >
+      <a
+        href="${
+          process.env.FRONTEND_URL ||
+          "https://frontend-blond-iota-kzel6q4tzd.vercel.app"
+        }/dashboard/user"
+        style="
+          display: inline-block;
+          padding: 12px 23px;
+          color: #ffffff;
+          background: #242429;
+          border-radius: 24px;
+          text-decoration: none;
+          font-size: 12px;
+          font-weight: 800;
+        "
+      >
+        Open My Bookings
+      </a>
     </div>
   `;
 
-  // 1. Send Stay/Cab Pass to Guest
   if (customerEmail) {
     await sendDirectMail({
       to: customerEmail,
-      subject: `🎉 OFFICIAL BOOKING CONFIRMED: ${booking.bookingId} - ${title}`,
-      html: guestMailHtml
+
+      subject:
+        `Booking Confirmed: ` +
+        `${bookingId} - ${title}`,
+
+      html: createEmailLayout({
+        title: title,
+
+        subtitle:
+          isCab
+            ? "Official Cab Transport Pass"
+            : "Official Stay Voucher",
+
+        content: guestContent,
+      }),
     });
   }
 
-  // 2. Send Notification to Vendor / Fleet Provider
-  if (vendorEmail && vendorEmail !== customerEmail) {
+  const providerContent = `
+    <p
+      style="
+        color: #4b5563;
+        font-size: 13px;
+        line-height: 1.7;
+      "
+    >
+      Booking
+      <strong>
+        ${escapeHtml(bookingId)}
+      </strong>
+      has been confirmed successfully.
+    </p>
+
+    <p>
+      <strong>Customer:</strong>
+      ${escapeHtml(customerName)}
+    </p>
+
+    <p>
+      <strong>Service:</strong>
+      ${escapeHtml(title)}
+    </p>
+
+    ${detailsTable}
+  `;
+
+  const providerRecipients = [
+    ...new Set(
+      [
+        vendorEmail,
+        adminEmail,
+      ].filter(Boolean)
+    ),
+  ];
+
+  for (
+    const recipient
+    of providerRecipients
+  ) {
     await sendDirectMail({
-      to: vendorEmail,
-      subject: `✅ GUEST RESERVATION CONFIRMED: ${booking.bookingId} - ${title}`,
-      html: guestMailHtml
+      to: recipient,
+
+      subject:
+        `Booking Confirmed: ` +
+        `${bookingId} - ${title}`,
+
+      html: createEmailLayout({
+        title: "Booking Confirmed",
+        subtitle: "Provider Confirmation",
+        content: providerContent,
+      }),
+    });
+  }
+};
+
+// -------------------------------------------------------
+// PROPERTY EMAIL HELPERS
+// -------------------------------------------------------
+
+const getPropertyInformation = (
+  property
+) => {
+  const ownerEmail = String(
+    property.ownerEmail ||
+    property.email ||
+    property.contactEmail ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const adminEmail = String(
+    process.env.ADMIN_EMAIL ||
+    "exploretamizhagam@gmail.com"
+  )
+    .trim()
+    .toLowerCase();
+
+  const title =
+    property.title ||
+    property.name ||
+    property.propertyName ||
+    "New Property";
+
+  const ownerName =
+    property.ownerName ||
+    property.hostName ||
+    property.contactName ||
+    "Property Partner";
+
+  const location =
+    property.location ||
+    property.city ||
+    property.destination ||
+    "Tamil Nadu";
+
+  const propertyType =
+    property.propertyType ||
+    property.type ||
+    "Property";
+
+  const propertyId =
+    property._id ||
+    property.id ||
+    "Pending ID";
+
+  return {
+    ownerEmail,
+    adminEmail,
+    title,
+    ownerName,
+    location,
+    propertyType,
+    propertyId,
+  };
+};
+
+const createPropertyDetails = (
+  property
+) => {
+  const information =
+    getPropertyInformation(property);
+
+  const {
+    title,
+    ownerName,
+    location,
+    propertyType,
+    propertyId,
+  } = information;
+
+  return `
+    <table
+      style="
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 18px;
+        font-family: monospace;
+      "
+    >
+      ${createInformationRow(
+        "Property ID",
+        propertyId
+      )}
+
+      ${createInformationRow(
+        "Property Name",
+        title
+      )}
+
+      ${createInformationRow(
+        "Property Type",
+        propertyType
+      )}
+
+      ${createInformationRow(
+        "Location",
+        location
+      )}
+
+      ${createInformationRow(
+        "Owner / Host",
+        ownerName
+      )}
+
+      ${createInformationRow(
+        "Contact Number",
+        property.ownerPhone ||
+        property.phone ||
+        property.contactPhone ||
+        "Not provided"
+      )}
+
+      ${createInformationRow(
+        "Price Per Night",
+        `₹${formatCurrency(
+          property.pricePerNight ||
+          property.price ||
+          0
+        )}`,
+        {
+          color: "#059669",
+        }
+      )}
+
+      ${createInformationRow(
+        "Current Status",
+        property.status ||
+        "Pending Approval",
+        {
+          color: "#b45309",
+        }
+      )}
+    </table>
+  `;
+};
+
+// -------------------------------------------------------
+// PROPERTY SUBMITTED EMAIL
+// -------------------------------------------------------
+
+const sendPropertySubmittedMail = async (
+  property
+) => {
+  const information =
+    getPropertyInformation(property);
+
+  const {
+    ownerEmail,
+    adminEmail,
+    title,
+    ownerName,
+    propertyId,
+  } = information;
+
+  const propertyDetails =
+    createPropertyDetails(property);
+
+  const ownerContent = `
+    <div style="text-align: center;">
+      <span
+        style="
+          display: inline-block;
+          padding: 7px 15px;
+          color: #92400e;
+          background: #fef3c7;
+          border: 1px solid #fde68a;
+          border-radius: 20px;
+          font-family: monospace;
+          font-size: 11px;
+          font-weight: 900;
+        "
+      >
+        PROPERTY REVIEW PENDING
+      </span>
+    </div>
+
+    <p
+      style="
+        color: #4b5563;
+        font-size: 13px;
+        line-height: 1.7;
+        text-align: center;
+      "
+    >
+      Hello
+      <strong>
+        ${escapeHtml(ownerName)}
+      </strong>,
+      your property submission has been
+      received successfully.
+    </p>
+
+    <p
+      style="
+        color: #4b5563;
+        font-size: 13px;
+        line-height: 1.7;
+        text-align: center;
+      "
+    >
+      Our verification team will review the
+      property details before making the
+      listing publicly available.
+    </p>
+
+    ${propertyDetails}
+
+    <div
+      style="
+        margin-top: 20px;
+        padding: 14px;
+        color: #334155;
+        background: #f8fafc;
+        border-left: 4px solid #f59e0b;
+        border-radius: 8px;
+        font-size: 12px;
+        line-height: 1.6;
+      "
+    >
+      You will receive another email when
+      your property is approved.
+    </div>
+  `;
+
+  if (ownerEmail) {
+    await sendDirectMail({
+      to: ownerEmail,
+
+      subject:
+        `Property Submission Received: ` +
+        `${title}`,
+
+      html: createEmailLayout({
+        title:
+          "Property Submission Received",
+
+        subtitle:
+          "Property Partner Centre",
+
+        content: ownerContent,
+      }),
     });
   }
 
-  // 3. Send Official Record to Super Admin
-  if (adminEmail && adminEmail !== customerEmail && adminEmail !== vendorEmail) {
+  const adminContent = `
+    <p
+      style="
+        color: #4b5563;
+        font-size: 13px;
+        line-height: 1.7;
+      "
+    >
+      A new property has been submitted and
+      requires verification.
+    </p>
+
+    <p>
+      <strong>Submission ID:</strong>
+      ${escapeHtml(propertyId)}
+    </p>
+
+    ${propertyDetails}
+
+    <p
+      style="
+        margin-top: 20px;
+        color: #92400e;
+        font-weight: 800;
+      "
+    >
+      Open the Super Admin property
+      management page to approve or reject
+      this submission.
+    </p>
+  `;
+
+  if (adminEmail) {
     await sendDirectMail({
       to: adminEmail,
-      subject: `👑 [ADMIN LOG] Reservation Confirmed: ${booking.bookingId} - ${title}`,
-      html: guestMailHtml
+
+      subject:
+        `New Property Requires Review: ` +
+        `${title}`,
+
+      html: createEmailLayout({
+        title:
+          "New Property Submission",
+
+        subtitle:
+          "Super Admin Notification",
+
+        content: adminContent,
+      }),
     });
   }
 };
 
-// 🏡 3. Property Submission Received Mail (When Host Adds Property)
-const sendPropertySubmittedMail = async (property) => {
-  if (!property) return;
-  const ownerEmail = (property.ownerEmail || property.providerEmail || property.email || '').trim().toLowerCase();
-  const propTitle = property.title || 'Your Property';
-  const propLocation = property.location || property.district || 'Tamil Nadu';
-
-  console.log(`🚀 [PROPERTY SUBMISSION EMAIL] Dispatching to Host: ${ownerEmail || 'admin'} for "${propTitle}"`);
-
-  const mailHtml = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 20px; border: 1px solid #242429;">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <h1 style="color: #070707; font-size: 24px; font-weight: 800; margin: 0;">Explore Tamil Nadu</h1>
-        <p style="color: #919191; font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px;">Host Listing Registration</p>
-      </div>
-
-      <div style="background-color: #ffffff; padding: 28px; border-radius: 16px; border: 1px solid rgba(36,36,41,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-        <div style="text-align: center; margin-bottom: 20px;">
-          <span style="display: inline-block; background-color: #fef3c7; color: #92400e; font-size: 11px; font-weight: 800; font-family: monospace; padding: 6px 14px; border-radius: 20px; border: 1px solid #fde68a;">
-            ⏳ LISTING UNDER VERIFICATION
-          </span>
-        </div>
-
-        <h2 style="color: #111827; font-size: 20px; font-weight: 900; margin: 0 0 10px 0; text-align: center;">
-          Property Listing Received: "${propTitle}"
-        </h2>
-
-        <p style="color: #4b5563; font-size: 13px; line-height: 1.6; margin-bottom: 20px; text-align: center;">
-          Hello <strong>${property.ownerName || property.providerName || 'Property Host'}</strong>, we have safely received your property listing application for <strong>"${propTitle}"</strong> (${propLocation}). Our team is reviewing the property photos, amenities, and location details.
-        </p>
-
-        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin-bottom: 20px; font-family: monospace; font-size: 12px;">
-          <div style="padding-bottom: 8px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Property:</span>
-            <strong style="color: #0f172a;">${propTitle}</strong>
-          </div>
-          <div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Location:</span>
-            <span style="color: #0f172a;">${propLocation}</span>
-          </div>
-          <div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Tariff:</span>
-            <strong style="color: #059669;">₹${Number(property.pricePerNight || property.price || 3800).toLocaleString()} / night</strong>
-          </div>
-          <div style="padding-top: 8px; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Status:</span>
-            <strong style="color: #d97706;">⏳ Pending Admin Review</strong>
-          </div>
-        </div>
-
-        <p style="font-size: 12px; color: #64748b; text-align: center; margin-bottom: 20px;">
-          Once verified, your listing will be published live on Explore Tamil Nadu and you will receive an instant approval notification email.
-        </p>
-
-        <div style="text-align: center;">
-          <a href="https://frontend-blond-iota-kzel6q4tzd.vercel.app/dashboard/vendor" style="display: inline-block; background-color: #242429; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: bold; padding: 12px 24px; border-radius: 24px;">
-            Open Vendor Dashboard
-          </a>
-        </div>
-      </div>
-
-      <div style="text-align: center; margin-top: 24px; color: #9ca3af; font-size: 11px; font-family: monospace;">
-        &copy; 2026 Explore Tamil Nadu Reservations Platform · +91 78717 79134
-      </div>
-    </div>
-  `;
-
-  if (ownerEmail) {
-    await sendDirectMail({
-      to: ownerEmail,
-      subject: `🏡 Property Registration Received: "${propTitle}" - Under Review`,
-      html: mailHtml
-    });
-  }
-
-  // Super Admin Alert
-  await sendDirectMail({
-    to: 'exploretamizhagam@gmail.com',
-    subject: `🔔 [NEW PROPERTY LISTED] "${propTitle}" by ${ownerEmail || 'Host'} Awaiting Approval`,
-    html: mailHtml
-  });
-};
-
-// 🏡 4. Property Onboarding & Listing Approved Mail (When Admin Approves Property)
-const sendPropertyOnboardingApprovedMail = async (property) => {
-  if (!property) return;
-  const ownerEmail = (property.ownerEmail || property.providerEmail || property.email || '').trim().toLowerCase();
-  const propTitle = property.title || 'Your Property';
-  const propLocation = property.location || property.district || 'Tamil Nadu';
-  const propPrice = property.pricePerNight || property.price || 3800;
-
-  console.log(`🚀 [PROPERTY ONBOARDING EMAIL] Dispatching to Host: ${ownerEmail || 'admin fallback'} for "${propTitle}"`);
-
-  const mailHtml = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 20px; border: 1px solid #242429;">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <h1 style="color: #070707; font-size: 24px; font-weight: 800; margin: 0;">Explore Tamil Nadu</h1>
-        <p style="color: #919191; font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px;">Host & Property Onboarding Activation</p>
-      </div>
-
-      <div style="background-color: #ffffff; padding: 28px; border-radius: 16px; border: 1px solid rgba(36,36,41,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-        <div style="text-align: center; margin-bottom: 20px;">
-          <span style="display: inline-block; background-color: #dcfce7; color: #15803d; font-size: 12px; font-weight: 900; font-family: monospace; padding: 8px 18px; border-radius: 20px; border: 1px solid #86efac;">
-            🟢 LISTING OFFICIALLY APPROVED & LIVE
-          </span>
-        </div>
-
-        <h2 style="color: #111827; font-size: 20px; font-weight: 900; margin: 0 0 10px 0; text-align: center;">
-          Congratulations! "${propTitle}" is Now Live
-        </h2>
-
-        <p style="color: #4b5563; font-size: 13px; line-height: 1.6; margin-bottom: 20px; text-align: center;">
-          Hello <strong>${property.ownerName || property.providerName || 'Property Host'}</strong>, your property listing has been <strong>reviewed, verified, and officially activated</strong> on the Explore Tamil Nadu curated tourism catalog. Tourists from across the world can now discover and book your stay!
-        </p>
-
-        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin-bottom: 20px; font-family: monospace; font-size: 12px;">
-          <div style="padding-bottom: 8px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Property:</span>
-            <strong style="color: #0f172a;">${propTitle} (${property.type || 'Resort / Stay'})</strong>
-          </div>
-          <div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Location:</span>
-            <span style="color: #0f172a;">${propLocation}</span>
-          </div>
-          <div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Nightly Tariff:</span>
-            <strong style="color: #059669;">₹${Number(propPrice).toLocaleString()} / night</strong>
-          </div>
-          <div style="padding-top: 8px; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Verification Status:</span>
-            <strong style="color: #16a34a;">✓ Approved & Live</strong>
-          </div>
-        </div>
-
-        <div style="text-align: center;">
-          <a href="https://frontend-blond-iota-kzel6q4tzd.vercel.app/dashboard/vendor" style="display: inline-block; background-color: #242429; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: bold; padding: 12px 24px; border-radius: 24px;">
-            Open Host Dashboard & Manage Bookings
-          </a>
-        </div>
-      </div>
-
-      <div style="text-align: center; margin-top: 24px; color: #9ca3af; font-size: 11px; font-family: monospace;">
-        &copy; 2026 Explore Tamil Nadu Reservations Platform · +91 78717 79134
-      </div>
-    </div>
-  `;
-
-  if (ownerEmail) {
-    await sendDirectMail({
-      to: ownerEmail,
-      subject: `🎉 ONBOARDING APPROVED: "${propTitle}" is Live on Explore Tamil Nadu!`,
-      html: mailHtml
-    });
-  }
-
-  // Admin log copy
-  await sendDirectMail({
-    to: 'exploretamizhagam@gmail.com',
-    subject: `👑 [HOST ONBOARDED] Property Approved: "${propTitle}" (${ownerEmail || 'Host'})`,
-    html: mailHtml
-  });
-};
-
-// 🚖 5. Vehicle Submission Received Mail (When Host Adds Vehicle)
-const sendVehicleSubmittedMail = async (vehicle) => {
-  if (!vehicle) return;
-  const ownerEmail = (vehicle.providerEmail || vehicle.ownerEmail || vehicle.email || '').trim().toLowerCase();
-  const vehTitle = vehicle.title || 'Your Vehicle';
-  const regNo = vehicle.registrationNumber || vehicle.regNo || vehicle.numberPlate || 'Pending Registration';
-  const vehLocation = vehicle.location || vehicle.district || 'Tamil Nadu';
-
-  console.log(`🚀 [VEHICLE SUBMISSION EMAIL] Dispatching to Host: ${ownerEmail || 'admin'} for "${vehTitle}" (${regNo})`);
-
-  const mailHtml = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 20px; border: 1px solid #242429;">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <h1 style="color: #070707; font-size: 24px; font-weight: 800; margin: 0;">Explore Tamil Nadu</h1>
-        <p style="color: #919191; font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px;">Vehicle Transport Fleet Onboarding</p>
-      </div>
-
-      <div style="background-color: #ffffff; padding: 28px; border-radius: 16px; border: 1px solid rgba(36,36,41,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-        <div style="text-align: center; margin-bottom: 20px;">
-          <span style="display: inline-block; background-color: #fef3c7; color: #92400e; font-size: 11px; font-weight: 800; font-family: monospace; padding: 6px 14px; border-radius: 20px; border: 1px solid #fde68a;">
-            ⏳ FLEET REGISTRATION UNDER REVIEW
-          </span>
-        </div>
-
-        <h2 style="color: #111827; font-size: 20px; font-weight: 900; margin: 0 0 10px 0; text-align: center;">
-          Vehicle Registration Received: "${vehTitle}"
-        </h2>
-
-        <p style="color: #4b5563; font-size: 13px; line-height: 1.6; margin-bottom: 20px; text-align: center;">
-          Hello <strong>${vehicle.providerName || vehicle.ownerName || 'Vehicle Owner'}</strong>, we have safely received your vehicle registration for <strong>"${vehTitle}" (${regNo})</strong>. Our transport operations team is reviewing your RC details and driver license documentation.
-        </p>
-
-        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin-bottom: 20px; font-family: monospace; font-size: 12px;">
-          <div style="padding-bottom: 8px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Vehicle:</span>
-            <strong style="color: #0f172a;">${vehTitle} (${vehicle.type || 'Cab'})</strong>
-          </div>
-          <div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Registration Plate:</span>
-            <strong style="color: #0284c7;">${regNo}</strong>
-          </div>
-          <div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Operating District:</span>
-            <span style="color: #0f172a;">${vehLocation}</span>
-          </div>
-          <div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Daily Tariff:</span>
-            <strong style="color: #059669;">₹${Number(vehicle.pricePerDay || vehicle.price || 3500).toLocaleString()} / day</strong>
-          </div>
-          <div style="padding-top: 8px; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Status:</span>
-            <strong style="color: #d97706;">⏳ Pending Admin Approval</strong>
-          </div>
-        </div>
-
-        <p style="font-size: 12px; color: #64748b; text-align: center; margin-bottom: 20px;">
-          Once approved, your vehicle will appear in the customer Cabs catalog and tourists will be able to book rides immediately.
-        </p>
-
-        <div style="text-align: center;">
-          <a href="https://frontend-blond-iota-kzel6q4tzd.vercel.app/dashboard/vendor" style="display: inline-block; background-color: #242429; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: bold; padding: 12px 24px; border-radius: 24px;">
-            Open Fleet Dashboard
-          </a>
-        </div>
-      </div>
-
-      <div style="text-align: center; margin-top: 24px; color: #9ca3af; font-size: 11px; font-family: monospace;">
-        &copy; 2026 Explore Tamil Nadu Reservations Platform · +91 78717 79134
-      </div>
-    </div>
-  `;
-
-  if (ownerEmail) {
-    await sendDirectMail({
-      to: ownerEmail,
-      subject: `🚖 Vehicle Registration Received: "${vehTitle}" (${regNo}) - Under Review`,
-      html: mailHtml
-    });
-  }
-
-  // Super Admin Alert
-  await sendDirectMail({
-    to: 'exploretamizhagam@gmail.com',
-    subject: `🔔 [NEW VEHICLE REGISTERED] "${vehTitle}" (${regNo}) by ${ownerEmail || 'Host'} Awaiting Approval`,
-    html: mailHtml
-  });
-};
-
-// 🚖 6. Vehicle Onboarding & Fleet Activation Approved Mail (When Admin Approves Vehicle)
-const sendVehicleOnboardingApprovedMail = async (vehicle) => {
-  if (!vehicle) return;
-  const ownerEmail = (vehicle.providerEmail || vehicle.ownerEmail || vehicle.email || '').trim().toLowerCase();
-  const vehTitle = vehicle.title || 'Your Vehicle';
-  const regNo = vehicle.registrationNumber || vehicle.regNo || vehicle.numberPlate || 'Verified Transport';
-  const vehLocation = vehicle.location || vehicle.district || 'Tamil Nadu';
-  const dailyPrice = vehicle.pricePerDay || vehicle.price || 3500;
-
-  console.log(`🚀 [VEHICLE ONBOARDING EMAIL] Dispatching to Fleet Provider: ${ownerEmail || 'admin fallback'} for "${vehTitle}" (${regNo})`);
-
-  const mailHtml = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 20px; border: 1px solid #242429;">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <h1 style="color: #070707; font-size: 24px; font-weight: 800; margin: 0;">Explore Tamil Nadu</h1>
-        <p style="color: #919191; font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px;">Vehicle Transport Fleet Onboarding & Activation</p>
-      </div>
-
-      <div style="background-color: #ffffff; padding: 28px; border-radius: 16px; border: 1px solid rgba(36,36,41,0.15); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-        <div style="text-align: center; margin-bottom: 20px;">
-          <span style="display: inline-block; background-color: #dcfce7; color: #15803d; font-size: 12px; font-weight: 900; font-family: monospace; padding: 8px 18px; border-radius: 20px; border: 1px solid #86efac;">
-            🟢 CAB & VEHICLE OFFICIALLY APPROVED & LIVE
-          </span>
-        </div>
-
-        <h2 style="color: #111827; font-size: 20px; font-weight: 900; margin: 0 0 10px 0; text-align: center;">
-          Vehicle "${vehTitle}" is Active for Bookings
-        </h2>
-
-        <p style="color: #4b5563; font-size: 13px; line-height: 1.6; margin-bottom: 20px; text-align: center;">
-          Hello <strong>${vehicle.providerName || vehicle.ownerName || 'Vehicle Owner'}</strong>, your vehicle and transport listing has been <strong>approved and activated</strong> on Explore Tamil Nadu! Tourists can now book your cab for hill station tours, airport pickups, and outstation trips.
-        </p>
-
-        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; margin-bottom: 20px; font-family: monospace; font-size: 12px;">
-          <div style="padding-bottom: 8px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Vehicle:</span>
-            <strong style="color: #0f172a;">${vehTitle} (${vehicle.type || 'Cab'})</strong>
-          </div>
-          <div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Reg No / Plate:</span>
-            <strong style="color: #0284c7;">${regNo}</strong>
-          </div>
-          <div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Operating Location:</span>
-            <span style="color: #0f172a;">${vehLocation}</span>
-          </div>
-          <div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Daily Tariff:</span>
-            <strong style="color: #059669;">₹${Number(dailyPrice).toLocaleString()} / day</strong>
-          </div>
-          <div style="padding-top: 8px; display: flex; justify-content: space-between;">
-            <span style="color: #64748b;">Safety & Driver Policy:</span>
-            <strong style="color: #16a34a;">✓ RC & Insurance Verified · Zero-Tolerance Policy</strong>
-          </div>
-        </div>
-
-        <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 14px; margin-bottom: 20px; font-size: 11px; color: #991b1b; line-height: 1.5;">
-          <strong>⚠️ Driver Safety & Conduct Reminder:</strong>
-          The assigned driver must maintain a valid commercial/driving license and strictly comply with the platform's <strong>Zero-Tolerance Substance Policy</strong> (No Smoking, No Alcohol, No Drugs, No Pan Masala, Hans, or Cool Lip in front of passengers or inside the vehicle).
-        </div>
-
-        <div style="text-align: center;">
-          <a href="https://frontend-blond-iota-kzel6q4tzd.vercel.app/dashboard/vendor" style="display: inline-block; background-color: #242429; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: bold; padding: 12px 24px; border-radius: 24px;">
-            Open Transport Dashboard & Fleet
-          </a>
-        </div>
-      </div>
-
-      <div style="text-align: center; margin-top: 24px; color: #9ca3af; font-size: 11px; font-family: monospace;">
-        &copy; 2026 Explore Tamil Nadu Reservations Platform · +91 78717 79134
-      </div>
-    </div>
-  `;
-
-  if (ownerEmail) {
-    await sendDirectMail({
-      to: ownerEmail,
-      subject: `🎉 ONBOARDING APPROVED: Vehicle "${vehTitle}" (${regNo}) is Active on Explore Tamil Nadu!`,
-      html: mailHtml
-    });
-  }
-
-  // Admin log copy
-  await sendDirectMail({
-    to: 'exploretamizhagam@gmail.com',
-    subject: `👑 [FLEET ONBOARDED] Vehicle Approved: "${vehTitle}" (${regNo}) - ${ownerEmail || 'Owner'}`,
-    html: mailHtml
-  });
-};
-
-// --- AUTHENTICATION & DIRECT MONGODB ATLAS USER SYNC ---
-
-router.post('/auth/register', async (req, res) => {
-  const { name, email, password, phone, role, accountType } = req.body;
-  try {
-    if (!email) {
-      return res.status(400).json({ message: 'Email address is required.' });
-    }
-
-    const normalizedEmail = email.toLowerCase().trim();
-    const isSuperAdmin = (normalizedEmail === 'exploretamizhagam@gmail.com');
-    
-    // Map Account Type
-    let userRole = 'user';
-    if (isSuperAdmin) {
-      userRole = 'super_admin';
-    } else if (accountType === 'Property Owner' || accountType === 'owner' || role === 'owner') {
-      userRole = 'owner';
-    } else if (role) {
-      userRole = role;
-    }
-
-    const userName = isSuperAdmin ? 'Jeeva Veeramani' : (name || normalizedEmail.split('@')[0]);
-
-    let user = null;
-    if (mongoose.connection.readyState === 1) {
-      user = await User.findOneAndUpdate(
-        { email: normalizedEmail },
-        {
-          $setOnInsert: {
-            password: password || 'ExploreTN2026',
-            phone: phone || '+91 78717 79134'
-          },
-          $set: {
-            name: userName,
-            role: userRole,
-            isVerified: true,
-            authProvider: 'local'
-          }
-        },
-        { new: true, upsert: true, setDefaultsOnInsert: true }
-      );
-    }
-
-    if (!user) {
-      user = {
-        _id: 'usr-' + Date.now(),
-        name: userName,
-        email: normalizedEmail,
-        phone: phone || '+91 78717 79134',
-        role: userRole,
-        isVerified: true,
-        authProvider: 'local'
-      };
-      memoryUsers.set(normalizedEmail, user);
-    }
-
-    const userIdStr = user._id ? user._id.toString() : 'usr-' + Date.now();
-    const token = generateToken(userIdStr);
-
-    console.log(`✅ [USER REGISTERED IN ATLAS] ${normalizedEmail} (${userRole}) [AccountType: ${accountType || 'Buyer'}]`);
-
-    // Broadcast live user registration & stats update
-    broadcast(req, 'new_user_registered', { email: normalizedEmail, name: user.name, role: userRole });
-    broadcast(req, 'stats_updated', {});
-
-    res.status(201).json({
-      _id: userIdStr,
-      id: userIdStr,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-      token,
-      alreadyVerified: true,
-      message: 'Account created successfully! Welcome to Explore Tamil Nadu.'
-    });
-  } catch (err) {
-    console.error('Registration error:', err);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- GOOGLE SIGN IN (DIRECT 1-CLICK MONGODB ATLAS USER STORAGE & LOGIN) ---
-router.post('/auth/google', async (req, res) => {
-  const { email, name, avatar, picture } = req.body;
-  try {
-    if (!email) {
-      return res.status(400).json({ message: 'Google email address is required.' });
-    }
-
-    const normalizedEmail = email.toLowerCase().trim();
-    const isSuperAdmin = (normalizedEmail === 'exploretamizhagam@gmail.com');
-    const userRole = isSuperAdmin ? 'super_admin' : 'user';
-    const userName = isSuperAdmin ? 'Jeeva Veeramani' : (name || normalizedEmail.split('@')[0]);
-
-    let user = null;
-    if (mongoose.connection.readyState === 1) {
-      // Find existing user first to preserve promoted role (e.g. if Super Admin made them owner)
-      const existing = await User.findOne({ email: normalizedEmail });
-      const finalRole = isSuperAdmin ? 'super_admin' : (existing?.role || userRole);
-
-      user = await User.findOneAndUpdate(
-        { email: normalizedEmail },
-        {
-          $setOnInsert: {
-            password: 'GoogleAuthVerifiedUser2026',
-            phone: '+91 78717 79134'
-          },
-          $set: {
-            name: existing?.name || userName,
-            role: finalRole,
-            isVerified: true,
-            authProvider: 'google',
-            avatar: avatar || picture || existing?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb'
-          }
-        },
-        { new: true, upsert: true, setDefaultsOnInsert: true }
-      );
-    }
-
-    if (!user) {
-      const existingMem = memoryUsers.get(normalizedEmail);
-      user = {
-        _id: 'usr-' + Date.now(),
-        name: existingMem?.name || userName,
-        email: normalizedEmail,
-        phone: existingMem?.phone || '+91 78717 79134',
-        role: isSuperAdmin ? 'super_admin' : (existingMem?.role || 'user'),
-        isVerified: true,
-        authProvider: 'google',
-        avatar: avatar || picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb'
-      };
-      memoryUsers.set(normalizedEmail, user);
-    }
-
-    const userIdStr = user._id ? user._id.toString() : 'usr-' + Date.now();
-    const token = generateToken(userIdStr);
-
-    console.log(`⚡ [GOOGLE AUTH PERSISTED IN ATLAS] ${normalizedEmail} (${user.role})`);
-
-    // Broadcast live user registration & stats update
-    broadcast(req, 'new_user_registered', { email: normalizedEmail, name: user.name, role: user.role });
-    broadcast(req, 'stats_updated', {});
-
-    return res.json({
-      _id: userIdStr,
-      id: userIdStr,
-      name: user.name,
-      email: user.email,
-      phone: user.phone || '+91 78717 79134',
-      role: user.role || 'user',
-      avatar: user.avatar,
-      token,
-      alreadyVerified: true,
-      message: 'Successfully signed in with Google!'
-    });
-  } catch (err) {
-    console.error('Google Auth error:', err);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- GOOGLE IDENTITY SERVICES (GIS) / OAUTH 2.0 TOKEN VERIFICATION ---
-router.post('/auth/google-oauth', async (req, res) => {
-  const { credential, client_id } = req.body;
-  try {
-    if (!credential) {
-      return res.status(400).json({ message: 'Google credential (ID token) is required.' });
-    }
-
-    let payload = null;
-    try {
-      const ticket = await googleClient.verifyIdToken({
-        idToken: credential,
-        audience: GOOGLE_CLIENT_ID || client_id
+// -------------------------------------------------------
+// PROPERTY APPROVED EMAIL
+// -------------------------------------------------------
+
+const sendPropertyOnboardingApprovedMail =
+  async (property) => {
+    const information =
+      getPropertyInformation(property);
+
+    const {
+      ownerEmail,
+      adminEmail,
+      title,
+      ownerName,
+    } = information;
+
+    const propertyDetails =
+      createPropertyDetails({
+        ...property,
+        status: "Approved",
       });
-      payload = ticket.getPayload();
-    } catch (verifyErr) {
-      try {
-        const decoded = jwt.decode(credential);
-        if (decoded && decoded.email) {
-          payload = decoded;
-        } else {
-          throw verifyErr;
+
+    const content = `
+      <div style="text-align: center;">
+        <span
+          style="
+            display: inline-block;
+            padding: 8px 17px;
+            color: #065f46;
+            background: #d1fae5;
+            border: 1px solid #a7f3d0;
+            border-radius: 20px;
+            font-family: monospace;
+            font-size: 11px;
+            font-weight: 900;
+          "
+        >
+          PROPERTY APPROVED
+        </span>
+      </div>
+
+      <p
+        style="
+          color: #4b5563;
+          font-size: 13px;
+          line-height: 1.7;
+          text-align: center;
+        "
+      >
+        Hello
+        <strong>
+          ${escapeHtml(ownerName)}
+        </strong>,
+        your property
+        <strong>
+          ${escapeHtml(title)}
+        </strong>
+        has been approved.
+      </p>
+
+      <p
+        style="
+          color: #4b5563;
+          font-size: 13px;
+          line-height: 1.7;
+          text-align: center;
+        "
+      >
+        Your listing can now be displayed to
+        travelers on Explore Tamil Nadu.
+      </p>
+
+      ${propertyDetails}
+
+      <div
+        style="
+          margin-top: 22px;
+          text-align: center;
+        "
+      >
+        <a
+          href="${
+            process.env.FRONTEND_URL ||
+            "https://frontend-blond-iota-kzel6q4tzd.vercel.app"
+          }/owner"
+          style="
+            display: inline-block;
+            padding: 12px 23px;
+            color: #ffffff;
+            background: #242429;
+            border-radius: 24px;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 800;
+          "
+        >
+          Open Property Owner Centre
+        </a>
+      </div>
+    `;
+
+    if (ownerEmail) {
+      await sendDirectMail({
+        to: ownerEmail,
+
+        subject:
+          `Property Approved: ${title}`,
+
+        html: createEmailLayout({
+          title:
+            "Property Onboarding Approved",
+
+          subtitle:
+            "Property Partner Activation",
+
+          content,
+        }),
+      });
+    }
+
+    if (
+      adminEmail &&
+      adminEmail !== ownerEmail
+    ) {
+      await sendDirectMail({
+        to: adminEmail,
+
+        subject:
+          `Property Activated: ${title}`,
+
+        html: createEmailLayout({
+          title:
+            "Property Listing Activated",
+
+          subtitle:
+            "Super Admin Confirmation",
+
+          content,
+        }),
+      });
+    }
+  };
+
+// -------------------------------------------------------
+// VEHICLE EMAIL HELPERS
+// -------------------------------------------------------
+
+const getVehicleInformation = (
+  vehicle
+) => {
+  const ownerEmail = String(
+    vehicle.ownerEmail ||
+    vehicle.email ||
+    vehicle.contactEmail ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
+
+  const adminEmail = String(
+    process.env.ADMIN_EMAIL ||
+    "exploretamizhagam@gmail.com"
+  )
+    .trim()
+    .toLowerCase();
+
+  const title =
+    vehicle.title ||
+    vehicle.vehicleName ||
+    vehicle.name ||
+    vehicle.model ||
+    "New Vehicle";
+
+  const ownerName =
+    vehicle.ownerName ||
+    vehicle.providerName ||
+    vehicle.driverName ||
+    "Vehicle Partner";
+
+  const registrationNumber =
+    vehicle.registrationNumber ||
+    vehicle.vehicleRegNo ||
+    vehicle.regNo ||
+    "Not provided";
+
+  const vehicleType =
+    vehicle.vehicleType ||
+    vehicle.type ||
+    vehicle.category ||
+    "Cab";
+
+  const location =
+    vehicle.location ||
+    vehicle.city ||
+    vehicle.operatingCity ||
+    "Tamil Nadu";
+
+  const vehicleId =
+    vehicle._id ||
+    vehicle.id ||
+    "Pending ID";
+
+  return {
+    ownerEmail,
+    adminEmail,
+    title,
+    ownerName,
+    registrationNumber,
+    vehicleType,
+    location,
+    vehicleId,
+  };
+};
+
+const createVehicleDetails = (
+  vehicle
+) => {
+  const information =
+    getVehicleInformation(vehicle);
+
+  const {
+    title,
+    ownerName,
+    registrationNumber,
+    vehicleType,
+    location,
+    vehicleId,
+  } = information;
+
+  return `
+    <table
+      style="
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 18px;
+        font-family: monospace;
+      "
+    >
+      ${createInformationRow(
+        "Vehicle ID",
+        vehicleId
+      )}
+
+      ${createInformationRow(
+        "Vehicle",
+        title
+      )}
+
+      ${createInformationRow(
+        "Vehicle Type",
+        vehicleType
+      )}
+
+      ${createInformationRow(
+        "Registration",
+        registrationNumber
+      )}
+
+      ${createInformationRow(
+        "Operating Location",
+        location
+      )}
+
+      ${createInformationRow(
+        "Owner / Provider",
+        ownerName
+      )}
+
+      ${createInformationRow(
+        "Contact Number",
+        vehicle.ownerPhone ||
+        vehicle.phone ||
+        vehicle.driverPhone ||
+        "Not provided"
+      )}
+
+      ${createInformationRow(
+        "Price",
+        `₹${formatCurrency(
+          vehicle.pricePerDay ||
+          vehicle.pricePerKm ||
+          vehicle.price ||
+          0
+        )}`,
+        {
+          color: "#059669",
         }
-      } catch (e) {
-        return res.status(401).json({ message: 'Invalid Google OAuth Token: ' + verifyErr.message });
-      }
-    }
+      )}
 
-    if (!payload || !payload.email) {
-      return res.status(400).json({ message: 'Could not extract Google account email.' });
-    }
-
-    const { sub: googleId, email, name, picture } = payload;
-    const normalizedEmail = email.toLowerCase().trim();
-    const isSuperAdmin = (normalizedEmail === 'exploretamizhagam@gmail.com');
-
-    let user = null;
-    if (mongoose.connection.readyState === 1) {
-      const existing = await User.findOne({ email: normalizedEmail });
-      const finalRole = isSuperAdmin ? 'super_admin' : (existing?.role || 'user');
-
-      user = await User.findOneAndUpdate(
-        { email: normalizedEmail },
+      ${createInformationRow(
+        "Current Status",
+        vehicle.status ||
+        "Pending Approval",
         {
-          $setOnInsert: {
-            password: 'GoogleOAuthVerifiedUser2026',
-            phone: '+91 78717 79134'
-          },
-          $set: {
-            name: existing?.name || (isSuperAdmin ? 'Jeeva Veeramani' : (name || normalizedEmail.split('@')[0])),
-            role: finalRole,
-            googleId,
-            authProvider: 'google',
-            isVerified: true,
-            avatar: picture || existing?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb'
-          }
-        },
-        { new: true, upsert: true, setDefaultsOnInsert: true }
-      );
-    }
-
-    if (!user) {
-      const existingMem = memoryUsers.get(normalizedEmail);
-      user = {
-        _id: 'usr-' + Date.now(),
-        name: existingMem?.name || (isSuperAdmin ? 'Jeeva Veeramani' : (name || normalizedEmail.split('@')[0])),
-        email: normalizedEmail,
-        phone: existingMem?.phone || '+91 78717 79134',
-        role: isSuperAdmin ? 'super_admin' : (existingMem?.role || 'user'),
-        googleId,
-        authProvider: 'google',
-        isVerified: true,
-        avatar: picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb'
-      };
-      memoryUsers.set(normalizedEmail, user);
-    }
-
-    const userIdStr = user._id ? user._id.toString() : 'usr-' + Date.now();
-    const sessionToken = generateToken(userIdStr);
-
-    broadcast(req, 'new_user_registered', { email: normalizedEmail, name: user.name, role: user.role });
-    broadcast(req, 'stats_updated', {});
-
-    res.json({
-      _id: userIdStr,
-      id: userIdStr,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: user.role || 'user',
-      avatar: user.avatar,
-      token: sessionToken,
-      alreadyVerified: true,
-      message: 'Google authentication successful! Welcome to Explore Tamil Nadu.'
-    });
-  } catch (err) {
-    res.status(500).json({ message: 'Google OAuth error: ' + err.message });
-  }
-});
-
-router.post('/auth/login', async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    if (!email) {
-      return res.status(400).json({ message: 'Email is required.' });
-    }
-
-    const normalizedEmail = email.toLowerCase().trim();
-
-    // Super Admin Credentials Validation
-    if (normalizedEmail === 'exploretamizhagam@gmail.com') {
-      let adminUser = null;
-      try {
-        if (mongoose.connection.readyState === 1) {
-          adminUser = await User.findOneAndUpdate(
-            { email: normalizedEmail },
-            {
-              $set: {
-                name: 'Jeeva Veeramani',
-                role: 'super_admin',
-                isVerified: true,
-                authProvider: 'local'
-              }
-            },
-            { new: true, upsert: true, setDefaultsOnInsert: true }
-          );
+          color: "#b45309",
         }
-      } catch (e) {}
+      )}
+    </table>
+  `;
+};
 
-      return res.json({
-        _id: adminUser?._id?.toString() || 'super-admin-jeeva',
-        name: 'Jeeva Veeramani',
-        email: 'exploretamizhagam@gmail.com',
-        phone: '+91 78717 79134',
-        role: 'super_admin',
-        token: generateToken(adminUser?._id?.toString() || 'super-admin-jeeva'),
-        alreadyVerified: true
-      });
-    }
+// -------------------------------------------------------
+// VEHICLE SUBMITTED EMAIL
+// -------------------------------------------------------
 
-    let user = await findUserByEmail(normalizedEmail);
+const sendVehicleSubmittedMail = async (
+  vehicle
+) => {
+  const information =
+    getVehicleInformation(vehicle);
 
-    if (!user) {
-      // Auto create user if not exists
-      if (mongoose.connection.readyState === 1) {
-        user = await User.create({
-          name: normalizedEmail.split('@')[0],
-          email: normalizedEmail,
-          password: password || 'ExploreTN2026',
-          phone: '+91 78717 79134',
-          role: 'user',
-          isVerified: true
-        });
-      } else {
-        user = {
-          _id: 'usr-' + Date.now(),
-          name: normalizedEmail.split('@')[0],
-          email: normalizedEmail,
-          phone: '+91 78717 79134',
-          role: 'user',
-          isVerified: true
-        };
-        memoryUsers.set(normalizedEmail, user);
-      }
-    }
+  const {
+    ownerEmail,
+    adminEmail,
+    title,
+    ownerName,
+  } = information;
 
-    const userIdStr = user._id ? user._id.toString() : 'usr-' + Date.now();
+  const vehicleDetails =
+    createVehicleDetails(vehicle);
 
-    res.json({
-      _id: userIdStr,
-      id: userIdStr,
-      name: user.name,
-      email: user.email,
-      phone: user.phone || '+91 78717 79134',
-      role: user.role || 'user',
-      token: generateToken(userIdStr),
-      alreadyVerified: true
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- CURRENT USER PROFILE & LIVE ROLE SYNC ---
-router.get('/auth/me', async (req, res) => {
-  try {
-    const email = req.query.email || req.headers['x-user-email'];
-    if (!email) {
-      return res.status(400).json({ message: 'Email required' });
-    }
-    const normalized = email.toLowerCase().trim();
-    const user = await findUserByEmail(normalized);
-
-    if (normalized === 'exploretamizhagam@gmail.com') {
-      return res.json({
-        _id: user?._id || 'super-admin-jeeva',
-        name: user?.name || 'Jeeva Veeramani',
-        email: 'exploretamizhagam@gmail.com',
-        phone: user?.phone || '+91 78717 79134',
-        avatar: user?.avatar || '',
-        role: 'super_admin'
-      });
-    }
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    return res.json({
-      _id: user._id || user.id || 'usr-' + Date.now(),
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      avatar: user.avatar || '',
-      role: user.role || 'user',
-      isVerified: user.isVerified !== false
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// In-memory OTP store for password reset
-const passwordResetOtpStore = new Map();
-
-// Helper to send password reset OTP
-const sendPasswordResetMail = async (toEmail, recipientName, code) => {
-  const mailHtml = `
-    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 560px; margin: 0 auto; background-color: #f9f5f2; padding: 32px; border-radius: 16px; border: 1px solid #242429;">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <h1 style="color: #070707; font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -0.5px;">Explore Tamil Nadu</h1>
-        <p style="color: #919191; font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 6px;">Security & Account Protection</p>
-      </div>
-      <div style="background-color: #ffffff; padding: 28px; border-radius: 12px; border: 1px solid rgba(36,36,41,0.15); text-align: center;">
-        <h2 style="color: #242429; font-size: 18px; font-weight: 700; margin-top: 0;">🔐 Password Change Verification Code</h2>
-        <p style="color: #3e3e3e; font-size: 13px; line-height: 1.6; margin-bottom: 20px;">
-          Hello <strong>${recipientName || 'Member'}</strong>, a password change was requested for your Explore Tamil Nadu account (<code>${toEmail}</code>). Please use the 6-digit verification code below to verify and complete your password change:
-        </p>
-        <div style="display: inline-block; background-color: #242429; color: #ffffff; font-size: 32px; font-weight: 800; letter-spacing: 8px; padding: 14px 28px; border-radius: 10px; font-family: monospace; margin: 8px 0 20px 0;">
-          ${code}
-        </div>
-        <p style="color: #919191; font-size: 11px; line-height: 1.5; margin: 0;">
-          This security code expires in 15 minutes. If you did not request this change, you can safely ignore this email.
-        </p>
-      </div>
-      <div style="text-align: center; margin-top: 24px; color: #919191; font-size: 11px; font-family: monospace;">
-        &copy; 2026 Explore Tamil Nadu Tourism Portal. All rights reserved.
-      </div>
+  const ownerContent = `
+    <div style="text-align: center;">
+      <span
+        style="
+          display: inline-block;
+          padding: 7px 15px;
+          color: #92400e;
+          background: #fef3c7;
+          border: 1px solid #fde68a;
+          border-radius: 20px;
+          font-family: monospace;
+          font-size: 11px;
+          font-weight: 900;
+        "
+      >
+        VEHICLE REVIEW PENDING
+      </span>
     </div>
+
+    <p
+      style="
+        color: #4b5563;
+        font-size: 13px;
+        line-height: 1.7;
+        text-align: center;
+      "
+    >
+      Hello
+      <strong>
+        ${escapeHtml(ownerName)}
+      </strong>,
+      your vehicle partnership submission
+      has been received.
+    </p>
+
+    <p
+      style="
+        color: #4b5563;
+        font-size: 13px;
+        line-height: 1.7;
+        text-align: center;
+      "
+    >
+      Our verification team will review the
+      vehicle and partner information before
+      activation.
+    </p>
+
+    ${vehicleDetails}
   `;
 
-  const smtpUser = process.env.SMTP_EMAIL || 'exploretamizhagam@gmail.com';
-  const smtpPass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASSWORD || '').replace(/\s+/g, '');
+  if (ownerEmail) {
+    await sendDirectMail({
+      to: ownerEmail,
 
-  try {
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: { user: smtpUser, pass: smtpPass },
-      tls: { rejectUnauthorized: false }
+      subject:
+        `Vehicle Submission Received: ` +
+        `${title}`,
+
+      html: createEmailLayout({
+        title:
+          "Vehicle Submission Received",
+
+        subtitle:
+          "Transport Partner Centre",
+
+        content: ownerContent,
+      }),
     });
+  }
 
-    const info = await transporter.sendMail({
-      from: `"Explore Tamil Nadu Security" <${smtpUser}>`,
-      to: toEmail,
-      subject: `🔐 Your 6-Digit Password Change Verification Code: ${code}`,
-      html: mailHtml
+  const adminContent = `
+    <p
+      style="
+        color: #4b5563;
+        font-size: 13px;
+        line-height: 1.7;
+      "
+    >
+      A new vehicle partnership submission
+      requires verification.
+    </p>
+
+    ${vehicleDetails}
+
+    <p
+      style="
+        margin-top: 20px;
+        color: #92400e;
+        font-weight: 800;
+      "
+    >
+      Open the Super Admin vehicle
+      management page to review it.
+    </p>
+  `;
+
+  if (adminEmail) {
+    await sendDirectMail({
+      to: adminEmail,
+
+      subject:
+        `New Vehicle Requires Review: ` +
+        `${title}`,
+
+      html: createEmailLayout({
+        title:
+          "New Vehicle Submission",
+
+        subtitle:
+          "Super Admin Notification",
+
+        content: adminContent,
+      }),
     });
+  }
+};
 
-    console.log(`✅ [PASSWORD OTP DELIVERED] 6-digit code ${code} sent to ${toEmail} (ID: ${info.messageId})`);
-    return true;
-  } catch (smtpErr) {
-    console.error(`⚠️ Password OTP email error for ${toEmail}:`, smtpErr.message);
+// -------------------------------------------------------
+// VEHICLE APPROVED EMAIL
+// -------------------------------------------------------
+
+const sendVehicleOnboardingApprovedMail =
+  async (vehicle) => {
+    const information =
+      getVehicleInformation(vehicle);
+
+    const {
+      ownerEmail,
+      adminEmail,
+      title,
+      ownerName,
+    } = information;
+
+    const vehicleDetails =
+      createVehicleDetails({
+        ...vehicle,
+        status: "Approved",
+      });
+
+    const content = `
+      <div style="text-align: center;">
+        <span
+          style="
+            display: inline-block;
+            padding: 8px 17px;
+            color: #065f46;
+            background: #d1fae5;
+            border: 1px solid #a7f3d0;
+            border-radius: 20px;
+            font-family: monospace;
+            font-size: 11px;
+            font-weight: 900;
+          "
+        >
+          VEHICLE APPROVED
+        </span>
+      </div>
+
+      <p
+        style="
+          color: #4b5563;
+          font-size: 13px;
+          line-height: 1.7;
+          text-align: center;
+        "
+      >
+        Hello
+        <strong>
+          ${escapeHtml(ownerName)}
+        </strong>,
+        your vehicle
+        <strong>
+          ${escapeHtml(title)}
+        </strong>
+        has been approved.
+      </p>
+
+      <p
+        style="
+          color: #4b5563;
+          font-size: 13px;
+          line-height: 1.7;
+          text-align: center;
+        "
+      >
+        The vehicle is now active on the
+        Explore Tamil Nadu transport
+        platform.
+      </p>
+
+      ${vehicleDetails}
+
+      <div
+        style="
+          margin-top: 22px;
+          text-align: center;
+        "
+      >
+        <a
+          href="${
+            process.env.FRONTEND_URL ||
+            "https://frontend-blond-iota-kzel6q4tzd.vercel.app"
+          }/dashboard/vendor"
+          style="
+            display: inline-block;
+            padding: 12px 23px;
+            color: #ffffff;
+            background: #242429;
+            border-radius: 24px;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 800;
+          "
+        >
+          Open Transport Dashboard
+        </a>
+      </div>
+    `;
+
+    if (ownerEmail) {
+      await sendDirectMail({
+        to: ownerEmail,
+
+        subject:
+          `Vehicle Approved: ${title}`,
+
+        html: createEmailLayout({
+          title:
+            "Vehicle Partnership Approved",
+
+          subtitle:
+            "Transport Partner Activation",
+
+          content,
+        }),
+      });
+    }
+
+    if (
+      adminEmail &&
+      adminEmail !== ownerEmail
+    ) {
+      await sendDirectMail({
+        to: adminEmail,
+
+        subject:
+          `Vehicle Activated: ${title}`,
+
+        html: createEmailLayout({
+          title:
+            "Vehicle Listing Activated",
+
+          subtitle:
+            "Super Admin Confirmation",
+
+          content,
+        }),
+      });
+    }
+  };
+
+// -------------------------------------------------------
+// AUTHENTICATION HELPERS
+// -------------------------------------------------------
+
+const normalizeEmail = (email) => {
+  return String(email || "")
+    .trim()
+    .toLowerCase();
+};
+
+const createPublicUser = (
+  user,
+  includeToken = false
+) => {
+  const userId = String(
+    user?._id ||
+    user?.id ||
+    `usr-${Date.now()}`
+  );
+
+  const result = {
+    _id: userId,
+    id: userId,
+    name: user?.name || "Member",
+    email: user?.email || "",
+    phone: user?.phone || "",
+    avatar: user?.avatar || "",
+    role: user?.role || "user",
+    isVerified:
+      user?.isVerified !== false,
+  };
+
+  if (includeToken) {
+    result.token =
+      generateToken(userId);
+  }
+
+  return result;
+};
+
+const checkUserPassword = async (
+  user,
+  password
+) => {
+  if (!user || !password) {
     return false;
   }
+
+  if (
+    typeof user.matchPassword ===
+    "function"
+  ) {
+    return user.matchPassword(password);
+  }
+
+  if (
+    typeof user.comparePassword ===
+    "function"
+  ) {
+    return user.comparePassword(password);
+  }
+
+  // This fallback only supports schemas that
+  // do not hash passwords. A hashed User model
+  // should provide matchPassword/comparePassword.
+  return user.password === password;
 };
 
-// --- 1. UPDATE USER PROFILE (NAME, PHONE, AVATAR PICTURE) ---
-router.put('/users/profile', async (req, res) => {
-  try {
-    const { email, name, phone, avatar } = req.body;
-    if (!email) {
-      return res.status(400).json({ message: 'User email is required' });
-    }
+const saveGoogleUser = async ({
+  email,
+  name,
+  picture,
+  googleId,
+}) => {
+  const normalizedEmail =
+    normalizeEmail(email);
 
-    const normalizedEmail = email.toLowerCase().trim();
-    let updatedUser = null;
+  if (!normalizedEmail) {
+    throw new Error(
+      "Google account email is required"
+    );
+  }
 
-    if (mongoose.connection.readyState === 1) {
-      const updateData = {};
-      if (name) updateData.name = name;
-      if (phone) updateData.phone = phone;
-      if (avatar !== undefined) updateData.avatar = avatar;
+  if (
+    mongoose.connection.readyState !== 1
+  ) {
+    throw new Error(
+      "Database is temporarily unavailable"
+    );
+  }
 
-      updatedUser = await User.findOneAndUpdate(
-        { email: normalizedEmail },
-        { $set: updateData },
-        { new: true, upsert: true }
-      );
-    }
+  const existing =
+    await User.findOne({
+      email: normalizedEmail,
+    }).maxTimeMS(5000);
 
-    if (!updatedUser) {
-      const existing = memoryUsers.get(normalizedEmail) || {};
-      updatedUser = {
-        ...existing,
+  const isConfiguredAdmin =
+    normalizedEmail ===
+    normalizeEmail(
+      process.env.SUPER_ADMIN_EMAIL
+    );
+
+  const finalRole = isConfiguredAdmin
+    ? "super_admin"
+    : existing?.role || "user";
+
+  const update = {
+    name:
+      existing?.name ||
+      name ||
+      normalizedEmail.split("@")[0],
+
+    role: finalRole,
+    googleId,
+    authProvider: "google",
+    isVerified: true,
+
+    avatar:
+      picture ||
+      existing?.avatar ||
+      "",
+  };
+
+  const user =
+    await User.findOneAndUpdate(
+      {
         email: normalizedEmail,
-        name: name || existing.name || normalizedEmail.split('@')[0],
-        phone: phone || existing.phone || '+91 78717 79134',
-        avatar: avatar !== undefined ? avatar : (existing.avatar || '')
-      };
-      memoryUsers.set(normalizedEmail, updatedUser);
-    }
+      },
+      {
+        $set: update,
 
-    // Broadcast user update & notification
-    broadcast(req, 'user_updated', updatedUser);
-    broadcast(req, 'new_notification', {
-      userEmail: normalizedEmail,
-      title: '📸 Profile Picture & Info Updated',
-      message: 'Your profile picture and account details have been updated and saved.',
-      date: 'Just now'
-    });
-
-    res.json({
-      success: true,
-      message: 'Profile updated successfully!',
-      user: {
-        _id: updatedUser._id || 'usr-' + Date.now(),
-        name: updatedUser.name,
-        email: updatedUser.email,
-        phone: updatedUser.phone,
-        avatar: updatedUser.avatar,
-        role: updatedUser.role
+        $setOnInsert: {
+          email: normalizedEmail,
+          phone: "",
+        },
+      },
+      {
+        new: true,
+        upsert: true,
+        setDefaultsOnInsert: true,
       }
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
+    ).maxTimeMS(5000);
 
-// --- 2. REQUEST PASSWORD RESET OTP CODE VIA EMAIL ---
-router.post('/users/request-password-otp', async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ message: 'Email address is required' });
-    }
-
-    const normalizedEmail = email.toLowerCase().trim();
-    const user = await findUserByEmail(normalizedEmail);
-    const userName = user ? user.name : 'Member';
-
-    // Generate 6-Digit Code
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
-
-    passwordResetOtpStore.set(normalizedEmail, {
-      code: otpCode,
-      expiresAt
-    });
-
-    // Send Mail
-    await sendPasswordResetMail(normalizedEmail, userName, otpCode);
-
-    // Broadcast security alert
-    broadcast(req, 'new_notification', {
-      userEmail: normalizedEmail,
-      title: '🔐 Password OTP Requested',
-      message: 'A 6-digit verification code was sent to your email to verify password change.',
-      date: 'Just now'
-    });
-
-    res.json({
-      success: true,
-      message: `A 6-digit verification code has been sent to ${normalizedEmail}`
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- 3. VERIFY OTP AND UPDATE NEW PASSWORD ---
-router.post('/users/verify-password-otp-and-update', async (req, res) => {
-  try {
-    const { email, otpCode, newPassword } = req.body;
-    if (!email || !otpCode || !newPassword) {
-      return res.status(400).json({ message: 'Email, verification code, and new password are required' });
-    }
-
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: 'New password must be at least 6 characters long' });
-    }
-
-    const normalizedEmail = email.toLowerCase().trim();
-    const stored = passwordResetOtpStore.get(normalizedEmail);
-
-    // Validate OTP
-    if (!stored || stored.code !== otpCode.trim() || Date.now() > stored.expiresAt) {
-      return res.status(400).json({ message: 'Invalid or expired 6-digit verification code. Please request a new code.' });
-    }
-
-    // Update in MongoDB Atlas
-    if (mongoose.connection.readyState === 1) {
-      const user = await User.findOne({ email: normalizedEmail });
-      if (user) {
-        user.password = newPassword;
-        await user.save();
-      }
-    }
-
-    // Invalidate OTP
-    passwordResetOtpStore.delete(normalizedEmail);
-
-    // Broadcast notification
-    broadcast(req, 'new_notification', {
-      userEmail: normalizedEmail,
-      title: '🛡️ Password Changed Successfully',
-      message: 'Your account password has been updated and verified via email. Your account is secured.',
-      date: 'Just now'
-    });
-
-    res.json({
-      success: true,
-      message: 'Password updated and verified successfully! Your account is secured.'
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- 4. TRIGGER REAL-TIME NOTIFICATION EVENT ---
-router.post('/notifications/trigger', async (req, res) => {
-  try {
-    const { userEmail, title, message, type } = req.body;
-    if (!title || !message) {
-      return res.status(400).json({ message: 'Title and message are required' });
-    }
-
-    const notifObj = {
-      id: 'notif-' + Date.now(),
-      title,
-      message,
-      type: type || 'info',
-      date: 'Just now',
-      read: false
-    };
-
-    if (userEmail && mongoose.connection.readyState === 1) {
-      try {
-        await User.updateOne(
-          { email: userEmail.toLowerCase().trim() },
-          { $push: { notifications: { $each: [notifObj], $position: 0 } } }
-        );
-      } catch (e) {}
-    }
-
-    broadcast(req, 'new_notification', {
-      userEmail: userEmail ? userEmail.toLowerCase().trim() : null,
-      ...notifObj
-    });
-
-    res.json({ success: true, notification: notifObj });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- ULTRA FAST CONSOLIDATED DASHBOARD DATA (PARALLEL FETCH & PROJECTIONS UNDER 150MS) ---
-router.get('/admin/dashboard-data', async (req, res) => {
-  try {
-    const cacheKey = 'admin_dashboard_summary';
-    const cached = getCached(cacheKey);
-    if (cached) {
-      return res.json(cached);
-    }
-
-    let stats = {
-      totalUsers: 0,
-      totalBookings: 0,
-      pendingBookings: 0,
-      cancelledBookings: 0,
-      activeTrips: 0,
-      totalProperties: 0,
-      hotelsCount: 0,
-      homestaysCount: 0,
-      resortsCount: 0,
-      guidesCount: 0,
-      vendorsCount: 0,
-      totalRevenue: 0,
-      recentUsersList: [],
-      recentBookingsList: []
-    };
-    let users = [];
-    let bookings = [];
-    let properties = [];
-    let vehicles = [];
-    let staff = [];
-    let tickets = [];
-
-    if (mongoose.connection.readyState === 1) {
-      try {
-        const [
-          totalUsersCount,
-          totalBookingsCount,
-          pendingBookingsCount,
-          cancelledBookingsCount,
-          activeTripsCount,
-          totalPropertiesCount,
-          hotelsCount,
-          homestaysCount,
-          resortsCount,
-          guidesCount,
-          vendorsCount,
-          revenueAgg,
-          dbUsers,
-          dbBookings,
-          dbProperties,
-          dbVehicles,
-          dbStaff,
-          dbTickets
-        ] = await Promise.all([
-          User.countDocuments({ email: { $ne: 'exploretamizhagam@gmail.com' } }).maxTimeMS(5000).catch(() => 0),
-          Booking.countDocuments({}).maxTimeMS(5000).catch(() => 0),
-          Booking.countDocuments({ status: 'Pending Approval' }).maxTimeMS(5000).catch(() => 0),
-          Booking.countDocuments({ status: 'Cancelled' }).maxTimeMS(5000).catch(() => 0),
-          Booking.countDocuments({ status: { $in: ['Confirmed', 'In Progress'] } }).maxTimeMS(5000).catch(() => 0),
-          Property.countDocuments({}).maxTimeMS(5000).catch(() => 0),
-          Property.countDocuments({ type: { $regex: /hotel/i } }).maxTimeMS(5000).catch(() => 0),
-          Property.countDocuments({ type: { $regex: /home/i } }).maxTimeMS(5000).catch(() => 0),
-          Property.countDocuments({ type: { $regex: /resort/i } }).maxTimeMS(5000).catch(() => 0),
-          User.countDocuments({ role: 'guide' }).maxTimeMS(5000).catch(() => 0),
-          User.countDocuments({ role: { $in: ['owner', 'vendor', 'owner_and_vendor'] } }).maxTimeMS(5000).catch(() => 0),
-          Booking.aggregate([
-            { $group: { _id: null, total: { $sum: '$totalAmount' } } }
-          ]).maxTimeMS(5000).catch(() => [{ total: 0 }]),
-          User.find({ email: { $ne: 'exploretamizhagam@gmail.com' } })
-            .select('name email role phone createdAt isVerified avatar')
-            .sort({ createdAt: -1 })
-            .limit(10)
-            .lean()
-            .maxTimeMS(5000)
-            .catch(() => []),
-          Booking.find({})
-            .select('bookingId propertyTitle itemTitle destination customerName customerEmail totalAmount status paymentStatus checkIn checkOut createdAt')
-            .sort({ createdAt: -1 })
-            .limit(10)
-            .lean()
-            .maxTimeMS(5000)
-            .catch(() => []),
-          Property.find({})
-            .select('title district location type pricePerNight price rating images status ownerName ownerEmail createdAt')
-            .sort({ createdAt: -1 })
-            .limit(10)
-            .lean()
-            .maxTimeMS(5000)
-            .catch(() => []),
-          Vehicle.find({})
-            .select('title type registrationNumber district pricePerDay price status providerName providerEmail createdAt')
-            .sort({ createdAt: -1 })
-            .limit(10)
-            .lean()
-            .maxTimeMS(5000)
-            .catch(() => []),
-          User.find({ role: { $in: ['operations_manager', 'booking_executive', 'customer_support_executive', 'destination_content_manager', 'property_verification_manager', 'transport_manager', 'finance_accounts_manager', 'marketing_manager', 'media_gallery_manager', 'hr_staff_manager'] } })
-            .select('name email role phone createdAt isVerified avatar')
-            .sort({ createdAt: -1 })
-            .limit(50)
-            .lean()
-            .maxTimeMS(5000)
-            .catch(() => []),
-          Ticket.find({})
-            .select('ticketId senderName senderEmail senderRole subject category status createdAt')
-            .sort({ createdAt: -1 })
-            .limit(10)
-            .lean()
-            .maxTimeMS(5000)
-            .catch(() => [])
-        ]);
-
-        const totalRevenue = (revenueAgg && revenueAgg[0] && revenueAgg[0].total) ? revenueAgg[0].total : 0;
-
-        const cleanProperties = (dbProperties || []).map(p => ({
-          ...p,
-          images: sanitizeImagesArray(p.images)
-        }));
-
-        stats = {
-          totalUsers: totalUsersCount || (dbUsers?.length || 0),
-          totalBookings: totalBookingsCount || (dbBookings?.length || 0),
-          pendingBookings: pendingBookingsCount,
-          cancelledBookings: cancelledBookingsCount,
-          activeTrips: activeTripsCount,
-          totalProperties: totalPropertiesCount || (dbProperties?.length || 0),
-          hotelsCount,
-          homestaysCount,
-          resortsCount,
-          guidesCount,
-          vendorsCount,
-          totalRevenue,
-          recentUsersList: dbUsers || [],
-          recentBookingsList: dbBookings || []
-        };
-
-        users = dbUsers || [];
-        bookings = dbBookings || [];
-        properties = cleanProperties;
-        vehicles = dbVehicles || [];
-        staff = dbStaff || [];
-        tickets = dbTickets || [];
-      } catch (dbErr) {
-        console.warn('Dashboard parallel fetch notice:', dbErr.message);
-      }
-    }
-
-    const payload = {
-      success: true,
-      stats,
-      users,
-      bookings,
-      properties,
-      vehicles,
-      staff,
-      tickets
-    };
-
-    setCached(cacheKey, payload);
-    return res.json(payload);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- ADMIN STATS ---
-router.get('/admin/stats', async (req, res) => {
-  try {
-    let totalUsers = 0, totalBookings = 0, pendingBookings = 0, cancelledBookings = 0, activeTrips = 0;
-    let totalProperties = 0, hotelsCount = 0, homestaysCount = 0, resortsCount = 0, guidesCount = 0, vendorsCount = 0;
-    let totalRevenue = 0, recentUsersList = [], recentBookingsList = [];
-
-    if (mongoose.connection.readyState === 1) {
-      try {
-        const [
-          uCount, bCount, pCount, cCount, aCount,
-          propCount, hCount, homeCount, rCount, gCount, vCount,
-          bookings, dbUsers
-        ] = await Promise.all([
-          User.countDocuments({ email: { $ne: 'exploretamizhagam@gmail.com' } }).catch(() => 0),
-          Booking.countDocuments({}).catch(() => 0),
-          Booking.countDocuments({ status: 'Pending Approval' }).catch(() => 0),
-          Booking.countDocuments({ status: 'Cancelled' }).catch(() => 0),
-          Booking.countDocuments({ status: { $in: ['Confirmed', 'In Progress'] } }).catch(() => 0),
-          Property.countDocuments({}).catch(() => 0),
-          Property.countDocuments({ type: { $regex: /hotel/i } }).catch(() => 0),
-          Property.countDocuments({ type: { $regex: /home/i } }).catch(() => 0),
-          Property.countDocuments({ type: { $regex: /resort/i } }).catch(() => 0),
-          User.countDocuments({ role: 'guide' }).catch(() => 0),
-          User.countDocuments({ role: { $in: ['owner', 'vendor', 'owner_and_vendor'] } }).catch(() => 0),
-          Booking.find({}).sort({ createdAt: -1 }).limit(10).catch(() => []),
-          User.find({ email: { $ne: 'exploretamizhagam@gmail.com' } }).sort({ createdAt: -1 }).limit(10).catch(() => [])
-        ]);
-
-        totalUsers = uCount;
-        totalBookings = bCount;
-        pendingBookings = pCount;
-        cancelledBookings = cCount;
-        activeTrips = aCount;
-        totalProperties = propCount;
-        hotelsCount = hCount;
-        homestaysCount = homeCount;
-        resortsCount = rCount;
-        guidesCount = gCount;
-        vendorsCount = vCount;
-        recentBookingsList = bookings || [];
-        recentUsersList = dbUsers || [];
-        totalRevenue = recentBookingsList.reduce((sum, b) => sum + (b.totalAmount || b.amount || 0), 0);
-      } catch (e) {}
-    }
-
-    const memUsersList = Array.from(memoryUsers.values()).filter(u => u.email !== 'exploretamizhagam@gmail.com');
-    if (totalUsers < memUsersList.length) totalUsers = memUsersList.length;
-    if (!recentUsersList || recentUsersList.length === 0) recentUsersList = memUsersList.slice(0, 10);
-
-    res.json({
-      totalUsers: totalUsers || 0,
-      totalBookings: totalBookings || 0,
-      pendingBookings: pendingBookings || 0,
-      cancelledBookings: cancelledBookings || 0,
-      activeTrips: activeTrips || 0,
-      totalProperties: totalProperties || 0,
-      hotelsCount: hotelsCount || 0,
-      homestaysCount: homestaysCount || 0,
-      resortsCount: resortsCount || 0,
-      guidesCount: guidesCount || 0,
-      vendorsCount: vendorsCount || 0,
-      totalRevenue: totalRevenue || 0,
-      recentUsersList: recentUsersList || [],
-      recentBookingsList: recentBookingsList || []
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- RESET DATABASE TO ZERO (SUPER ADMIN ONLY) ---
-router.post('/admin/reset-database', async (req, res) => {
-  try {
-    if (mongoose.connection.readyState === 1) {
-      await Booking.deleteMany({});
-      await Property.deleteMany({});
-      await Vehicle.deleteMany({});
-      await Ticket.deleteMany({});
-      await User.deleteMany({ email: { $ne: 'exploretamizhagam@gmail.com' } });
-    }
-
-    memoryUsers.clear();
-    memoryProperties.length = 0;
-    memoryVehicles.length = 0;
-    memoryTickets.length = 0;
-    memoryBookings.length = 0;
-
-    broadcast(req, 'database_reset_zero', {});
-    broadcast(req, 'stats_updated', {});
-
-    res.json({
-      success: true,
-      message: 'All platform data has been reset to ZERO. Super admin preserved.'
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- USERS ENDPOINTS ---
-router.get('/users', async (req, res) => {
-  try {
-    let users = [];
-    if (mongoose.connection.readyState === 1) {
-      users = await User.find({ email: { $ne: 'exploretamizhagam@gmail.com' } }).sort({ createdAt: -1 }).maxTimeMS(3000).catch(() => []);
-    }
-    const memList = Array.from(memoryUsers.values()).filter(u => u.email !== 'exploretamizhagam@gmail.com');
-    const finalMap = new Map();
-    for (const u of (users || [])) {
-      const obj = u.toObject ? u.toObject() : { ...u };
-      finalMap.set(obj.email?.toLowerCase(), obj);
-    }
-    for (const mem of memList) {
-      const key = mem.email?.toLowerCase();
-      if (finalMap.has(key)) {
-        finalMap.set(key, { ...finalMap.get(key), ...mem });
-      } else {
-        finalMap.set(key, mem);
-      }
-    }
-    return res.json(Array.from(finalMap.values()));
-  } catch (err) {
-    const memList = Array.from(memoryUsers.values()).filter(u => u.email !== 'exploretamizhagam@gmail.com');
-    res.json(memList);
-  }
-});
-
-// --- DIRECT INSTANT ROLE UPDATE (SUPPORTS BOTH /users/role AND /users/:id/role) ---
-const handleRoleUpdateCore = async (req, res) => {
-  try {
-    const { role, email, userId } = req.body;
-    const identifier = req.params?.id || userId || email || '';
-    const targetEmail = (email || (identifier.includes('@') ? identifier : '')).toLowerCase().trim();
-
-    if (!role) {
-      return res.status(400).json({ message: 'Role is required' });
-    }
-
-    let updatedUser = null;
-
-    // 1. Immediately update in memoryUsers
-    if (targetEmail) {
-      let existing = memoryUsers.get(targetEmail) || { email: targetEmail, name: targetEmail.split('@')[0] };
-      existing = { ...existing, role, email: targetEmail, updatedAt: new Date().toISOString() };
-      memoryUsers.set(targetEmail, existing);
-      updatedUser = existing;
-    }
-    for (const [em, u] of memoryUsers.entries()) {
-      if (u._id === identifier || u.id === identifier || em.toLowerCase() === targetEmail) {
-        u.role = role;
-        memoryUsers.set(em, u);
-        updatedUser = u;
-      }
-    }
-
-    // 2. Permanently update in MongoDB Atlas
-    if (mongoose.connection.readyState === 1) {
-      try {
-        if (mongoose.Types.ObjectId.isValid(identifier)) {
-          const dbUser = await User.findByIdAndUpdate(identifier, { $set: { role } }, { new: true });
-          if (dbUser) updatedUser = dbUser;
-        }
-        if (targetEmail) {
-          const dbUser = await User.findOneAndUpdate(
-            { email: { $regex: new RegExp(`^${targetEmail}$`, 'i') } },
-            { $set: { role, isVerified: true } },
-            { new: true, upsert: true }
-          );
-          if (dbUser) updatedUser = dbUser;
-        }
-      } catch (dbErr) {
-        console.error('Mongo role update error:', dbErr);
-      }
-    }
-
-    if (!updatedUser) {
-      updatedUser = { _id: identifier || 'usr-' + Date.now(), email: targetEmail, role };
-      if (targetEmail) memoryUsers.set(targetEmail, updatedUser);
-    }
-
-    console.log(`✅ [ROLE UPDATED] ${targetEmail || identifier} role -> ${role}`);
-
-    // Broadcast live event & trigger instant sync
-    broadcast(req, 'user_role_updated', updatedUser);
-    broadcast(req, 'stats_updated', {});
-
-    res.json(updatedUser);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+  return user;
 };
 
-router.put('/users/role', handleRoleUpdateCore);
-router.post('/users/role', handleRoleUpdateCore);
-router.put('/users/:id/role', handleRoleUpdateCore);
+// -------------------------------------------------------
+// REGISTER
+// -------------------------------------------------------
 
-// --- STAFF LISTING & CREATION ---
-router.get('/admin/staff', async (req, res) => {
-  try {
-    if (mongoose.connection.readyState === 1) {
-      const staff = await User.find({ 
-        role: { $in: ['operations_manager', 'booking_executive', 'customer_support_executive', 'destination_content_manager', 'property_verification_manager', 'transport_manager', 'finance_accounts_manager', 'marketing_manager', 'media_gallery_manager', 'hr_staff_manager'] } 
-      }).sort({ createdAt: -1 }).maxTimeMS(2500);
-      return res.json(staff);
-    }
-  } catch (err) {}
-  res.json([]);
-});
-
-router.post('/admin/staff', async (req, res) => {
-  try {
-    const { name, email, phone, role, password } = req.body;
-    let newStaff = null;
-    if (mongoose.connection.readyState === 1) {
-      newStaff = await User.create({
+router.post(
+  "/auth/register",
+  async (req, res) => {
+    try {
+      const {
         name,
-        email: email.toLowerCase().trim(),
+        email,
+        password,
         phone,
         role,
-        password: password || 'ExploreTN2026',
-        isVerified: true
+        accountType,
+      } = req.body;
+
+      const normalizedEmail =
+        normalizeEmail(email);
+
+      if (
+        !normalizedEmail ||
+        !password ||
+        !name
+      ) {
+        return res.status(400).json({
+          message:
+            "Name, email and password " +
+            "are required.",
+        });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({
+          message:
+            "Password must contain at " +
+            "least 6 characters.",
+        });
+      }
+
+      if (
+        mongoose.connection.readyState !==
+        1
+      ) {
+        return res.status(503).json({
+          message:
+            "Database is temporarily " +
+            "unavailable.",
+        });
+      }
+
+      const existing =
+        await User.findOne({
+          email: normalizedEmail,
+        })
+          .select("_id")
+          .lean()
+          .maxTimeMS(5000);
+
+      if (existing) {
+        return res.status(409).json({
+          message:
+            "An account already exists " +
+            "with this email.",
+        });
+      }
+
+      const requestedOwner =
+        role === "owner" ||
+        accountType === "owner" ||
+        accountType ===
+          "Property Owner";
+
+      // Public registration cannot create
+      // admin or staff accounts.
+      const userRole = requestedOwner
+        ? "owner"
+        : "user";
+
+      const user = await User.create({
+        name: String(name).trim(),
+        email: normalizedEmail,
+        password,
+        phone: String(phone || "").trim(),
+        role: userRole,
+        accountType:
+          accountType || "Buyer",
+        isVerified: true,
+        authProvider: "local",
       });
-    } else {
-      newStaff = { _id: 'stf-' + Date.now(), name, email, phone, role, isVerified: true };
+
+      const publicUser =
+        createPublicUser(user, true);
+
+      broadcast(
+        req,
+        "new_user_registered",
+        publicUser
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      return res.status(201).json({
+        ...publicUser,
+        alreadyVerified: true,
+
+        message:
+          "Account created successfully.",
+      });
+    } catch (error) {
+      console.error(
+        "Registration failed:",
+        error
+      );
+
+      if (error?.code === 11000) {
+        return res.status(409).json({
+          message:
+            "An account already exists " +
+            "with this email.",
+        });
+      }
+
+      return res.status(500).json({
+        message:
+          "Unable to create account.",
+      });
     }
-    broadcast(req, 'staff_added', newStaff);
-    broadcast(req, 'stats_updated', {});
-    res.status(201).json(newStaff);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
   }
-});
+);
 
-// --- PROPERTIES & RESORTS ENDPOINTS ---
-router.get('/properties', async (req, res) => {
-  try {
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 24));
-    const status = req.query.status ? String(req.query.status).trim() : null;
-    const type = req.query.type ? String(req.query.type).trim() : null;
-    const district = req.query.district ? String(req.query.district).trim() : null;
-    const location = req.query.location ? String(req.query.location).trim() : null;
-    const search = req.query.search ? String(req.query.search).trim() : null;
-    const ownerEmail = req.query.ownerEmail ? String(req.query.ownerEmail).trim().toLowerCase() : null;
+// -------------------------------------------------------
+// LOCAL LOGIN
+// -------------------------------------------------------
 
-    const cacheKey = `properties_${page}_${limit}_${status || 'all'}_${type || 'all'}_${district || 'all'}_${location || 'all'}_${search || 'all'}_${ownerEmail || 'all'}`;
-    const cached = getCached(cacheKey);
-    if (cached) {
-      return res.json(cached);
+router.post(
+  "/auth/login",
+  async (req, res) => {
+    try {
+      const normalizedEmail =
+        normalizeEmail(req.body.email);
+
+      const password =
+        String(req.body.password || "");
+
+      if (
+        !normalizedEmail ||
+        !password
+      ) {
+        return res.status(400).json({
+          message:
+            "Email and password are required.",
+        });
+      }
+
+      if (
+        mongoose.connection.readyState !==
+        1
+      ) {
+        return res.status(503).json({
+          message:
+            "Database is temporarily " +
+            "unavailable.",
+        });
+      }
+
+      // Password may be excluded by default
+      // in the User schema.
+      const user =
+        await User.findOne({
+          email: normalizedEmail,
+        })
+          .select("+password")
+          .maxTimeMS(5000);
+
+      if (!user) {
+        return res.status(401).json({
+          message:
+            "Invalid email or password.",
+        });
+      }
+
+      const passwordMatches =
+        await checkUserPassword(
+          user,
+          password
+        );
+
+      if (!passwordMatches) {
+        return res.status(401).json({
+          message:
+            "Invalid email or password.",
+        });
+      }
+
+      if (
+        user.isVerified === false
+      ) {
+        return res.status(403).json({
+          message:
+            "Please verify your account.",
+        });
+      }
+
+      const publicUser =
+        createPublicUser(user, true);
+
+      return res.status(200).json({
+        ...publicUser,
+        alreadyVerified: true,
+        message: "Login successful.",
+      });
+    } catch (error) {
+      console.error(
+        "Login failed:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Unable to complete login.",
+      });
     }
+  }
+);
 
-    if (mongoose.connection.readyState === 1) {
-      const query = {};
+// -------------------------------------------------------
+// GOOGLE OAUTH
+// -------------------------------------------------------
 
-      if (status && status.toLowerCase() !== 'all') {
-        query.status = { $regex: new RegExp(`^${status}$`, 'i') };
-      }
-      if (type && type.toLowerCase() !== 'all') {
-        query.type = { $regex: new RegExp(type, 'i') };
-      }
-      if (district && district.toLowerCase() !== 'all' && !district.toLowerCase().includes('all tamil nadu')) {
-        query.$or = [
-          { district: { $regex: new RegExp(district, 'i') } },
-          { location: { $regex: new RegExp(district, 'i') } }
-        ];
-      }
-      if (location && location.toLowerCase() !== 'all') {
-        query.location = { $regex: new RegExp(location, 'i') };
-      }
-      if (ownerEmail) {
-        query.ownerEmail = { $regex: new RegExp(`^${ownerEmail}$`, 'i') };
-      }
-      if (search) {
-        const searchRegex = new RegExp(search, 'i');
-        query.$or = [
-          { title: searchRegex },
-          { district: searchRegex },
-          { location: searchRegex },
-          { type: searchRegex }
-        ];
+const handleGoogleAuthentication =
+  async (req, res) => {
+    try {
+      const credential =
+        req.body.credential;
+
+      const suppliedClientId =
+        req.body.client_id;
+
+      if (!credential) {
+        return res.status(400).json({
+          message:
+            "Google credential is required.",
+        });
       }
 
-      const total = await Property.countDocuments(query).maxTimeMS(5000).catch(() => 0);
-      const skip = (page - 1) * limit;
+      const audience =
+        GOOGLE_CLIENT_ID ||
+        suppliedClientId;
 
-      const rawProperties = await Property.find(query)
-        .select('title district location type pricePerNight price rating reviewsCount images coordinates googleMapsUrl description amenities ownerRules ownerName ownerEmail status createdAt')
+      if (!audience) {
+        return res.status(500).json({
+          message:
+            "Google authentication is " +
+            "not configured.",
+        });
+      }
+
+      const ticket =
+        await googleClient.verifyIdToken({
+          idToken: credential,
+          audience,
+        });
+
+      const payload =
+        ticket.getPayload();
+
+      if (
+        !payload?.email ||
+        payload.email_verified !== true
+      ) {
+        return res.status(401).json({
+          message:
+            "Google account could not " +
+            "be verified.",
+        });
+      }
+
+      const user =
+        await saveGoogleUser({
+          email: payload.email,
+          name: payload.name,
+          picture: payload.picture,
+          googleId: payload.sub,
+        });
+
+      const publicUser =
+        createPublicUser(user, true);
+
+      broadcast(
+        req,
+        "new_user_registered",
+        publicUser
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      return res.status(200).json({
+        ...publicUser,
+        alreadyVerified: true,
+
+        message:
+          "Google authentication " +
+          "successful.",
+      });
+    } catch (error) {
+      console.error(
+        "Google authentication failed:",
+        error.message
+      );
+
+      return res.status(401).json({
+        message:
+          "Invalid Google authentication.",
+      });
+    }
+  };
+
+router.post(
+  "/auth/google",
+  handleGoogleAuthentication
+);
+
+router.post(
+  "/auth/google-oauth",
+  handleGoogleAuthentication
+);
+
+// -------------------------------------------------------
+// CURRENT USER
+// -------------------------------------------------------
+
+router.get(
+  "/auth/me",
+  async (req, res) => {
+    try {
+      const normalizedEmail =
+        normalizeEmail(
+          req.query.email ||
+          req.headers["x-user-email"]
+        );
+
+      if (!normalizedEmail) {
+        return res.status(400).json({
+          message: "Email is required.",
+        });
+      }
+
+      if (
+        mongoose.connection.readyState !==
+        1
+      ) {
+        return res.status(503).json({
+          message:
+            "Database is temporarily " +
+            "unavailable.",
+        });
+      }
+
+      res.set(
+        "Cache-Control",
+        "private, max-age=30"
+      );
+
+      const user =
+        await User.findOne({
+          email: normalizedEmail,
+        })
+          .select(
+            "_id name email phone avatar " +
+            "role isVerified"
+          )
+          .lean()
+          .maxTimeMS(5000);
+
+      if (!user) {
+        return res.status(404).json({
+          message: "User not found.",
+        });
+      }
+
+      return res.status(200).json(
+        createPublicUser(user)
+      );
+    } catch (error) {
+      console.error(
+        "Current user request failed:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Unable to retrieve user.",
+      });
+    }
+  }
+);
+
+// -------------------------------------------------------
+// UPDATE PROFILE
+// -------------------------------------------------------
+
+router.put(
+  "/users/profile",
+  async (req, res) => {
+    try {
+      const {
+        email,
+        name,
+        phone,
+        avatar,
+      } = req.body;
+
+      const normalizedEmail =
+        normalizeEmail(email);
+
+      if (!normalizedEmail) {
+        return res.status(400).json({
+          message:
+            "User email is required.",
+        });
+      }
+
+      if (
+        mongoose.connection.readyState !==
+        1
+      ) {
+        return res.status(503).json({
+          message:
+            "Database is temporarily " +
+            "unavailable.",
+        });
+      }
+
+      const update = {};
+
+      if (name) {
+        update.name =
+          String(name).trim();
+      }
+
+      if (phone !== undefined) {
+        update.phone =
+          String(phone).trim();
+      }
+
+      if (avatar !== undefined) {
+        const avatarValue =
+          String(avatar || "");
+
+        // Prevent new Base64 profile images
+        // from entering MongoDB.
+        if (
+          avatarValue.startsWith(
+            "data:image/"
+          )
+        ) {
+          return res.status(400).json({
+            message:
+              "Upload the profile image " +
+              "to Cloudinary and submit " +
+              "its URL.",
+          });
+        }
+
+        update.avatar = avatarValue;
+      }
+
+      const updatedUser =
+        await User.findOneAndUpdate(
+          {
+            email: normalizedEmail,
+          },
+          {
+            $set: update,
+          },
+          {
+            new: true,
+            runValidators: true,
+          }
+        )
+          .select(
+            "_id name email phone avatar " +
+            "role isVerified"
+          )
+          .lean()
+          .maxTimeMS(5000);
+
+      if (!updatedUser) {
+        return res.status(404).json({
+          message: "User not found.",
+        });
+      }
+
+      broadcast(
+        req,
+        "user_updated",
+        updatedUser
+      );
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Profile updated successfully.",
+        user:
+          createPublicUser(updatedUser),
+      });
+    } catch (error) {
+      console.error(
+        "Profile update failed:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Unable to update profile.",
+      });
+    }
+  }
+);
+
+// -------------------------------------------------------
+// PASSWORD RESET OTP
+// -------------------------------------------------------
+
+const passwordResetOtpStore =
+  new Map();
+
+const sendPasswordResetMail = async (
+  toEmail,
+  recipientName,
+  code
+) => {
+  const content = `
+    <p
+      style="
+        color: #4b5563;
+        font-size: 13px;
+        line-height: 1.7;
+        text-align: center;
+      "
+    >
+      Hello
+      <strong>
+        ${escapeHtml(
+          recipientName || "Member"
+        )}
+      </strong>,
+      use the following verification code
+      to change your password.
+    </p>
+
+    <div
+      style="
+        margin: 22px auto;
+        padding: 15px 25px;
+        width: fit-content;
+        color: #ffffff;
+        background: #242429;
+        border-radius: 10px;
+        font-family: monospace;
+        font-size: 30px;
+        font-weight: 900;
+        letter-spacing: 7px;
+      "
+    >
+      ${escapeHtml(code)}
+    </div>
+
+    <p
+      style="
+        color: #8b8b8b;
+        font-size: 11px;
+        text-align: center;
+      "
+    >
+      This code expires in 15 minutes.
+    </p>
+  `;
+
+  return sendDirectMail({
+    to: toEmail,
+
+    subject:
+      "Password Change Verification Code",
+
+    html: createEmailLayout({
+      title: "Password Verification",
+      subtitle: "Account Security",
+      content,
+    }),
+  });
+};
+
+router.post(
+  "/users/request-password-otp",
+  async (req, res) => {
+    try {
+      const normalizedEmail =
+        normalizeEmail(req.body.email);
+
+      if (!normalizedEmail) {
+        return res.status(400).json({
+          message: "Email is required.",
+        });
+      }
+
+      if (
+        mongoose.connection.readyState !==
+        1
+      ) {
+        return res.status(503).json({
+          message:
+            "Database is temporarily " +
+            "unavailable.",
+        });
+      }
+
+      const user =
+        await User.findOne({
+          email: normalizedEmail,
+        })
+          .select("_id name email")
+          .lean()
+          .maxTimeMS(5000);
+
+      // Use the same success response even
+      // when an account is not found.
+      if (user) {
+        const otpCode = String(
+          Math.floor(
+            100000 +
+            Math.random() * 900000
+          )
+        );
+
+        passwordResetOtpStore.set(
+          normalizedEmail,
+          {
+            code: otpCode,
+            expiresAt:
+              Date.now() +
+              15 * 60 * 1000,
+            attempts: 0,
+          }
+        );
+
+        await sendPasswordResetMail(
+          normalizedEmail,
+          user.name,
+          otpCode
+        );
+      }
+
+      return res.status(200).json({
+        success: true,
+
+        message:
+          "If the account exists, a " +
+          "verification code was sent.",
+      });
+    } catch (error) {
+      console.error(
+        "Password OTP request failed:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Unable to process request.",
+      });
+    }
+  }
+);
+
+router.post(
+  "/users/verify-password-otp-and-update",
+  async (req, res) => {
+    try {
+      const normalizedEmail =
+        normalizeEmail(req.body.email);
+
+      const otpCode = String(
+        req.body.otpCode || ""
+      ).trim();
+
+      const newPassword = String(
+        req.body.newPassword || ""
+      );
+
+      if (
+        !normalizedEmail ||
+        !otpCode ||
+        !newPassword
+      ) {
+        return res.status(400).json({
+          message:
+            "Email, verification code and " +
+            "new password are required.",
+        });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({
+          message:
+            "Password must contain at " +
+            "least 6 characters.",
+        });
+      }
+
+      const stored =
+        passwordResetOtpStore.get(
+          normalizedEmail
+        );
+
+      if (
+        !stored ||
+        stored.code !== otpCode ||
+        Date.now() > stored.expiresAt ||
+        stored.attempts >= 5
+      ) {
+        return res.status(400).json({
+          message:
+            "Invalid or expired " +
+            "verification code.",
+        });
+      }
+
+      stored.attempts += 1;
+
+      const user =
+        await User.findOne({
+          email: normalizedEmail,
+        }).maxTimeMS(5000);
+
+      if (!user) {
+        passwordResetOtpStore.delete(
+          normalizedEmail
+        );
+
+        return res.status(404).json({
+          message: "User not found.",
+        });
+      }
+
+      user.password = newPassword;
+      await user.save();
+
+      passwordResetOtpStore.delete(
+        normalizedEmail
+      );
+
+      broadcast(
+        req,
+        "new_notification",
+        {
+          userEmail: normalizedEmail,
+          title:
+            "Password Changed Successfully",
+          message:
+            "Your account password has " +
+            "been updated.",
+          date: "Just now",
+        }
+      );
+
+      return res.status(200).json({
+        success: true,
+
+        message:
+          "Password updated successfully.",
+      });
+    } catch (error) {
+      console.error(
+        "Password update failed:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Unable to update password.",
+      });
+    }
+  }
+);
+
+// -------------------------------------------------------
+// REAL-TIME NOTIFICATION
+// -------------------------------------------------------
+
+router.post(
+  "/notifications/trigger",
+  async (req, res) => {
+    try {
+      const {
+        userEmail,
+        title,
+        message,
+        type,
+      } = req.body;
+
+      if (!title || !message) {
+        return res.status(400).json({
+          message:
+            "Title and message are required.",
+        });
+      }
+
+      const notification = {
+        id: `notif-${Date.now()}`,
+        title: String(title),
+        message: String(message),
+        type: type || "info",
+        date: "Just now",
+        read: false,
+      };
+
+      const normalizedEmail =
+        normalizeEmail(userEmail);
+
+      if (
+        normalizedEmail &&
+        mongoose.connection.readyState ===
+          1
+      ) {
+        await User.updateOne(
+          {
+            email: normalizedEmail,
+          },
+          {
+            $push: {
+              notifications: {
+                $each: [notification],
+                $position: 0,
+                $slice: 100,
+              },
+            },
+          }
+        ).maxTimeMS(5000);
+      }
+
+      broadcast(
+        req,
+        "new_notification",
+        {
+          userEmail:
+            normalizedEmail || null,
+          ...notification,
+        }
+      );
+
+      return res.status(200).json({
+        success: true,
+        notification,
+      });
+    } catch (error) {
+      console.error(
+        "Notification failed:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Unable to create notification.",
+      });
+    }
+  }
+);
+
+// -------------------------------------------------------
+// DATABASE AVAILABILITY MIDDLEWARE
+// -------------------------------------------------------
+
+const requireDatabase = (
+  req,
+  res,
+  next
+) => {
+  if (
+    mongoose.connection.readyState !== 1
+  ) {
+    return res.status(503).json({
+      success: false,
+      message:
+        "Database is temporarily unavailable.",
+    });
+  }
+
+  next();
+};
+
+// -------------------------------------------------------
+// ADMIN DASHBOARD DATA
+// -------------------------------------------------------
+
+router.get(
+  "/admin/dashboard-data",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      res.set(
+        "Cache-Control",
+        "private, max-age=20"
+      );
+
+      const [
+        totalUsers,
+        totalBookings,
+        pendingBookings,
+        cancelledBookings,
+        activeTrips,
+        totalProperties,
+        hotelsCount,
+        homestaysCount,
+        resortsCount,
+        guidesCount,
+        vendorsCount,
+        revenueResult,
+        recentUsers,
+        recentBookings,
+        recentProperties,
+        recentVehicles,
+        recentStaff,
+        recentTickets,
+      ] = await Promise.all([
+        User.countDocuments({
+          role: {
+            $nin: [
+              "super_admin",
+              "admin",
+            ],
+          },
+        }).maxTimeMS(5000),
+
+        Booking.countDocuments({})
+          .maxTimeMS(5000),
+
+        Booking.countDocuments({
+          status: {
+            $in: [
+              "Pending",
+              "Pending Approval",
+            ],
+          },
+        }).maxTimeMS(5000),
+
+        Booking.countDocuments({
+          status: "Cancelled",
+        }).maxTimeMS(5000),
+
+        Booking.countDocuments({
+          status: {
+            $in: [
+              "Confirmed",
+              "In Progress",
+            ],
+          },
+        }).maxTimeMS(5000),
+
+        Property.countDocuments({})
+          .maxTimeMS(5000),
+
+        Property.countDocuments({
+          type: {
+            $regex: /hotel/i,
+          },
+        }).maxTimeMS(5000),
+
+        Property.countDocuments({
+          type: {
+            $regex: /home/i,
+          },
+        }).maxTimeMS(5000),
+
+        Property.countDocuments({
+          type: {
+            $regex: /resort/i,
+          },
+        }).maxTimeMS(5000),
+
+        User.countDocuments({
+          role: "guide",
+        }).maxTimeMS(5000),
+
+        User.countDocuments({
+          role: {
+            $in: [
+              "owner",
+              "vendor",
+              "owner_and_vendor",
+            ],
+          },
+        }).maxTimeMS(5000),
+
+        Booking.aggregate([
+          {
+            $group: {
+              _id: null,
+
+              total: {
+                $sum: {
+                  $ifNull: [
+                    "$totalAmount",
+                    {
+                      $ifNull: [
+                        "$amount",
+                        0,
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        ]).option({
+          maxTimeMS: 5000,
+        }),
+
+        User.find({})
+          .select(
+            "_id name email phone avatar " +
+            "role isVerified createdAt"
+          )
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean()
+          .maxTimeMS(5000),
+
+        Booking.find({})
+          .select(
+            "-paymentDetails -internalNotes"
+          )
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean()
+          .maxTimeMS(5000),
+
+        Property.find({})
+          .select(
+            "-images -imageData " +
+            "-base64Image -gallery " +
+            "-documents -approvalHistory"
+          )
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean()
+          .maxTimeMS(5000),
+
+        Vehicle.find({})
+          .select(
+            "-images -imageData " +
+            "-base64Image -documents"
+          )
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean()
+          .maxTimeMS(5000),
+
+        User.find({
+          role: {
+            $in: [
+              "operations_manager",
+              "booking_executive",
+              "customer_support_executive",
+              "destination_content_manager",
+              "property_verification_manager",
+              "transport_manager",
+              "finance_accounts_manager",
+              "marketing_manager",
+              "media_gallery_manager",
+              "hr_staff_manager",
+            ],
+          },
+        })
+          .select(
+            "_id name email phone avatar " +
+            "role createdAt"
+          )
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean()
+          .maxTimeMS(5000),
+
+        Ticket.find({})
+          .select(
+            "-attachments -internalNotes"
+          )
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean()
+          .maxTimeMS(5000),
+      ]);
+
+      const totalRevenue =
+        revenueResult?.[0]?.total || 0;
+
+      const stats = {
+        totalUsers,
+        totalBookings,
+        pendingBookings,
+        cancelledBookings,
+        activeTrips,
+        totalProperties,
+        hotelsCount,
+        homestaysCount,
+        resortsCount,
+        guidesCount,
+        vendorsCount,
+        totalRevenue,
+
+        recentUsersList:
+          recentUsers,
+
+        recentBookingsList:
+          recentBookings,
+      };
+
+      return res.status(200).json({
+        success: true,
+        stats,
+        users: recentUsers,
+        bookings: recentBookings,
+        properties: recentProperties,
+        vehicles: recentVehicles,
+        staff: recentStaff,
+        tickets: recentTickets,
+      });
+    } catch (error) {
+      console.error(
+        "Dashboard data failed:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Unable to load dashboard data.",
+      });
+    }
+  }
+);
+
+router.get(
+  "/admin/stats",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const [
+        users,
+        properties,
+        vehicles,
+        bookings,
+        tickets,
+      ] = await Promise.all([
+        User.countDocuments({})
+          .maxTimeMS(5000),
+
+        Property.countDocuments({})
+          .maxTimeMS(5000),
+
+        Vehicle.countDocuments({})
+          .maxTimeMS(5000),
+
+        Booking.countDocuments({})
+          .maxTimeMS(5000),
+
+        Ticket.countDocuments({})
+          .maxTimeMS(5000),
+      ]);
+
+      return res.status(200).json({
+        users,
+        properties,
+        vehicles,
+        bookings,
+        tickets,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to retrieve statistics.",
+      });
+    }
+  }
+);
+
+// -------------------------------------------------------
+// USERS
+// -------------------------------------------------------
+
+router.get(
+  "/users",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const page = Math.max(
+        Number.parseInt(
+          req.query.page,
+          10
+        ) || 1,
+        1
+      );
+
+      const limit = Math.min(
+        Math.max(
+          Number.parseInt(
+            req.query.limit,
+            10
+          ) || 25,
+          1
+        ),
+        100
+      );
+
+      const users = await User.find({})
+        .select(
+          "_id name email phone avatar " +
+          "role isVerified createdAt"
+        )
         .sort({ createdAt: -1 })
-        .skip(skip)
+        .skip((page - 1) * limit)
         .limit(limit)
         .lean()
         .maxTimeMS(10000);
 
-      const cleanedProperties = rawProperties.map(p => ({
-        ...p,
-        images: sanitizeImagesArray(p.images),
-        id: p._id ? p._id.toString() : p.id
-      }));
-
-      const totalPages = Math.ceil(total / limit) || 1;
-
-      // When requested with explicit pagination or paginated=true, return metadata wrapper
-      if (req.query.paginated === 'true' || req.query.page) {
-        const paginatedResult = {
-          success: true,
-          count: cleanedProperties.length,
-          total,
-          page,
-          totalPages,
-          data: cleanedProperties
-        };
-        setCached(cacheKey, paginatedResult);
-        return res.json(paginatedResult);
-      }
-
-      setCached(cacheKey, cleanedProperties);
-      return res.json(cleanedProperties);
-    }
-  } catch (err) {
-    console.error('Properties query notice:', err.message);
-  }
-
-  const cleanedMemory = memoryProperties.map(p => ({
-    ...p,
-    images: sanitizeImagesArray(p.images),
-    id: p._id ? p._id.toString() : p.id
-  }));
-  res.json(cleanedMemory);
-});
-
-router.post('/properties', async (req, res) => {
-  try {
-    const body = { ...req.body };
-    delete body._id;
-    delete body.id;
-
-    // Sanitize image URLs on save
-    if (body.images) {
-      body.images = sanitizeImagesArray(body.images);
-    }
-
-    let saved = null;
-    if (mongoose.connection.readyState === 1) {
-      const prop = new Property({
-        ...body,
-        pricePerNight: Number(body.pricePerNight || body.price || 3800),
-        price: Number(body.price || body.pricePerNight || 3800),
-        status: body.status || 'Pending Approval'
+      return res.status(200).json(users);
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to retrieve users.",
       });
-      saved = await prop.save();
-      saved = saved.toObject ? saved.toObject() : saved;
-      saved.id = saved._id ? saved._id.toString() : 'prop-' + Date.now();
-    } else {
-      saved = { ...body, _id: 'prop-' + Date.now(), id: 'prop-' + Date.now(), status: body.status || 'Pending Approval' };
-      memoryProperties.unshift(saved);
     }
-
-    // Invalidate caches
-    clearCacheByPrefix('properties');
-    clearCacheByPrefix('admin_dashboard');
-
-    broadcast(req, 'new_property', saved);
-    broadcast(req, 'stats_updated', {});
-
-    // 📧 Dispatch Submission Confirmation Email to Host and Super Admin
-    sendPropertySubmittedMail(saved).catch(e => console.warn('Property submit email err:', e.message));
-
-    res.status(201).json(saved);
-  } catch (err) {
-    console.error('Property save error:', err);
-    res.status(400).json({ message: err.message });
   }
-});
+);
 
-router.put('/properties/:id/status', async (req, res) => {
+const handleRoleUpdateCore = async (
+  req,
+  res
+) => {
   try {
-    const { status } = req.body;
-    const propId = req.params.id;
-    let updated = null;
-    if (mongoose.connection.readyState === 1) {
-      if (mongoose.Types.ObjectId.isValid(propId)) {
-        updated = await Property.findByIdAndUpdate(propId, { status }, { new: true });
-      } else {
-        updated = await Property.findOneAndUpdate({ $or: [{ _id: propId }, { id: propId }] }, { status }, { new: true });
-      }
-      if (updated && updated.toObject) updated = updated.toObject();
-    }
-    if (!updated) {
-      const idx = memoryProperties.findIndex(p => p._id === propId || p.id === propId);
-      if (idx !== -1) {
-        memoryProperties[idx].status = status;
-        updated = memoryProperties[idx];
-      }
-    }
+    const identifier =
+      req.params.id ||
+      req.body.id ||
+      req.body._id;
 
-    // Invalidate caches
-    clearCacheByPrefix('properties');
-    clearCacheByPrefix('admin_dashboard');
+    const targetEmail =
+      normalizeEmail(req.body.email);
 
-    broadcast(req, 'property_updated', updated || { _id: propId, status });
-    broadcast(req, 'stats_updated', {});
+    const role =
+      String(req.body.role || "").trim();
 
-    // 📧 Dispatch Onboarding Activation Email if Approved
-    const isApproved = String(status).toLowerCase() === 'approved' || String(status).toLowerCase() === 'accepted';
-    if (isApproved && updated) {
-      sendPropertyOnboardingApprovedMail(updated).catch(e => console.warn('Property onboarding email err:', e.message));
-    }
+    const permittedRoles = [
+      "user",
+      "owner",
+      "vendor",
+      "owner_and_vendor",
+      "guide",
+      "operations_manager",
+      "booking_executive",
+      "customer_support_executive",
+      "destination_content_manager",
+      "property_verification_manager",
+      "transport_manager",
+      "finance_accounts_manager",
+      "marketing_manager",
+      "media_gallery_manager",
+      "hr_staff_manager",
+      "admin",
+      "super_admin",
+    ];
 
-    res.json(updated || { success: true });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-router.delete('/properties/:id', async (req, res) => {
-  try {
-    const propId = req.params.id;
-    if (mongoose.connection.readyState === 1) {
-      if (mongoose.Types.ObjectId.isValid(propId)) {
-        await Property.findByIdAndDelete(propId);
-      } else {
-        await Property.findOneAndDelete({ $or: [{ _id: propId }, { id: propId }] });
-      }
-    }
-    const idx = memoryProperties.findIndex(p => p._id === propId || p.id === propId);
-    if (idx !== -1) memoryProperties.splice(idx, 1);
-
-    broadcast(req, 'vehicle_deleted', { _id: vehId });
-    broadcast(req, 'stats_updated', {});
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// --- SUPPORT TICKETS ENDPOINTS ---
-router.get('/tickets', async (req, res) => {
-  try {
-    const { email, senderEmail } = req.query;
-    const filterEmail = (email || senderEmail || '').toLowerCase().trim();
-    
-    if (mongoose.connection.readyState === 1) {
-      const query = filterEmail ? { senderEmail: { $regex: new RegExp(`^${filterEmail}$`, 'i') } } : {};
-      const tickets = await Ticket.find(query).sort({ createdAt: -1 }).maxTimeMS(3000);
-      return res.json(tickets);
-    }
-  } catch (err) {}
-  
-  const filterEmail = (req.query.email || req.query.senderEmail || '').toLowerCase().trim();
-  if (filterEmail) {
-    return res.json(memoryTickets.filter(t => (t.senderEmail || '').toLowerCase() === filterEmail));
-  }
-  res.json(memoryTickets);
-});
-
-router.post('/tickets', async (req, res) => {
-  try {
-    const body = { ...req.body };
-    delete body._id;
-    delete body.id;
-    const ticketId = body.ticketId || ('TCK-' + Math.floor(2000 + Math.random() * 8000));
-    const senderEmail = (body.senderEmail || body.email || 'guest@exploretamilnadu.com').toLowerCase().trim();
-    const senderName = body.senderName || body.name || 'User / Host';
-    const senderRole = body.senderRole || body.role || 'user';
-    const subject = body.subject || 'Support Assistance Request';
-    const category = body.category || 'General Inquiry';
-    const priority = body.priority || 'Medium';
-    const message = body.message || '';
-
-    let saved = null;
-    if (mongoose.connection.readyState === 1) {
-      const ticket = new Ticket({
-        ticketId,
-        senderName,
-        senderEmail,
-        senderRole,
-        subject,
-        category,
-        priority,
-        message,
-        status: body.status || 'Open',
-        adminReply: ''
+    if (
+      !permittedRoles.includes(role)
+    ) {
+      return res.status(400).json({
+        message: "Invalid role.",
       });
-      saved = await ticket.save();
-      saved = saved.toObject ? saved.toObject() : saved;
-      saved.id = saved._id ? saved._id.toString() : 'tck-' + Date.now();
-    } else {
-      saved = {
-        _id: 'tck-' + Date.now(),
-        id: 'tck-' + Date.now(),
-        ticketId,
-        senderName,
-        senderEmail,
-        senderRole,
-        subject,
-        category,
-        priority,
-        message,
-        status: body.status || 'Open',
-        adminReply: '',
-        createdAt: new Date().toISOString()
-      };
-      memoryTickets.unshift(saved);
     }
 
-    console.log(`🎫 [SUPPORT TICKET CREATED] ${ticketId} by ${senderName} (${senderEmail}) [${category}]`);
+    const filter = targetEmail
+      ? { email: targetEmail }
+      : (
+          mongoose.Types.ObjectId.isValid(
+            identifier
+          )
+            ? { _id: identifier }
+            : { id: identifier }
+        );
 
-    // Broadcast to Customer Support Dashboard & Super Admin Control Center
-    broadcast(req, 'new_ticket', saved);
-    broadcast(req, 'new_notification', {
-      title: `🎫 NEW SUPPORT TICKET: ${ticketId}`,
-      message: `[${category}] ${subject} from ${senderName} (${senderRole})`,
-      date: 'Just now'
+    const updatedUser =
+      await User.findOneAndUpdate(
+        filter,
+        {
+          $set: { role },
+        },
+        {
+          new: true,
+          runValidators: true,
+        }
+      )
+        .select(
+          "_id name email phone avatar role"
+        )
+        .lean()
+        .maxTimeMS(5000);
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        message: "User not found.",
+      });
+    }
+
+    broadcast(
+      req,
+      "user_role_updated",
+      updatedUser
+    );
+
+    broadcast(
+      req,
+      "stats_updated",
+      {}
+    );
+
+    return res.status(200).json(
+      updatedUser
+    );
+  } catch (error) {
+    console.error(
+      "Role update failed:",
+      error
+    );
+
+    return res.status(500).json({
+      message:
+        "Unable to update user role.",
     });
-    broadcast(req, 'stats_updated', {});
-
-    res.status(201).json(saved);
-  } catch (err) {
-    console.error('Ticket save error:', err);
-    res.status(400).json({ message: err.message });
-  }
-});
-
-const handleTicketStatusUpdate = async (req, res) => {
-  try {
-    const ticketIdent = req.params.id;
-    const { status, adminReply } = req.body;
-    let updated = null;
-
-    if (mongoose.connection.readyState === 1) {
-      if (mongoose.Types.ObjectId.isValid(ticketIdent)) {
-        updated = await Ticket.findByIdAndUpdate(
-          ticketIdent, 
-          { status: status || 'Resolved', adminReply: adminReply || '' }, 
-          { new: true }
-        );
-      }
-      if (!updated) {
-        updated = await Ticket.findOneAndUpdate(
-          { ticketId: ticketIdent },
-          { status: status || 'Resolved', adminReply: adminReply || '' },
-          { new: true }
-        );
-      }
-    }
-
-    if (!updated) {
-      const idx = memoryTickets.findIndex(t => t._id === ticketIdent || t.id === ticketIdent || t.ticketId === ticketIdent);
-      if (idx !== -1) {
-        memoryTickets[idx].status = status || memoryTickets[idx].status;
-        if (adminReply !== undefined) memoryTickets[idx].adminReply = adminReply;
-        updated = memoryTickets[idx];
-      } else {
-        updated = { _id: ticketIdent, ticketId: ticketIdent, status, adminReply };
-      }
-    }
-
-    // Broadcast ticket update to User, Vendor, Support Executive & Super Admin
-    broadcast(req, 'ticket_updated', updated);
-    if (updated.senderEmail) {
-      broadcast(req, 'new_notification', {
-        userEmail: updated.senderEmail.toLowerCase().trim(),
-        title: `🎫 TICKET UPDATED: ${updated.ticketId || ticketIdent}`,
-        message: `Status: ${updated.status}. Support Team Reply: "${adminReply || 'Updated by support team.'}"`,
-        date: 'Just now'
-      });
-    }
-    broadcast(req, 'stats_updated', {});
-
-    console.log(`✅ [TICKET UPDATED] ${ticketIdent} -> ${status}`);
-    return res.json(updated);
-  } catch (err) {
-    console.error('Ticket update error:', err);
-    res.status(500).json({ message: err.message });
   }
 };
 
-router.put('/tickets/:id/status', handleTicketStatusUpdate);
-router.put('/tickets/:id', handleTicketStatusUpdate);
-router.post('/tickets/:id/reply', handleTicketStatusUpdate);
+router.put(
+  "/users/role",
+  requireDatabase,
+  handleRoleUpdateCore
+);
 
-router.delete('/tickets/:id', async (req, res) => {
-  try {
-    const ticketIdent = req.params.id;
-    if (mongoose.connection.readyState === 1) {
-      if (mongoose.Types.ObjectId.isValid(ticketIdent)) {
-        await Ticket.findByIdAndDelete(ticketIdent);
-      } else {
-        await Ticket.findOneAndDelete({ ticketId: ticketIdent });
-      }
-    }
-    const idx = memoryTickets.findIndex(t => t._id === ticketIdent || t.id === ticketIdent || t.ticketId === ticketIdent);
-    if (idx !== -1) memoryTickets.splice(idx, 1);
+router.post(
+  "/users/role",
+  requireDatabase,
+  handleRoleUpdateCore
+);
 
-    broadcast(req, 'ticket_deleted', { _id: ticketIdent, ticketId: ticketIdent });
-    broadcast(req, 'stats_updated', {});
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
+router.put(
+  "/users/:id/role",
+  requireDatabase,
+  handleRoleUpdateCore
+);
 
-// --- RAZORPAY PAYMENT GATEWAY ENDPOINTS (TEST & LIVE API) ---
-router.get('/payment/razorpay/key', (req, res) => {
-  const keyId = process.env.RAZORPAY_KEY_ID || '';
-  res.json({ success: true, keyId });
-});
+// -------------------------------------------------------
+// STAFF
+// -------------------------------------------------------
 
-router.post('/payment/razorpay/create-order', async (req, res) => {
-  try {
-    const { amount, currency = 'INR', receipt } = req.body;
-    const keyId = process.env.RAZORPAY_KEY_ID || '';
-    const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
-    
-    let orderId = '';
+const staffRoles = [
+  "operations_manager",
+  "booking_executive",
+  "customer_support_executive",
+  "destination_content_manager",
+  "property_verification_manager",
+  "transport_manager",
+  "finance_accounts_manager",
+  "marketing_manager",
+  "media_gallery_manager",
+  "hr_staff_manager",
+];
+
+router.get(
+  "/admin/staff",
+  requireDatabase,
+  async (req, res) => {
     try {
-      const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
-      const order = await razorpay.orders.create({
-        amount: Math.round(Number(amount || 1000) * 100), // paise
-        currency,
-        receipt: (receipt || 'rcpt_' + Date.now()).substring(0, 40),
-        notes: {
-          platform: 'Explore Tamil Nadu Tourism'
-        }
-      });
-      orderId = order.id;
-    } catch (sdkErr) {
-      console.warn('Razorpay SDK Order create notice (fallback generated):', sdkErr.message);
-      orderId = 'order_' + Math.random().toString(36).substring(2, 10) + Date.now().toString().slice(-4);
-    }
-    
-    return res.json({
-      success: true,
-      orderId,
-      amount: Math.round(Number(amount || 1000) * 100),
-      currency,
-      keyId,
-      receipt: receipt || 'rcpt_' + Date.now()
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
+      const staff = await User.find({
+        role: {
+          $in: staffRoles,
+        },
+      })
+        .select(
+          "_id name email phone avatar " +
+          "role isVerified createdAt"
+        )
+        .sort({ createdAt: -1 })
+        .limit(100)
+        .lean()
+        .maxTimeMS(5000);
 
-// --- BOOKINGS ENDPOINTS ---
-router.get('/bookings', async (req, res) => {
-  try {
-    if (mongoose.connection.readyState === 1) {
-      const bookings = await Booking.find({}).sort({ createdAt: -1 }).maxTimeMS(3000);
-      return res.json(bookings);
-    }
-  } catch (err) {}
-  res.json(memoryBookings);
-});
-
-// Check Property Availability
-router.post('/bookings/check-availability', async (req, res) => {
-  try {
-    const { propertyId, checkIn, checkOut } = req.body;
-    // Can check if there are overlapping active bookings
-    res.json({
-      available: true,
-      message: 'Property is available for the selected dates!'
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-router.post('/bookings', async (req, res) => {
-  try {
-    const body = { ...req.body };
-    delete body._id;
-    delete body.id;
-    const bookingId = body.bookingId || ('ETN-BK-' + Math.floor(100000 + Math.random() * 900000));
-    const totalAmount = Number(body.totalAmount || body.amount || 0);
-    const customerName = body.customerName || body.userName || 'Tourist Guest';
-    const customerEmail = body.customerEmail || body.userEmail || 'guest@exploretamilnadu.com';
-    const checkIn = body.checkIn || body.checkInDate || new Date().toISOString().split('T')[0];
-    const checkOut = body.checkOut || body.checkOutDate || new Date(Date.now() + 86400000).toISOString().split('T')[0];
-
-    const bookingData = {
-      ...body,
-      bookingId,
-      customerName,
-      userName: customerName,
-      customerEmail,
-      userEmail: customerEmail,
-      checkIn,
-      checkInDate: checkIn,
-      checkOut,
-      checkOutDate: checkOut,
-      totalAmount,
-      amount: totalAmount,
-      status: body.status || 'Pending Approval',
-      paymentStatus: body.paymentStatus || 'Paid',
-      paymentMethod: body.paymentMethod || 'Razorpay Test Gateway',
-      paymentId: body.paymentId || ('pay_rzp_' + Date.now()),
-      createdAt: new Date()
-    };
-
-    let saved = null;
-    if (mongoose.connection.readyState === 1) {
-      const booking = new Booking(bookingData);
-      saved = await booking.save();
-      saved = saved.toObject ? saved.toObject() : saved;
-      saved.id = saved._id ? saved._id.toString() : 'bk-' + Date.now();
-    } else {
-      saved = { ...bookingData, _id: 'bk-' + Date.now(), id: 'bk-' + Date.now() };
-      memoryBookings.unshift(saved);
-    }
-
-    // 📧 1. Dispatch Email to Customer & Host based on initial booking status
-    const isInitiallyConfirmed = String(saved.status).toLowerCase() === 'confirmed';
-    if (isInitiallyConfirmed) {
-      sendBookingConfirmedMail(saved).catch(e => console.error('Confirmed mail error:', e.message));
-    } else {
-      sendBookingPendingMail(saved).catch(e => console.error('Pending mail error:', e.message));
-    }
-
-    // Broadcast live socket updates immediately to all dashboards
-    broadcast(req, 'new_booking', saved);
-    broadcast(req, 'payment_received', saved);
-    broadcast(req, 'stats_updated', {});
-
-    // Send instant in-app notification to customer
-    const custEmail = (saved.customerEmail || saved.userEmail || '').toLowerCase().trim();
-    if (custEmail) {
-      broadcast(req, 'new_notification', {
-        userEmail: custEmail,
-        title: isInitiallyConfirmed 
-          ? `🎉 Booking Confirmed - ${saved.itemTitle || saved.propertyTitle || 'Service'}`
-          : `⏳ Booking Placed (Pending Verification) - ${saved.itemTitle || saved.propertyTitle || 'Service'}`,
-        message: isInitiallyConfirmed
-          ? `Your booking ${saved.bookingId} is confirmed! Confirmation pass has been sent to your email.`
-          : `Your booking ${saved.bookingId} is placed! Host is verifying availability. You'll receive your confirmed pass once accepted.`,
-        date: 'Just now'
+      return res.status(200).json(staff);
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to retrieve staff.",
       });
     }
-
-    // Send instant in-app notification to property owner / vendor
-    const hostEmail = (saved.ownerEmail || '').toLowerCase().trim();
-    if (hostEmail) {
-      broadcast(req, 'new_notification', {
-        userEmail: hostEmail,
-        title: `🔔 New Booking (${saved.itemTitle || saved.propertyTitle || 'Listing'})`,
-        message: `New reservation ${saved.bookingId} by ${saved.customerName || saved.userName || 'Tourist'} for ₹${Number(saved.totalAmount).toLocaleString()}.`,
-        date: 'Just now'
-      });
-    }
-
-    // Send instant in-app notification to Super Admin
-    broadcast(req, 'new_notification', {
-      userEmail: 'exploretamizhagam@gmail.com',
-      title: `🔔 [ADMIN ALERT] New Booking ${saved.bookingId} (${saved.itemTitle || saved.propertyTitle})`,
-      message: `Reservation by ${saved.customerName || 'Tourist'} (₹${Number(saved.totalAmount).toLocaleString()}).`,
-      date: 'Just now'
-    });
-
-    // Send instant in-app notification to Booking Manager & Staff
-    broadcast(req, 'new_notification', {
-      userEmail: 'staff@exploretamilnadu.com',
-      title: `📋 [BOOKING MANAGER] New Booking ${saved.bookingId}`,
-      message: `Listing ${saved.itemTitle || saved.propertyTitle} booked by ${saved.customerName || 'Tourist'}.`,
-      date: 'Just now'
-    });
-
-    console.log(`✅ [BOOKING RECORDED] ${bookingId} for ${saved.itemTitle || saved.propertyTitle} (₹${totalAmount}) [Status: ${saved.status}]`);
-
-    res.status(201).json({
-      success: true,
-      booking: saved,
-      message: isInitiallyConfirmed ? 'Booking confirmed! Travel pass sent to email.' : 'Booking submitted and pending host availability confirmation. Verification email sent!'
-    });
-  } catch (err) {
-    console.error('Booking save error:', err);
-    res.status(400).json({ message: err.message });
   }
-});
+);
 
-router.put('/bookings/:id/status', async (req, res) => {
-  try {
-    const { status } = req.body;
-    const bookingId = req.params.id;
-    let updated = null;
-    if (mongoose.connection.readyState === 1) {
-      if (mongoose.Types.ObjectId.isValid(bookingId)) {
-        updated = await Booking.findByIdAndUpdate(bookingId, { status }, { new: true });
-      }
-      if (!updated) {
-        updated = await Booking.findOneAndUpdate({ bookingId }, { status }, { new: true });
-      }
-      if (updated && updated.toObject) updated = updated.toObject();
-    }
-    
-    if (!updated) {
-      const idx = memoryBookings.findIndex(b => (b.id === bookingId || b._id === bookingId || b.bookingId === bookingId));
-      if (idx !== -1) {
-        memoryBookings[idx].status = status;
-        updated = memoryBookings[idx];
-      } else {
-        updated = { _id: bookingId, bookingId, status };
-      }
-    }
+router.post(
+  "/admin/staff",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const {
+        name,
+        email,
+        phone,
+        role,
+        password,
+      } = req.body;
 
-    // 📧 2. If status is changed to Confirmed, dispatch Official Confirmation Email!
-    const isNowConfirmed = String(status).toLowerCase() === 'confirmed';
-    if (isNowConfirmed && updated) {
-      sendBookingConfirmedMail(updated).catch(e => console.error('Confirmed mail error:', e.message));
+      const normalizedEmail =
+        normalizeEmail(email);
 
-      const custEmail = (updated.customerEmail || updated.userEmail || '').toLowerCase().trim();
-      if (custEmail) {
-        broadcast(req, 'new_notification', {
-          userEmail: custEmail,
-          title: `🎉 OFFICIAL BOOKING CONFIRMED: ${updated.bookingId}`,
-          message: `Your booking for ${updated.propertyTitle || updated.itemTitle || 'Reservation'} has been confirmed! Confirmation pass sent to your email.`,
-          date: 'Just now'
+      if (
+        !name ||
+        !normalizedEmail ||
+        !staffRoles.includes(role)
+      ) {
+        return res.status(400).json({
+          message:
+            "Valid name, email and staff " +
+            "role are required.",
         });
       }
-    }
 
-    broadcast(req, 'booking_updated', updated);
-    broadcast(req, 'stats_updated', {});
-    console.log(`✅ [BOOKING STATUS UPDATED] ${bookingId} -> ${status}`);
-    res.json(updated || { success: true });
-  } catch (err) {
-    console.error('Status update error:', err);
-    res.status(500).json({ message: err.message });
-  }
-});
+      const newStaff =
+        await User.create({
+          name: String(name).trim(),
+          email: normalizedEmail,
+          phone: String(phone || "").trim(),
+          role,
+          password:
+            password ||
+            `Temp-${Date.now()}`,
+          isVerified: true,
+        });
 
-router.delete('/bookings/:id', async (req, res) => {
-  try {
-    const bookingId = req.params.id;
-    if (mongoose.connection.readyState === 1) {
-      if (mongoose.Types.ObjectId.isValid(bookingId)) {
-        await Booking.findByIdAndDelete(bookingId);
-      } else {
-        await Booking.findOneAndDelete({ bookingId });
+      const publicStaff =
+        createPublicUser(newStaff);
+
+      broadcast(
+        req,
+        "staff_added",
+        publicStaff
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      return res.status(201).json(
+        publicStaff
+      );
+    } catch (error) {
+      if (error?.code === 11000) {
+        return res.status(409).json({
+          message:
+            "A user already exists with " +
+            "this email.",
+        });
       }
-    }
-    broadcast(req, 'booking_deleted', { _id: bookingId, bookingId });
-    broadcast(req, 'stats_updated', {});
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
 
-router.delete('/bookings-clear-all', async (req, res) => {
-  try {
-    if (mongoose.connection.readyState === 1) {
-      await Booking.deleteMany({});
+      return res.status(500).json({
+        message:
+          "Unable to create staff account.",
+      });
     }
-    memoryBookings.length = 0;
-    broadcast(req, 'database_reset_zero', {});
-    broadcast(req, 'stats_updated', {});
-    res.json({ success: true, message: 'All bookings cleared successfully.' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
   }
-});
+);
 
-router.get('/bookings/:id/receipt', async (req, res) => {
-  try {
-    const bookingId = req.params.id;
-    let bk = null;
-    if (mongoose.connection.readyState === 1) {
-      if (mongoose.Types.ObjectId.isValid(bookingId)) {
-        bk = await Booking.findById(bookingId);
-      }
-      if (!bk) {
-        bk = await Booking.findOne({ bookingId });
-      }
-      if (bk && bk.toObject) bk = bk.toObject();
+// -------------------------------------------------------
+// PROPERTIES CACHE
+// -------------------------------------------------------
+
+const PROPERTY_LIST_EXCLUDED_FIELDS = [
+  "-images",
+  "-imageData",
+  "-base64Image",
+  "-gallery",
+  "-documents",
+  "-approvalHistory",
+  "-internalNotes",
+].join(" ");
+
+let propertiesListCache = {
+  key: "",
+  expiresAt: 0,
+  value: null,
+};
+
+const clearPropertiesListCache = () => {
+  propertiesListCache = {
+    key: "",
+    expiresAt: 0,
+    value: null,
+  };
+};
+
+// -------------------------------------------------------
+// PROPERTIES LIST
+// -------------------------------------------------------
+
+router.get(
+  "/properties",
+  requireDatabase,
+  async (req, res) => {
+    const page = Math.max(
+      Number.parseInt(
+        req.query.page,
+        10
+      ) || 1,
+      1
+    );
+
+    const limit = Math.min(
+      Math.max(
+        Number.parseInt(
+          req.query.limit,
+          10
+        ) || 24,
+        1
+      ),
+      50
+    );
+
+    const filter = {};
+
+    if (req.query.status) {
+      filter.status =
+        String(req.query.status);
     }
-    if (!bk) {
-      bk = memoryBookings.find(b => (b.id === bookingId || b._id === bookingId || b.bookingId === bookingId));
+
+    if (req.query.type) {
+      filter.type =
+        String(req.query.type);
     }
-    if (!bk) {
-      bk = {
-        bookingId: bookingId,
-        propertyTitle: 'Verified Luxury Stay',
-        destination: 'Tamil Nadu',
-        customerName: 'Tourist Guest',
-        customerEmail: 'guest@exploretamilnadu.com',
-        customerPhone: '+91 78717 79134',
-        checkIn: '2026-08-25',
-        checkOut: '2026-08-28',
-        nights: 3,
-        guests: 2,
-        guestType: 'Stay',
-        totalAmount: 24500,
-        paymentId: 'pay_rzp_captured',
-        paymentStatus: 'Paid',
-        status: 'Confirmed'
+
+    if (req.query.location) {
+      filter.location = {
+        $regex:
+          String(req.query.location),
+        $options: "i",
       };
     }
 
-    const bkId = bk.bookingId || bookingId;
-    const bkTitle = bk.propertyTitle || bk.itemTitle || 'Verified Luxury Stay';
-    const bkLocation = bk.destination || bk.location || 'Tamil Nadu';
-    const bkAmount = Number(bk.totalAmount || 0);
-    const baseRate = Math.round(bkAmount / 1.23);
-    const gstAmount = Math.round(baseRate * 0.18);
-    const serviceFee = bkAmount - baseRate - gstAmount;
-    const issueDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Explore_TamilNadu_Receipt_${bkId}</title>
-        <style>
-          @page { size: A4; margin: 12mm; }
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #0f172a; margin: 0; padding: 24px; background: #ffffff; line-height: 1.5; }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px; }
-          .logo-title { font-size: 24px; font-weight: 900; color: #0f172a; letter-spacing: -0.5px; }
-          .sub-title { font-size: 11px; font-family: monospace; color: #64748b; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 2px; }
-          .badge { display: inline-block; padding: 6px 14px; border-radius: 9999px; font-size: 11px; font-weight: 800; font-family: monospace; }
-          .badge-paid { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
-          .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-          .box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; }
-          .box h4 { margin: 0 0 8px 0; font-size: 11px; text-transform: uppercase; color: #64748b; font-family: monospace; letter-spacing: 1px; }
-          .box p { margin: 3px 0; font-size: 12px; }
-          table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; }
-          th { background: #f1f5f9; text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; color: #475569; font-family: monospace; border-bottom: 1px solid #cbd5e1; }
-          td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
-          .text-right { text-align: right; }
-          .total-row { font-size: 15px; font-weight: 900; background: #f8fafc; }
-          .footer { margin-top: 28px; padding-top: 14px; border-top: 1px dashed #cbd5e1; text-align: center; font-size: 11px; color: #94a3b8; font-family: monospace; }
-          .print-btn-bar { display: flex; justify-content: center; gap: 12px; margin-bottom: 20px; }
-          .print-btn { background: #0f172a; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px; }
-          @media print { .print-btn-bar { display: none; } body { padding: 0; } }
-        </style>
-      </head>
-      <body>
-        <div class="print-btn-bar">
-          <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
-        </div>
-
-        <div class="header">
-          <div>
-            <div class="logo-title">Explore Tamil Nadu</div>
-            <div class="sub-title">Official Tax Invoice & Stay Voucher</div>
-            <p style="font-size: 11px; color: #64748b; margin: 4px 0 0 0;">GSTIN: 33AAACE2026TN1Z8 · Helpline: +91 78717 79134</p>
-          </div>
-          <div style="text-align: right;">
-            <span class="badge badge-paid">✓ PAID VIA RAZORPAY</span>
-            <p style="font-size: 12px; font-family: monospace; margin: 6px 0 0 0; color: #0f172a;"><strong>Booking ID:</strong> ${bkId}</p>
-            <p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0;">Date: ${issueDate}</p>
-          </div>
-        </div>
-
-        <div class="grid-2">
-          <div class="box">
-            <h4>Billed To (Guest Details)</h4>
-            <p><strong>Name:</strong> ${bk.customerName || bk.userName || 'Tourist'}</p>
-            <p><strong>Email:</strong> ${bk.customerEmail || bk.userEmail || ''}</p>
-            <p><strong>Phone:</strong> ${bk.customerPhone || bk.userPhone || '+91 78717 79134'}</p>
-            <p><strong>Guests:</strong> ${bk.guests || 2} Guests (${bk.guestType || 'Stay'})</p>
-          </div>
-          <div class="box">
-            <h4>Stay & Schedule Details</h4>
-            <p><strong>Property:</strong> ${bkTitle}</p>
-            <p><strong>Location:</strong> ${bkLocation}</p>
-            <p><strong>Host Name:</strong> ${bk.ownerName || 'Verified Host'}</p>
-            <p><strong>Schedule:</strong> ${bk.checkIn || bk.checkInDate || ''} (12:00 PM) → ${bk.checkOut || bk.checkOutDate || ''} (11:00 AM)</p>
-          </div>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th>Description</th>
-              <th>Duration</th>
-              <th class="text-right">Rate</th>
-              <th class="text-right">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <strong>${bkTitle}</strong><br>
-                <span style="font-size: 11px; color: #64748b;">Luxury Verified Accommodation · ${bkLocation}</span>
-              </td>
-              <td>${bk.nights || 1} Night(s)</td>
-              <td class="text-right font-mono">₹${Math.round(baseRate / (bk.nights || 1)).toLocaleString()}</td>
-              <td class="text-right font-mono">₹${baseRate.toLocaleString()}</td>
-            </tr>
-            <tr>
-              <td>Goods & Services Tax (GST 18%)</td>
-              <td>Standard 18%</td>
-              <td class="text-right">18%</td>
-              <td class="text-right font-mono">+ ₹${gstAmount.toLocaleString()}</td>
-            </tr>
-            <tr>
-              <td>Explore Tamil Nadu Platform & Facilitation Fee (5%)</td>
-              <td>Service Fee</td>
-              <td class="text-right">5%</td>
-              <td class="text-right font-mono">+ ₹${serviceFee.toLocaleString()}</td>
-            </tr>
-            <tr class="total-row">
-              <td colspan="3" style="font-weight: 900;">Total Amount Paid (INR)</td>
-              <td class="text-right font-mono" style="color: #059669; font-size: 17px;">₹${bkAmount.toLocaleString()}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="box" style="background: #f0fdf4; border-color: #bbf7d0; margin-top: 14px;">
-          <h4 style="color: #166534;">Payment Verification & Instructions</h4>
-          <p style="font-size: 12px; color: #166534; font-family: monospace;">
-            <strong>Transaction ID:</strong> ${bk.paymentId || 'pay_rzp_captured'} · <strong>Status:</strong> ${bk.status || 'Confirmed'}
-          </p>
-          <p style="font-size: 11px; color: #15803d; margin-top: 4px;">
-            Please present this official voucher or your Booking ID (${bkId}) at check-in. Valid Government ID proof is required for all adult guests.
-          </p>
-        </div>
-
-        <div class="footer">
-          &copy; 2026 Explore Tamil Nadu Reservations Platform · support@exploretamilnadu.com · +91 78717 79134<br>
-          This is a computer-generated tax invoice and requires no physical signature.
-        </div>
-      </body>
-      </html>
-    `;
-
-    if (req.query.download === '1') {
-      res.setHeader('Content-Type', 'text/html');
-      res.setHeader('Content-Disposition', `attachment; filename="Explore_TamilNadu_Receipt_${bkId}.html"`);
-    } else {
-      res.setHeader('Content-Type', 'text/html');
+    if (
+      req.query.featured !== undefined
+    ) {
+      filter.isFeatured =
+        String(req.query.featured) ===
+        "true";
     }
-    res.send(html);
-  } catch (err) {
-    res.status(500).send('Error generating receipt: ' + err.message);
+
+    const cacheKey =
+      JSON.stringify({
+        page,
+        limit,
+        filter,
+      });
+
+    res.set(
+      "Cache-Control",
+      "public, max-age=30, " +
+      "stale-while-revalidate=120"
+    );
+
+    if (
+      propertiesListCache.value &&
+      propertiesListCache.key ===
+        cacheKey &&
+      propertiesListCache.expiresAt >
+        Date.now()
+    ) {
+      return res.status(200).json(
+        propertiesListCache.value
+      );
+    }
+
+    try {
+      const properties =
+        await Property.find(filter)
+          .select(
+            PROPERTY_LIST_EXCLUDED_FIELDS
+          )
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .lean()
+          .maxTimeMS(10000);
+
+      propertiesListCache = {
+        key: cacheKey,
+        expiresAt:
+          Date.now() + 30_000,
+        value: properties,
+      };
+
+      // Array response maintained for the
+      // existing Explore frontend.
+      return res.status(200).json(
+        properties
+      );
+    } catch (error) {
+      console.error(
+        "GET /api/properties failed:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Unable to retrieve properties.",
+      });
+    }
   }
-});
+);
 
-// --- SYSTEM MAINTENANCE & UPGRADE CONTROLS ---
-router.get('/system/maintenance', (req, res) => {
-  res.json({
-    success: true,
-    ...systemMaintenanceState
-  });
-});
+// -------------------------------------------------------
+// CREATE PROPERTY
+// -------------------------------------------------------
 
-router.post('/system/maintenance', (req, res) => {
+router.post(
+  "/properties",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const body = {
+        ...req.body,
+      };
+
+      delete body._id;
+      delete body.id;
+
+      const imageValues = Array.isArray(
+        body.images
+      )
+        ? body.images
+        : [];
+
+      const containsBase64 =
+        imageValues.some((image) => {
+          const value =
+            typeof image === "string"
+              ? image
+              : image?.url;
+
+          return String(value || "")
+            .startsWith("data:image/");
+        });
+
+      if (containsBase64) {
+        return res.status(400).json({
+          message:
+            "Upload images to Cloudinary " +
+            "and submit image URLs.",
+        });
+      }
+
+      const property =
+        await Property.create({
+          ...body,
+
+          pricePerNight: Number(
+            body.pricePerNight ||
+            body.price ||
+            3800
+          ),
+
+          price: Number(
+            body.price ||
+            body.pricePerNight ||
+            3800
+          ),
+
+          status:
+            body.status ||
+            "Pending Approval",
+        });
+
+      const saved =
+        property.toObject();
+
+      saved.id =
+        String(saved._id);
+
+      clearPropertiesListCache();
+
+      broadcast(
+        req,
+        "new_property",
+        saved
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      sendPropertySubmittedMail(
+        saved
+      ).catch((error) => {
+        console.warn(
+          "Property email failed:",
+          error.message
+        );
+      });
+
+      return res.status(201).json(saved);
+    } catch (error) {
+      console.error(
+        "Property save failed:",
+        error
+      );
+
+      return res.status(400).json({
+        message: error.message,
+      });
+    }
+  }
+);
+
+// -------------------------------------------------------
+// UPDATE PROPERTY STATUS
+// -------------------------------------------------------
+
+router.put(
+  "/properties/:id/status",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const propertyId =
+        req.params.id;
+
+      const status =
+        String(
+          req.body.status || ""
+        ).trim();
+
+      if (!status) {
+        return res.status(400).json({
+          message: "Status is required.",
+        });
+      }
+
+      if (
+        !mongoose.Types.ObjectId.isValid(
+          propertyId
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "Invalid property ID.",
+        });
+      }
+
+      const updated =
+        await Property.findByIdAndUpdate(
+          propertyId,
+          {
+            $set: { status },
+          },
+          {
+            new: true,
+            runValidators: true,
+          }
+        ).maxTimeMS(5000);
+
+      if (!updated) {
+        return res.status(404).json({
+          message:
+            "Property not found.",
+        });
+      }
+
+      clearPropertiesListCache();
+
+      broadcast(
+        req,
+        "property_updated",
+        updated
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      if (
+        [
+          "approved",
+          "accepted",
+        ].includes(
+          status.toLowerCase()
+        )
+      ) {
+        sendPropertyOnboardingApprovedMail(
+          updated
+        ).catch((error) => {
+          console.warn(
+            "Property approval email failed:",
+            error.message
+          );
+        });
+      }
+
+      return res.status(200).json(
+        updated
+      );
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to update property.",
+      });
+    }
+  }
+);
+
+router.delete(
+  "/properties/:id",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      if (
+        !mongoose.Types.ObjectId.isValid(
+          req.params.id
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "Invalid property ID.",
+        });
+      }
+
+      const deleted =
+        await Property.findByIdAndDelete(
+          req.params.id
+        ).maxTimeMS(5000);
+
+      if (!deleted) {
+        return res.status(404).json({
+          message:
+            "Property not found.",
+        });
+      }
+
+      clearPropertiesListCache();
+
+      broadcast(
+        req,
+        "property_deleted",
+        {
+          _id: req.params.id,
+        }
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      return res.status(200).json({
+        success: true,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to delete property.",
+      });
+    }
+  }
+);
+
+// -------------------------------------------------------
+// VEHICLES
+// -------------------------------------------------------
+
+router.get(
+  "/vehicles",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const limit = Math.min(
+        Math.max(
+          Number.parseInt(
+            req.query.limit,
+            10
+          ) || 25,
+          1
+        ),
+        50
+      );
+
+      const vehicles =
+        await Vehicle.find({})
+          .select(
+            "-imageData -base64Image " +
+            "-documents"
+          )
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .lean()
+          .maxTimeMS(10000);
+
+      return res.status(200).json(
+        vehicles
+      );
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to retrieve vehicles.",
+      });
+    }
+  }
+);
+
+router.post(
+  "/vehicles",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const body = {
+        ...req.body,
+      };
+
+      delete body._id;
+      delete body.id;
+
+      const vehicle =
+        await Vehicle.create({
+          ...body,
+
+          status:
+            body.status ||
+            "Pending Approval",
+        });
+
+      const saved =
+        vehicle.toObject();
+
+      saved.id =
+        String(saved._id);
+
+      broadcast(
+        req,
+        "new_vehicle",
+        saved
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      sendVehicleSubmittedMail(
+        saved
+      ).catch((error) => {
+        console.warn(
+          "Vehicle email failed:",
+          error.message
+        );
+      });
+
+      return res.status(201).json(saved);
+    } catch (error) {
+      return res.status(400).json({
+        message: error.message,
+      });
+    }
+  }
+);
+
+router.put(
+  "/vehicles/:id/status",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const status =
+        String(
+          req.body.status || ""
+        ).trim();
+
+      const updated =
+        await Vehicle.findByIdAndUpdate(
+          req.params.id,
+          {
+            $set: { status },
+          },
+          {
+            new: true,
+            runValidators: true,
+          }
+        ).maxTimeMS(5000);
+
+      if (!updated) {
+        return res.status(404).json({
+          message:
+            "Vehicle not found.",
+        });
+      }
+
+      broadcast(
+        req,
+        "vehicle_updated",
+        updated
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      if (
+        [
+          "approved",
+          "accepted",
+        ].includes(
+          status.toLowerCase()
+        )
+      ) {
+        sendVehicleOnboardingApprovedMail(
+          updated
+        ).catch((error) => {
+          console.warn(
+            "Vehicle approval email failed:",
+            error.message
+          );
+        });
+      }
+
+      return res.status(200).json(
+        updated
+      );
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to update vehicle.",
+      });
+    }
+  }
+);
+
+router.delete(
+  "/vehicles/:id",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const deleted =
+        await Vehicle.findByIdAndDelete(
+          req.params.id
+        ).maxTimeMS(5000);
+
+      if (!deleted) {
+        return res.status(404).json({
+          message:
+            "Vehicle not found.",
+        });
+      }
+
+      broadcast(
+        req,
+        "vehicle_deleted",
+        {
+          _id: req.params.id,
+        }
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      return res.status(200).json({
+        success: true,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to delete vehicle.",
+      });
+    }
+  }
+);
+
+// -------------------------------------------------------
+// SUPPORT TICKETS
+// -------------------------------------------------------
+
+router.get(
+  "/tickets",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const limit = Math.min(
+        Math.max(
+          Number.parseInt(
+            req.query.limit,
+            10
+          ) || 50,
+          1
+        ),
+        100
+      );
+
+      const filter = {};
+
+      if (req.query.status) {
+        filter.status =
+          String(req.query.status);
+      }
+
+      if (req.query.email) {
+        filter.userEmail =
+          normalizeEmail(
+            req.query.email
+          );
+      }
+
+      const tickets =
+        await Ticket.find(filter)
+          .select("-attachments")
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .lean()
+          .maxTimeMS(10000);
+
+      return res.status(200).json(
+        tickets
+      );
+    } catch (error) {
+      console.error(
+        "Ticket retrieval failed:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Unable to retrieve tickets.",
+      });
+    }
+  }
+);
+
+router.post(
+  "/tickets",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const body = {
+        ...req.body,
+      };
+
+      delete body._id;
+      delete body.id;
+
+      if (
+        !body.subject ||
+        !body.message
+      ) {
+        return res.status(400).json({
+          message:
+            "Subject and message are required.",
+        });
+      }
+
+      const ticket =
+        await Ticket.create({
+          ...body,
+
+          userEmail:
+            normalizeEmail(
+              body.userEmail ||
+              body.email
+            ),
+
+          status:
+            body.status || "Open",
+
+          ticketNumber:
+            body.ticketNumber ||
+            `TKT-${Date.now()}`,
+        });
+
+      const saved =
+        ticket.toObject();
+
+      saved.id =
+        String(saved._id);
+
+      broadcast(
+        req,
+        "new_ticket",
+        saved
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      return res.status(201).json(saved);
+    } catch (error) {
+      console.error(
+        "Ticket creation failed:",
+        error
+      );
+
+      return res.status(400).json({
+        message: error.message,
+      });
+    }
+  }
+);
+
+const handleTicketStatusUpdate = async (
+  req,
+  res
+) => {
   try {
-    const { isMaintenance, message, estimatedTime, upgradeTitle } = req.body;
-    systemMaintenanceState = {
-      isMaintenance: Boolean(isMaintenance),
-      message: message || systemMaintenanceState.message,
-      estimatedTime: estimatedTime || systemMaintenanceState.estimatedTime,
-      upgradeTitle: upgradeTitle || systemMaintenanceState.upgradeTitle,
-      updatedAt: new Date()
+    const ticketId =
+      req.params.id;
+
+    if (
+      !mongoose.Types.ObjectId.isValid(
+        ticketId
+      )
+    ) {
+      return res.status(400).json({
+        message:
+          "Invalid ticket ID.",
+      });
+    }
+
+    const update = {};
+
+    if (req.body.status) {
+      update.status =
+        String(req.body.status);
+    }
+
+    if (req.body.assignedTo) {
+      update.assignedTo =
+        req.body.assignedTo;
+    }
+
+    if (req.body.priority) {
+      update.priority =
+        req.body.priority;
+    }
+
+    if (
+      req.body.reply ||
+      req.body.message
+    ) {
+      update.$push = {
+        replies: {
+          message:
+            req.body.reply ||
+            req.body.message,
+
+          sender:
+            req.body.sender ||
+            req.body.staffName ||
+            "Support Team",
+
+          senderRole:
+            req.body.senderRole ||
+            "support",
+
+          createdAt:
+            new Date(),
+        },
+      };
+    }
+
+    const normalUpdate = {
+      ...update,
     };
 
-    broadcast(req, 'maintenance_mode_changed', systemMaintenanceState);
-    broadcast(req, 'stats_updated', {});
+    delete normalUpdate.$push;
 
-    res.json({
-      success: true,
-      maintenance: systemMaintenanceState
+    const updateOperation = {
+      $set: normalUpdate,
+    };
+
+    if (update.$push) {
+      updateOperation.$push =
+        update.$push;
+    }
+
+    const updated =
+      await Ticket.findByIdAndUpdate(
+        ticketId,
+        updateOperation,
+        {
+          new: true,
+          runValidators: true,
+        }
+      ).maxTimeMS(5000);
+
+    if (!updated) {
+      return res.status(404).json({
+        message:
+          "Ticket not found.",
+      });
+    }
+
+    broadcast(
+      req,
+      "ticket_updated",
+      updated
+    );
+
+    broadcast(
+      req,
+      "stats_updated",
+      {}
+    );
+
+    return res.status(200).json(
+      updated
+    );
+  } catch (error) {
+    console.error(
+      "Ticket update failed:",
+      error
+    );
+
+    return res.status(500).json({
+      message:
+        "Unable to update ticket.",
     });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
   }
-});
+};
+
+router.put(
+  "/tickets/:id/status",
+  requireDatabase,
+  handleTicketStatusUpdate
+);
+
+router.put(
+  "/tickets/:id",
+  requireDatabase,
+  handleTicketStatusUpdate
+);
+
+router.post(
+  "/tickets/:id/reply",
+  requireDatabase,
+  handleTicketStatusUpdate
+);
+
+router.delete(
+  "/tickets/:id",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const deleted =
+        await Ticket.findByIdAndDelete(
+          req.params.id
+        ).maxTimeMS(5000);
+
+      if (!deleted) {
+        return res.status(404).json({
+          message:
+            "Ticket not found.",
+        });
+      }
+
+      broadcast(
+        req,
+        "ticket_deleted",
+        {
+          _id: req.params.id,
+        }
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      return res.status(200).json({
+        success: true,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to delete ticket.",
+      });
+    }
+  }
+);
+
+// -------------------------------------------------------
+// RAZORPAY
+// -------------------------------------------------------
+
+const createRazorpayClient = () => {
+  const keyId =
+    process.env.RAZORPAY_KEY_ID;
+
+  const keySecret =
+    process.env.RAZORPAY_KEY_SECRET;
+
+  if (!keyId || !keySecret) {
+    throw new Error(
+      "Razorpay is not configured"
+    );
+  }
+
+  return new Razorpay({
+    key_id: keyId,
+    key_secret: keySecret,
+  });
+};
+
+router.get(
+  "/payment/razorpay/key",
+  (req, res) => {
+    if (
+      !process.env.RAZORPAY_KEY_ID
+    ) {
+      return res.status(503).json({
+        message:
+          "Payment service is unavailable.",
+      });
+    }
+
+    return res.status(200).json({
+      key:
+        process.env.RAZORPAY_KEY_ID,
+    });
+  }
+);
+
+router.post(
+  "/payment/razorpay/create-order",
+  async (req, res) => {
+    try {
+      const amount = Number(
+        req.body.amount
+      );
+
+      if (
+        !Number.isFinite(amount) ||
+        amount <= 0
+      ) {
+        return res.status(400).json({
+          message:
+            "A valid amount is required.",
+        });
+      }
+
+      const razorpay =
+        createRazorpayClient();
+
+      const receipt =
+        String(
+          req.body.receipt ||
+          `receipt-${Date.now()}`
+        ).slice(0, 40);
+
+      const order =
+        await razorpay.orders.create({
+          amount:
+            Math.round(amount * 100),
+
+          currency:
+            req.body.currency ||
+            "INR",
+
+          receipt,
+
+          notes: {
+            bookingType:
+              String(
+                req.body.bookingType ||
+                ""
+              ).slice(0, 100),
+
+            customerEmail:
+              normalizeEmail(
+                req.body.customerEmail
+              ),
+          },
+        });
+
+      return res.status(201).json({
+        success: true,
+        order,
+      });
+    } catch (error) {
+      console.error(
+        "Razorpay order failed:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Unable to create payment order.",
+      });
+    }
+  }
+);
+
+// -------------------------------------------------------
+// BOOKINGS
+// -------------------------------------------------------
+
+router.get(
+  "/bookings",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const page = Math.max(
+        Number.parseInt(
+          req.query.page,
+          10
+        ) || 1,
+        1
+      );
+
+      const limit = Math.min(
+        Math.max(
+          Number.parseInt(
+            req.query.limit,
+            10
+          ) || 25,
+          1
+        ),
+        100
+      );
+
+      const filter = {};
+
+      if (req.query.email) {
+        const email =
+          normalizeEmail(
+            req.query.email
+          );
+
+        filter.$or = [
+          { customerEmail: email },
+          { userEmail: email },
+          { email },
+        ];
+      }
+
+      if (req.query.status) {
+        filter.status =
+          String(req.query.status);
+      }
+
+      const bookings =
+        await Booking.find(filter)
+          .select(
+            "-paymentSignature " +
+            "-internalNotes"
+          )
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .lean()
+          .maxTimeMS(10000);
+
+      return res.status(200).json(
+        bookings
+      );
+    } catch (error) {
+      console.error(
+        "Booking retrieval failed:",
+        error
+      );
+
+      return res.status(500).json({
+        message:
+          "Unable to retrieve bookings.",
+      });
+    }
+  }
+);
+
+router.post(
+  "/bookings/check-availability",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const {
+        propertyId,
+        vehicleId,
+        checkIn,
+        checkOut,
+        pickupDate,
+      } = req.body;
+
+      const resourceId =
+        propertyId || vehicleId;
+
+      if (!resourceId) {
+        return res.status(400).json({
+          message:
+            "Property or vehicle ID is required.",
+        });
+      }
+
+      const dateFilter = [];
+
+      if (checkIn && checkOut) {
+        dateFilter.push({
+          checkIn: {
+            $lt: new Date(checkOut),
+          },
+
+          checkOut: {
+            $gt: new Date(checkIn),
+          },
+        });
+      }
+
+      if (pickupDate) {
+        dateFilter.push({
+          pickupDate,
+        });
+      }
+
+      const filter = {
+        status: {
+          $in: [
+            "Confirmed",
+            "Pending",
+            "Pending Approval",
+            "In Progress",
+          ],
+        },
+
+        $or: [
+          { propertyId: resourceId },
+          { vehicleId: resourceId },
+          { itemId: resourceId },
+        ],
+      };
+
+      if (dateFilter.length) {
+        filter.$and = [
+          {
+            $or: dateFilter,
+          },
+        ];
+      }
+
+      const existing =
+        await Booking.findOne(filter)
+          .select("_id bookingId status")
+          .lean()
+          .maxTimeMS(5000);
+
+      return res.status(200).json({
+        available: !existing,
+
+        message: existing
+          ? "The selected schedule is unavailable."
+          : "The selected schedule is available.",
+      });
+    } catch (error) {
+      return res.status(500).json({
+        available: false,
+        message:
+          "Unable to check availability.",
+      });
+    }
+  }
+);
+
+router.post(
+  "/bookings",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const body = {
+        ...req.body,
+      };
+
+      delete body._id;
+      delete body.id;
+
+      const bookingId =
+        body.bookingId ||
+        `ETN-${Date.now()}`;
+
+      const booking =
+        await Booking.create({
+          ...body,
+          bookingId,
+
+          customerEmail:
+            normalizeEmail(
+              body.customerEmail ||
+              body.userEmail ||
+              body.email
+            ),
+
+          totalAmount: Number(
+            body.totalAmount ||
+            body.amount ||
+            0
+          ),
+
+          status:
+            body.status ||
+            "Pending Approval",
+        });
+
+      const saved =
+        booking.toObject();
+
+      saved.id =
+        String(saved._id);
+
+      broadcast(
+        req,
+        "new_booking",
+        saved
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      const normalizedStatus =
+        String(saved.status)
+          .toLowerCase();
+
+      if (
+        normalizedStatus ===
+        "confirmed"
+      ) {
+        sendBookingConfirmedMail(
+          saved
+        ).catch((error) => {
+          console.warn(
+            "Booking confirmation email failed:",
+            error.message
+          );
+        });
+      } else {
+        sendBookingPendingMail(
+          saved
+        ).catch((error) => {
+          console.warn(
+            "Booking pending email failed:",
+            error.message
+          );
+        });
+      }
+
+      return res.status(201).json(saved);
+    } catch (error) {
+      console.error(
+        "Booking creation failed:",
+        error
+      );
+
+      return res.status(400).json({
+        message: error.message,
+      });
+    }
+  }
+);
+
+router.put(
+  "/bookings/:id/status",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const status =
+        String(
+          req.body.status || ""
+        ).trim();
+
+      if (!status) {
+        return res.status(400).json({
+          message:
+            "Booking status is required.",
+        });
+      }
+
+      const update = {
+        status,
+      };
+
+      const allowedFields = [
+        "driverName",
+        "driverPhone",
+        "vehicleRegNo",
+        "ownerName",
+        "ownerEmail",
+        "note",
+      ];
+
+      for (
+        const field
+        of allowedFields
+      ) {
+        if (
+          req.body[field] !== undefined
+        ) {
+          update[field] =
+            req.body[field];
+        }
+      }
+
+      const updated =
+        await Booking.findByIdAndUpdate(
+          req.params.id,
+          {
+            $set: update,
+          },
+          {
+            new: true,
+            runValidators: true,
+          }
+        ).maxTimeMS(5000);
+
+      if (!updated) {
+        return res.status(404).json({
+          message:
+            "Booking not found.",
+        });
+      }
+
+      broadcast(
+        req,
+        "booking_updated",
+        updated
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      if (
+        status.toLowerCase() ===
+        "confirmed"
+      ) {
+        sendBookingConfirmedMail(
+          updated
+        ).catch((error) => {
+          console.warn(
+            "Confirmation email failed:",
+            error.message
+          );
+        });
+      }
+
+      return res.status(200).json(
+        updated
+      );
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to update booking.",
+      });
+    }
+  }
+);
+
+router.delete(
+  "/bookings/:id",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const deleted =
+        await Booking.findByIdAndDelete(
+          req.params.id
+        ).maxTimeMS(5000);
+
+      if (!deleted) {
+        return res.status(404).json({
+          message:
+            "Booking not found.",
+        });
+      }
+
+      broadcast(
+        req,
+        "booking_deleted",
+        {
+          _id: req.params.id,
+        }
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      return res.status(200).json({
+        success: true,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to delete booking.",
+      });
+    }
+  }
+);
+
+// This destructive route should only be
+// available to authenticated administrators.
+router.delete(
+  "/bookings-clear-all",
+  protect,
+  authorizeRoles(
+    "admin",
+    "super_admin"
+  ),
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const result =
+        await Booking.deleteMany({});
+
+      broadcast(
+        req,
+        "bookings_cleared",
+        {}
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+
+      return res.status(200).json({
+        success: true,
+        deletedCount:
+          result.deletedCount,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to clear bookings.",
+      });
+    }
+  }
+);
+
+router.get(
+  "/bookings/:id/receipt",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const booking =
+        await Booking.findById(
+          req.params.id
+        )
+          .select(
+            "-paymentSignature " +
+            "-internalNotes"
+          )
+          .lean()
+          .maxTimeMS(5000);
+
+      if (!booking) {
+        return res.status(404).json({
+          message:
+            "Booking not found.",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+
+        receipt: {
+          receiptNumber:
+            booking.bookingId ||
+            String(booking._id),
+
+          issuedAt:
+            booking.updatedAt ||
+            booking.createdAt,
+
+          customerName:
+            booking.customerName ||
+            booking.userName ||
+            booking.name,
+
+          customerEmail:
+            booking.customerEmail ||
+            booking.userEmail ||
+            booking.email,
+
+          itemTitle:
+            booking.itemTitle ||
+            booking.propertyTitle ||
+            booking.title,
+
+          status:
+            booking.status,
+
+          paymentId:
+            booking.paymentId ||
+            booking.razorpayPaymentId,
+
+          totalAmount:
+            booking.totalAmount ||
+            booking.amount ||
+            0,
+
+          currency:
+            booking.currency ||
+            "INR",
+
+          checkIn:
+            booking.checkIn ||
+            booking.checkInDate,
+
+          checkOut:
+            booking.checkOut ||
+            booking.checkOutDate,
+
+          pickupDate:
+            booking.pickupDate,
+
+          pickupTime:
+            booking.pickupTime,
+        },
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to generate receipt.",
+      });
+    }
+  }
+);
+
+// -------------------------------------------------------
+// MAINTENANCE MODE
+// -------------------------------------------------------
+
+router.get(
+  "/system/maintenance",
+  (req, res) => {
+    return res.status(200).json(
+      systemMaintenanceState
+    );
+  }
+);
+
+router.post(
+  "/system/maintenance",
+  protect,
+  authorizeRoles(
+    "admin",
+    "super_admin"
+  ),
+  (req, res) => {
+    const {
+      isMaintenance,
+      message,
+      estimatedTime,
+      upgradeTitle,
+    } = req.body;
+
+    systemMaintenanceState = {
+      ...systemMaintenanceState,
+
+      isMaintenance:
+        Boolean(isMaintenance),
+
+      message:
+        message ||
+        systemMaintenanceState.message,
+
+      estimatedTime:
+        estimatedTime ||
+        systemMaintenanceState
+          .estimatedTime,
+
+      upgradeTitle:
+        upgradeTitle ||
+        systemMaintenanceState
+          .upgradeTitle,
+
+      updatedAt: new Date(),
+    };
+
+    broadcast(
+      req,
+      "maintenance_updated",
+      systemMaintenanceState
+    );
+
+    return res.status(200).json({
+      success: true,
+      maintenance:
+        systemMaintenanceState,
+    });
+  }
+);
+
+// -------------------------------------------------------
+// API HEALTH CHECK
+// -------------------------------------------------------
+
+router.get(
+  "/health",
+  (req, res) => {
+    const databaseState =
+      mongoose.connection.readyState;
+
+    return res.status(
+      databaseState === 1
+        ? 200
+        : 503
+    ).json({
+      success:
+        databaseState === 1,
+
+      service:
+        "Explore Tamil Nadu API",
+
+      database:
+        databaseState === 1
+          ? "connected"
+          : "disconnected",
+
+      uptime:
+        Math.floor(process.uptime()),
+
+      timestamp:
+        new Date().toISOString(),
+    });
+  }
+);
+
+// -------------------------------------------------------
+// ROUTER ERROR HANDLER
+// -------------------------------------------------------
+
+router.use(
+  (error, req, res, next) => {
+    console.error(
+      "API route error:",
+      error
+    );
+
+    if (res.headersSent) {
+      return next(error);
+    }
+
+    return res.status(
+      error.status || 500
+    ).json({
+      success: false,
+
+      message:
+        process.env.NODE_ENV ===
+        "production"
+          ? "An unexpected server error occurred."
+          : error.message,
+    });
+  }
+);
+
+// -------------------------------------------------------
+// FINAL EXPORT
+// -------------------------------------------------------
 
 export default router;
-

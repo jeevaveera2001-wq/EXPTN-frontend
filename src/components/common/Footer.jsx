@@ -236,6 +236,17 @@ export default function Footer({ onOpenAuth }) {
                 >
                   HELP & CONTACT
                 </button>
+                <div className="pt-2 border-t border-slate-200/60 space-y-1">
+                  <Link to="/privacy-policy" className="block py-0.5 text-[11px] text-slate-500 hover:text-black">
+                    PRIVACY & POLICY
+                  </Link>
+                  <Link to="/terms" className="block py-0.5 text-[11px] text-slate-500 hover:text-black">
+                    TERMS & CONDITIONS
+                  </Link>
+                  <Link to="/cancellation-refund" className="block py-0.5 text-[11px] text-slate-500 hover:text-black">
+                    CANCELLATION & REFUND
+                  </Link>
+                </div>
               </div>
             )}
           </div>
@@ -395,6 +406,21 @@ export default function Footer({ onOpenAuth }) {
                   HELP & CONTACT
                 </button>
               </li>
+              <li className="pt-1.5 border-t border-slate-200/60">
+                <Link to="/privacy-policy" className="hover:text-[#000000] transition-colors no-underline block text-[11px] text-slate-500">
+                  PRIVACY & POLICY
+                </Link>
+              </li>
+              <li>
+                <Link to="/terms" className="hover:text-[#000000] transition-colors no-underline block text-[11px] text-slate-500">
+                  TERMS & CONDITIONS
+                </Link>
+              </li>
+              <li>
+                <Link to="/cancellation-refund" className="hover:text-[#000000] transition-colors no-underline block text-[11px] text-slate-500">
+                  CANCELLATION & REFUND
+                </Link>
+              </li>
             </ul>
           </div>
 
@@ -425,12 +451,22 @@ export default function Footer({ onOpenAuth }) {
 
         </div>
 
-        {/* Footer Bottom Bar */}
+        {/* Footer Bottom Bar with Legal Links */}
         <div className="max-w-7xl mx-auto px-6 mt-6 pt-4 border-t border-[#242429]/15 flex flex-col md:flex-row justify-between items-center font-fira-mono text-[10px] sm:text-[11px] text-[#919191] gap-2 sm:gap-4">
           <p className="flex items-center gap-2">
             <span>THIS SITE IS UNDER</span>
             <span className="font-bold text-[#000000] tracking-wide">VEERAWEBTECH</span>
           </p>
+          
+          {/* Direct Legal Policy Badges */}
+          <div className="flex flex-wrap justify-center items-center gap-3 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+            <Link to="/privacy-policy" className="hover:text-black transition-colors">Privacy Policy</Link>
+            <span>•</span>
+            <Link to="/terms" className="hover:text-black transition-colors">Terms & Conditions</Link>
+            <span>•</span>
+            <Link to="/cancellation-refund" className="hover:text-black transition-colors">Cancellation & Refund</Link>
+          </div>
+
           <p className="text-[#919191]">
             © {new Date().getFullYear()} EXPLORE TAMIL NADU. KOBU EDITORIAL DESIGN SYSTEM.
           </p>

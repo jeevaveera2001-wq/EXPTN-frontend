@@ -284,6 +284,10 @@ export default function Navbar({ onOpenAuth }) {
             <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
               <Link to="/" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all">OVERVIEW</Link>
               <Link to="/explore" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all">EXPLORE</Link>
+              <Link to="/cabs" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-[#ffffff] hover:border hover:border-[#242429]/20 transition-all flex items-center gap-1.5 font-bold">
+                <Car size={13} className="text-amber-600 shrink-0" />
+                <span>CABS & TRANSPORT</span>
+              </Link>
               <Link to="/hotels" className="px-3.5 py-1.5 rounded-full text-xs font-fira-mono tracking-widest text-[#242429] bg-[#ffffff]/60 hover:bg-[#ffffff] border border-[#242429]/15 hover:border-[#242429]/40 transition-all font-bold flex items-center gap-1.5 shadow-xs">
                 <Sparkles size={12} className="text-amber-500 shrink-0" />
                 <span>PREMIUM & FEATURED STAYS & RESORTS</span>
@@ -534,16 +538,16 @@ export default function Navbar({ onOpenAuth }) {
                             <>
                               <button
                                 type="button"
-                                onClick={() => handleNavigate('/dashboard/vendor?tab=properties_vehicles')}
+                                onClick={() => handleNavigate('/dashboard/vendor?tab=vehicles')}
                                 className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
                               >
                                 <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
-                                    <Building2 size={15} />
+                                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 border border-amber-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <Car size={15} />
                                   </div>
                                   <div>
-                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">My Properties & Fleets</span>
-                                    <span className="text-[10px] text-[#71717a] block font-mono">Manage active listings</span>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">My Vehicle Fleet</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Cabs, Travellers & RC Status</span>
                                   </div>
                                 </div>
                                 <ChevronRight size={14} className="text-[#a1a1aa]" />
@@ -551,7 +555,41 @@ export default function Navbar({ onOpenAuth }) {
 
                               <button
                                 type="button"
-                                onClick={() => handleNavigate('/dashboard/vendor?tab=properties_vehicles&action=add')}
+                                onClick={() => handleNavigate('/dashboard/vendor?tab=vehicles&action=add_vehicle')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 border border-amber-300 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0 font-bold">
+                                    <Plus size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Add New Vehicle / Cab</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Upload RC, photos & driver details</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/vendor?tab=properties')}
+                                className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center transition-transform group-hover:scale-105 shrink-0">
+                                    <Building2 size={15} />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">My Listed Stays & Resorts</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Manage active homestays</span>
+                                  </div>
+                                </div>
+                                <ChevronRight size={14} className="text-[#a1a1aa]" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleNavigate('/dashboard/vendor?tab=properties&action=add_property')}
                                 className="w-full flex items-center justify-between p-2.5 rounded-2xl hover:bg-[#f5f1ea] transition-all text-left group"
                               >
                                 <div className="flex items-center gap-3">
@@ -559,8 +597,8 @@ export default function Navbar({ onOpenAuth }) {
                                     <Plus size={15} />
                                   </div>
                                   <div>
-                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Add New Property / Cab</span>
-                                    <span className="text-[10px] text-[#71717a] block font-mono">Upload photos & details</span>
+                                    <span className="text-xs font-extrabold text-[#18181b] block font-editorial">Add New Property / Stay</span>
+                                    <span className="text-[10px] text-[#71717a] block font-mono">Upload photos & room tariffs</span>
                                   </div>
                                 </div>
                                 <ChevronRight size={14} className="text-[#a1a1aa]" />
@@ -825,6 +863,14 @@ export default function Navbar({ onOpenAuth }) {
                   className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold"
                 >
                   EXPLORE
+                </Link>
+                <Link 
+                  to="/cabs" 
+                  onClick={() => setMobileNavOpen(false)}
+                  className="px-4 py-2 rounded-2xl text-xs font-fira-mono tracking-widest text-[#242429] hover:bg-white transition-all font-bold flex items-center gap-1.5"
+                >
+                  <Car size={13} className="text-amber-600 shrink-0" />
+                  <span>CABS & TRANSPORT</span>
                 </Link>
                 <Link 
                   to="/hotels" 

@@ -96,8 +96,28 @@ export default function UserDashboard() {
   // Help Accordion State
   const [openFaq, setOpenFaq] = useState(null);
 
-  // Live Bookings (Starts strictly at 0 / empty)
-  const [bookingsList, setBookingsList] = useState([]);
+  // Live Bookings (0ms Instant Load from Cache & LocalStorage)
+  const getInitialBookings = () => {
+    try {
+      const userEm = (currentUser?.email || '').toLowerCase().trim();
+      const userPh = (currentUser?.phone || '').replace(/\D/g, '');
+      const uNm = (currentUser?.name || '').toLowerCase().trim();
+      const savedRaw = localStorage.getItem('etn_user_bookings') || localStorage.getItem('etn_saved_bookings');
+      if (savedRaw) {
+        const parsed = JSON.parse(savedRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter(b => {
+            const cEm = (b.userEmail || b.customerEmail || b.email || '').toLowerCase().trim();
+            const cPh = (b.userPhone || b.customerPhone || b.phone || '').replace(/\D/g, '');
+            const cNm = (b.customerName || b.userName || '').toLowerCase().trim();
+            return !userEm || cEm === userEm || (userPh && cPh && cPh === userPh) || (uNm && cNm && cNm === uNm) || (!cEm && !userEm);
+          });
+        }
+      }
+    } catch (e) {}
+    return [];
+  };
+  const [bookingsList, setBookingsList] = useState(getInitialBookings);
 
   // Live Saved Wishlist (Loads from localStorage and syncs with Explore page)
   const getInitialWishlist = () => {
@@ -134,23 +154,64 @@ export default function UserDashboard() {
 
   const fetchUserData = async () => {
     try {
-      const res = await apiFetch('/api/bookings');
-      if (res.ok) {
-        const allBookings = await res.json();
-        if (Array.isArray(allBookings)) {
-          const userEm = (currentUser?.email || '').toLowerCase().trim();
-          const myBookings = allBookings.filter(b => {
-            const cEm = (b.userEmail || b.customerEmail || b.email || '').toLowerCase().trim();
-            return cEm === userEm;
-          });
-          setBookingsList(myBookings);
+      const userEm = (currentUser?.email || '').toLowerCase().trim();
+      const userPh = (currentUser?.phone || '').replace(/\D/g, '');
+
+      // 1. Fetch from Backend API / MongoDB Atlas
+      let serverBookings = [];
+      try {
+        const res = await apiFetch('/api/bookings');
+        if (res && res.ok) {
+          const all = await res.json();
+          if (Array.isArray(all)) {
+            serverBookings = all.filter(b => {
+              const cEm = (b.userEmail || b.customerEmail || b.email || '').toLowerCase().trim();
+              const cPh = (b.userPhone || b.customerPhone || b.phone || '').replace(/\D/g, '');
+              const cNm = (b.customerName || b.userName || '').toLowerCase().trim();
+              const uNm = (currentUser?.name || '').toLowerCase().trim();
+              return (userEm && cEm === userEm) || 
+                     (userPh && cPh && cPh === userPh) || 
+                     (uNm && cNm && cNm === uNm) ||
+                     (!userEm && !cEm);
+            });
+          }
         }
-      }
+      } catch (e) {}
+
+      // 2. Fetch from Local Storage for 0ms Instant Client-Side Sync
+      let localBookings = [];
+      try {
+        const savedRaw = localStorage.getItem('etn_user_bookings') || localStorage.getItem('etn_saved_bookings');
+        if (savedRaw) {
+          const parsed = JSON.parse(savedRaw);
+          if (Array.isArray(parsed)) {
+            localBookings = parsed.filter(b => {
+              const cEm = (b.userEmail || b.customerEmail || b.email || '').toLowerCase().trim();
+              const cPh = (b.userPhone || b.customerPhone || b.phone || '').replace(/\D/g, '');
+              const cNm = (b.customerName || b.userName || '').toLowerCase().trim();
+              const uNm = (currentUser?.name || '').toLowerCase().trim();
+              return !userEm || cEm === userEm || (userPh && cPh && cPh === userPh) || (uNm && cNm && cNm === uNm);
+            });
+          }
+        }
+      } catch (e) {}
+
+      // Merge and deduplicate by bookingId / id / _id
+      const mergedMap = new Map();
+      [...serverBookings, ...localBookings].forEach(b => {
+        const id = b.bookingId || b._id || b.id;
+        if (id && !mergedMap.has(id)) {
+          mergedMap.set(id, b);
+        }
+      });
+
+      setBookingsList(Array.from(mergedMap.values()));
+
+      // Fetch Support Tickets
       const tckRes = await apiFetch('/api/tickets');
-      if (tckRes.ok) {
+      if (tckRes && tckRes.ok) {
         const allTickets = await tckRes.json();
         if (Array.isArray(allTickets)) {
-          const userEm = (currentUser?.email || '').toLowerCase().trim();
           const myTickets = allTickets.filter(t => (t.senderEmail || '').toLowerCase().trim() === userEm);
           setTicketsList(myTickets);
         }
@@ -160,6 +221,17 @@ export default function UserDashboard() {
 
   useEffect(() => {
     fetchUserData();
+
+    const handleBookingCreated = (e) => {
+      if (e.detail) {
+        setBookingsList(prev => {
+          const id = e.detail.bookingId || e.detail.id || e.detail._id;
+          const exists = prev.some(b => (b.bookingId || b.id || b._id) === id);
+          return exists ? prev : [e.detail, ...prev];
+        });
+      }
+    };
+    window.addEventListener('etn_booking_created', handleBookingCreated);
 
     if (socket) {
       socket.on('new_booking', fetchUserData);
@@ -175,6 +247,7 @@ export default function UserDashboard() {
     const interval = setInterval(fetchUserData, 4000);
 
     return () => {
+      window.removeEventListener('etn_booking_created', handleBookingCreated);
       clearInterval(interval);
       if (socket) {
         socket.off('new_booking');
@@ -279,19 +352,51 @@ export default function UserDashboard() {
     setTicketMessage('');
   };
 
-  // 📝 Generate Formatted Stay Pass Share Text
+  // 📝 Generate Formatted Stay / Cab Transport Pass Share Text
   const getShareMessage = (bk) => {
     if (!bk) return '';
     const bkId = bk.bookingId || bk.id || 'ETN-BK-REF';
-    const bkTitle = bk.itemTitle || bk.propertyTitle || bk.title || 'Verified Luxury Stay';
+    const isCab = bk.type === 'cab' || bk.itemType === 'vehicle' || bk.bookingType === 'cab';
+    const bkTitle = bk.itemTitle || bk.propertyTitle || bk.title || (isCab ? 'Verified Cab Transport' : 'Verified Luxury Stay');
+    const totalAmount = Number(bk.totalAmount || bk.amount || 0).toLocaleString('en-IN');
+    const guestName = bk.customerName || bk.userName || currentUser?.name || 'Tourist Guest';
+
+    if (isCab) {
+      const pickupDate = bk.pickupDate || bk.checkIn || '2026-08-25';
+      const pickupTime = bk.pickupTime || '09:00';
+      const pickupLocation = bk.pickupLocation || 'Pickup Stand';
+      const dropLocation = bk.dropLocation || 'Sightseeing Circuit';
+      const driverName = bk.driverName || 'Assigned Commercial Driver';
+      const driverPhone = bk.driverPhone || '+91 78717 79134';
+      const regNo = bk.vehicleRegNo || 'TN-VERIFIED';
+      const days = bk.days || bk.nights || 1;
+      const passengerCount = bk.passengerCount || bk.guests || 4;
+
+      return `🚖 *EXPLORE TAMIL NADU - OFFICIAL CAB TRANSPORT PASS* 🚖
+
+🚗 *Vehicle:* ${bkTitle} (${regNo})
+📍 *Pickup Point:* ${pickupLocation}
+🏁 *Drop / Route:* ${dropLocation}
+🗓️ *Pickup Schedule:* ${pickupDate} at ${pickupTime} (${days} Day${days > 1 ? 's' : ''})
+👤 *Primary Traveler:* ${guestName} (👥 ${passengerCount} Passengers)
+👨‍✈️ *Chauffeur / Driver:* ${driverName} (${driverPhone})
+🆔 *Booking Reference ID:* ${bkId}
+💳 *Total Fare Paid:* ₹${totalAmount} (Taxes & Platform Fees Included)
+
+🛡️ *Safety Policy:* Strict Zero-Tolerance Policy (100% Non-Smoking, No Alcohol/Drugs).
+
+🌐 *Explore Tamil Nadu Cabs:*
+https://frontend-blond-iota-kzel6q4tzd.vercel.app/cabs
+
+📞 24/7 Helpline: +91 78717 79134 | support@exploretamilnadu.com`;
+    }
+
     const bkLocation = bk.destination || bk.location || 'Tamil Nadu';
     const checkIn = bk.checkIn || bk.checkInDate || '2026-08-25';
     const checkOut = bk.checkOut || bk.checkOutDate || '2026-08-28';
     const nights = bk.nights || 1;
     const guests = bk.guests || 2;
     const guestType = bk.guestType || 'Stay';
-    const totalAmount = Number(bk.totalAmount || bk.amount || 0).toLocaleString('en-IN');
-    const guestName = bk.customerName || bk.userName || currentUser?.name || 'Tourist Guest';
 
     return `✨ *EXPLORE TAMIL NADU - OFFICIAL STAY PASS* ✨
 
@@ -313,12 +418,13 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
 📞 24/7 Helpline: +91 78717 79134 | support@exploretamilnadu.com`;
   };
 
-  // 💾 Save Stay Pass directly to File Explorer / Device Files
+  // 💾 Save Stay / Cab Pass directly to File Explorer / Device Files
   const handleSaveToFileExplorer = async (bk) => {
     if (!bk) return;
     const bkId = bk.bookingId || bk.id || 'ETN-BK-REF';
+    const isCab = bk.type === 'cab' || bk.itemType === 'vehicle' || bk.bookingType === 'cab';
     const content = getShareMessage(bk);
-    const fileName = `Explore_TamilNadu_StayPass_${bkId}.txt`;
+    const fileName = isCab ? `Explore_TamilNadu_CabPass_${bkId}.txt` : `Explore_TamilNadu_StayPass_${bkId}.txt`;
 
     // 1. Native File System Access API (Opens Windows/Mac File Explorer save dialog!)
     if ('showSaveFilePicker' in window) {
@@ -447,13 +553,6 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
           </nav>
         </div>
 
-        {/* Sidebar Footer Controls */}
-        <div className="pt-6 border-t border-[#0d2a58]">
-          <div className="flex items-center gap-2 text-[11px] font-mono text-emerald-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>Verified Account</span>
-          </div>
-        </div>
       </aside>
 
       {/* 💻 MAIN CONTENT AREA (100% Full Width on Mobile with zero sidebars) */}
@@ -462,19 +561,10 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
         {/* Header Status Bar */}
         <div className="flex justify-between items-center mb-4 sm:mb-8 pb-3 sm:pb-4 border-b border-slate-200">
           <div>
-            <span className="px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-extrabold bg-blue-50 text-blue-700 border border-blue-200 font-mono">
-              👤 Tourist Member Portal
-            </span>
-            <h2 className="text-2xl font-black text-slate-900 mt-2 capitalize">
+            <h2 className="text-2xl font-black text-slate-900 capitalize">
               {navMenuItems.find(i => i.id === activeTab)?.label}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">Manage your travel bookings, saved stays, profile & security.</p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className="px-3 py-1.5 rounded-full text-xs font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-              🟢 Member Verified
-            </span>
           </div>
         </div>
 
@@ -505,24 +595,34 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                   const isConfirmed = bk.status === 'Confirmed';
                   const isPending = bk.status === 'Pending Verification' || bk.status === 'Pending Approval' || bk.status === 'Pending' || !bk.status;
                   const bkId = bk.bookingId || bk.id || 'ETN-BK-REF';
-                  const bkTitle = bk.itemTitle || bk.propertyTitle || bk.title || 'Verified Luxury Stay';
-                  const bkLocation = bk.destination || bk.location || 'Tamil Nadu';
+                  const isCab = bk.type === 'cab' || bk.itemType === 'vehicle' || bk.bookingType === 'cab';
+                  const bkTitle = bk.itemTitle || bk.propertyTitle || bk.title || (isCab ? 'Cab Transport' : 'Stay & Resort');
+                  const bkLocation = bk.destination || bk.location || (isCab ? bk.pickupLocation : 'Tamil Nadu');
                   const bkAmount = Number(bk.totalAmount || bk.amount || 0);
 
                   return (
                     <div key={bk._id || bk.id || bkId} className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row justify-between md:items-center gap-6">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
+                      <div className="space-y-2 flex-1">
+                        <div className="flex flex-wrap items-center gap-3">
                           <span className="font-mono font-extrabold text-blue-600 text-xs px-2.5 py-1 bg-blue-50 rounded-lg border border-blue-200">
                             {bkId}
                           </span>
+                          {isCab ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                              🚖 Cab Transport
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-blue-100 text-blue-900 border border-blue-300 flex items-center gap-1">
+                              🏡 Stay & Resort
+                            </span>
+                          )}
                           {isConfirmed ? (
                             <span className="px-3 py-0.5 rounded-full text-xs font-bold font-mono bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                              🟢 Confirmed & Verified
+                              🟢 Confirmed
                             </span>
                           ) : isPending ? (
                             <span className="px-3 py-0.5 rounded-full text-xs font-bold font-mono bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
-                              ⏳ Pending Host Verification
+                              ⏳ Pending Confirmation
                             </span>
                           ) : (
                             <span className="px-3 py-0.5 rounded-full text-xs font-bold font-mono bg-slate-100 text-slate-700">
@@ -531,29 +631,68 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                           )}
                         </div>
                         
-                        <h4 className="text-lg font-black text-slate-900">{bkTitle}</h4>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={(e) => openGoogleMaps(bk, e)}
-                            className="inline-flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-xl font-mono font-bold hover:underline cursor-pointer transition-colors"
-                            title="Click to navigate directly to this stay on Google Maps ↗"
-                          >
-                            <MapPin size={13} className="text-rose-600 shrink-0" />
-                            <span>{bkLocation}</span>
-                            <span className="text-[10px] text-blue-600 bg-white border border-blue-200 px-1 py-0.2 rounded font-bold">
-                              Maps ↗
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-lg font-black text-slate-900">{bkTitle}</h4>
+                          {isCab && bk.vehicleRegNo && (
+                            <span className="px-2 py-0.5 rounded-lg bg-slate-100 border border-slate-300 text-slate-800 font-mono text-xs font-bold">
+                              {bk.vehicleRegNo}
                             </span>
-                          </button>
-                          <span className="text-xs text-slate-500 font-mono">• 👥 {bk.guests || 2} Guests ({bk.guestType || 'Stay'})</span>
+                          )}
                         </div>
-                        <div className="text-xs font-semibold text-slate-700">
-                          📅 Dates: <span className="font-bold text-slate-900">{bk.checkIn || bk.checkInDate} → {bk.checkOut || bk.checkOutDate}</span> ({bk.nights || 1} Night{bk.nights > 1 ? 's' : ''})
-                        </div>
+
+                        {isCab ? (
+                          <div className="space-y-1 text-xs">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={(e) => openGoogleMaps(bk, e)}
+                                className="inline-flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-xl font-mono font-bold hover:underline cursor-pointer transition-colors"
+                                title="Click to navigate directly on Google Maps ↗"
+                              >
+                                <MapPin size={13} className="text-rose-600 shrink-0" />
+                                <span>📍 Pickup: {bk.pickupLocation || 'Central Stand'} ➔ {bk.dropLocation || 'Sightseeing Tour'}</span>
+                                <span className="text-[10px] text-blue-600 bg-white border border-blue-200 px-1 py-0.2 rounded font-bold">
+                                  Maps ↗
+                                </span>
+                              </button>
+                            </div>
+                            <div className="text-xs font-semibold text-slate-700 pt-0.5">
+                              🗓️ Schedule: <span className="font-bold text-slate-900">{bk.pickupDate || bk.checkIn} at {bk.pickupTime || '09:00'}</span> ({bk.days || bk.nights || 1} Day{(bk.days || 1) > 1 ? 's' : ''})
+                            </div>
+                            <div className="text-[11px] font-mono text-slate-600 flex flex-wrap items-center gap-2">
+                              <span>👨‍✈️ Driver: <strong className="text-slate-900">{bk.driverName || 'Assigned Host Driver'}</strong> ({bk.driverPhone || '+91 78717 79134'})</span>
+                              <span>•</span>
+                              <span>👥 {bk.passengerCount || bk.guests || 4} Passengers</span>
+                              <span>•</span>
+                              <span>🏷️ {bk.tripType || 'Full Day Tour'}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-1 text-xs">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={(e) => openGoogleMaps(bk, e)}
+                                className="inline-flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-xl font-mono font-bold hover:underline cursor-pointer transition-colors"
+                                title="Click to navigate directly to this stay on Google Maps ↗"
+                              >
+                                <MapPin size={13} className="text-rose-600 shrink-0" />
+                                <span>{bkLocation}</span>
+                                <span className="text-[10px] text-blue-600 bg-white border border-blue-200 px-1 py-0.2 rounded font-bold">
+                                  Maps ↗
+                                </span>
+                              </button>
+                              <span className="text-xs text-slate-500 font-mono">• 👥 {bk.guests || 2} Guests ({bk.guestType || 'Stay'})</span>
+                            </div>
+                            <div className="text-xs font-semibold text-slate-700 pt-0.5">
+                              📅 Dates: <span className="font-bold text-slate-900">{bk.checkIn || bk.checkInDate} → {bk.checkOut || bk.checkOutDate}</span> ({bk.nights || 1} Night{bk.nights > 1 ? 's' : ''})
+                            </div>
+                          </div>
+                        )}
 
                         {isPending && (
                           <div className="text-[11px] text-amber-800 bg-amber-50/80 border border-amber-200 px-3 py-1.5 rounded-xl font-mono">
-                            ℹ️ Host is validating room allocation. You will receive an official confirmation email once accepted.
+                            ℹ️ Host is validating reservation. You will receive an official confirmation voucher once accepted.
                           </div>
                         )}
                       </div>
@@ -562,6 +701,9 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                         <div className="text-right">
                           <div className="text-2xl font-black text-slate-900">₹{bkAmount.toLocaleString()}</div>
                           <div className="text-[11px] font-bold text-emerald-600">✓ {bk.paymentStatus || 'Paid via Razorpay'}</div>
+                          {bk.gstAmount !== undefined && (
+                            <div className="text-[10px] text-slate-400 font-mono">Incl. 18% GST + 5% Fee</div>
+                          )}
                         </div>
                         <div className="flex items-center w-full sm:w-auto">
                           <button 
@@ -569,7 +711,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                             onClick={() => setShareModalBooking(bk)}
                             className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
                           >
-                            <Share2 size={14} /> Share Stay Pass
+                            <Share2 size={14} /> {isCab ? 'Share Transport Pass' : 'Share Stay Pass'}
                           </button>
                         </div>
                       </div>
@@ -1006,17 +1148,18 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
 
       </main>
 
-      {/* 📤 SHARE & SAVE STAY PASS MODAL */}
+      {/* 📤 SHARE & SAVE STAY / CAB PASS MODAL */}
       {shareModalBooking && (() => {
         const bk = shareModalBooking;
         const bkId = bk.bookingId || bk.id || 'ETN-BK-REF';
-        const bkTitle = bk.itemTitle || bk.propertyTitle || bk.title || 'Verified Luxury Stay';
-        const bkLocation = bk.destination || bk.location || 'Tamil Nadu';
+        const isCab = bk.type === 'cab' || bk.itemType === 'vehicle' || bk.bookingType === 'cab';
+        const bkTitle = bk.itemTitle || bk.propertyTitle || bk.title || (isCab ? 'Verified Cab Transport' : 'Verified Luxury Stay');
+        const bkLocation = bk.destination || bk.location || (isCab ? bk.pickupLocation : 'Tamil Nadu');
         const bkAmount = Number(bk.totalAmount || bk.amount || 0).toLocaleString('en-IN');
-        const checkIn = bk.checkIn || bk.checkInDate || '2026-08-25';
+        const checkIn = bk.checkIn || bk.checkInDate || bk.pickupDate || '2026-08-25';
         const checkOut = bk.checkOut || bk.checkOutDate || '2026-08-28';
-        const nights = bk.nights || 1;
-        const guests = bk.guests || 2;
+        const nights = bk.nights || bk.days || 1;
+        const guests = bk.guests || bk.passengerCount || 2;
         const shareMsg = getShareMessage(bk);
 
         return (
@@ -1030,7 +1173,9 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                     <Share2 size={18} />
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-sm sm:text-base text-white">Share Stay Reservation Pass</h3>
+                    <h3 className="font-extrabold text-sm sm:text-base text-white">
+                      {isCab ? '🚖 Share Cab Transport Pass' : '🏨 Share Stay Reservation Pass'}
+                    </h3>
                     <p className="text-[11px] text-slate-300 font-mono">Reference: {bkId}</p>
                   </div>
                 </div>
@@ -1045,26 +1190,46 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
               {/* Body Content */}
               <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-slate-800 text-xs sm:text-sm">
                 
-                {/* Stay Card Preview */}
+                {/* Stay / Cab Card Preview */}
                 <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="font-mono text-xs font-black text-blue-600 px-2 py-0.5 bg-blue-50 border border-blue-200 rounded-lg">{bkId}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-black text-blue-600 px-2 py-0.5 bg-blue-50 border border-blue-200 rounded-lg">{bkId}</span>
+                      {isCab && bk.vehicleRegNo && (
+                        <span className="font-mono text-xs font-bold text-slate-800 px-2 py-0.5 bg-amber-100 border border-amber-300 rounded-lg">
+                          {bk.vehicleRegNo}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-xs font-bold text-emerald-700 font-mono">₹{bkAmount} Paid</span>
                   </div>
                   <h4 className="font-extrabold text-slate-900 text-sm mt-1">{bkTitle}</h4>
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
-                    <button
-                      type="button"
-                      onClick={(e) => openGoogleMaps(bk, e)}
-                      className="inline-flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 hover:underline font-mono font-bold bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg cursor-pointer transition-colors"
-                      title="Open GPS Location in Google Maps ↗"
-                    >
-                      <MapPin size={12} className="text-rose-600 shrink-0" />
-                      <span>{bkLocation}</span>
-                      <span className="text-[10px] text-blue-600 font-bold">Maps ↗</span>
-                    </button>
-                    <span className="text-slate-500 text-xs font-mono">👥 {guests} Guests • 📅 {checkIn} → {checkOut} ({nights}N)</span>
-                  </div>
+                  
+                  {isCab ? (
+                    <div className="space-y-1 pt-0.5 text-xs text-slate-600 font-mono">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin size={12} className="text-rose-600 shrink-0" />
+                        <span>📍 {bk.pickupLocation || 'Pickup Stand'} ➔ {bk.dropLocation || 'Sightseeing Route'}</span>
+                      </div>
+                      <div className="text-slate-700">
+                        🗓️ {bk.pickupDate || checkIn} at {bk.pickupTime || '09:00'} • 👨‍✈️ Driver: {bk.driverName || 'Assigned Driver'}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={(e) => openGoogleMaps(bk, e)}
+                        className="inline-flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 hover:underline font-mono font-bold bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg cursor-pointer transition-colors"
+                        title="Open GPS Location in Google Maps ↗"
+                      >
+                        <MapPin size={12} className="text-rose-600 shrink-0" />
+                        <span>{bkLocation}</span>
+                        <span className="text-[10px] text-blue-600 font-bold">Maps ↗</span>
+                      </button>
+                      <span className="text-slate-500 text-xs font-mono">👥 {guests} Guests • 📅 {checkIn} → {checkOut} ({nights}N)</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Instant Share Channels Grid */}

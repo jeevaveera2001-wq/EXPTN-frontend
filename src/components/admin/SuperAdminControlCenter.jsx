@@ -46,12 +46,17 @@ import {
   UserCheck,
   Building,
   DollarSign,
-  Navigation
+  Navigation,
+  Wrench,
+  Zap,
+  AlertTriangle
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { BACKEND_API } from '../../config/api';
 import InteractiveLocationMapPicker from '../common/InteractiveLocationMapPicker';
+import { calculatePricing } from '../../utils/pricing';
 
 const TAMIL_NADU_DISTRICTS = [
   'Dindigul (Kodaikanal)',
@@ -79,9 +84,18 @@ const TAMIL_NADU_DISTRICTS = [
 export default function SuperAdminControlCenter() {
   const { currentUser, logout } = useAuth();
   const { socket, isConnected } = useSocket();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
 
   // 12 Requested Tabs from user specification image
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(tabFromUrl || 'dashboard');
+
+  useEffect(() => {
+    if (tabFromUrl) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
@@ -94,11 +108,23 @@ export default function SuperAdminControlCenter() {
   // Sub-filter for Owner Requests & Properties
   const [requestsFilter, setRequestsFilter] = useState('all'); // 'all', 'stays', 'vehicles'
   const [propertiesViewTab, setPropertiesViewTab] = useState('stays'); // 'stays', 'vehicles'
+  const [selectedInspectVehicle, setSelectedInspectVehicle] = useState(null);
+  const [inspectPhotoTab, setInspectPhotoTab] = useState('rc'); // 'rc' | 'exterior' | 'interior' | 'plate'
 
   // Live Collection States
   const [usersList, setUsersList] = useState([]);
   const [staffList, setStaffList] = useState([]);
-  const [bookingsList, setBookingsList] = useState([]);
+  const getInitialAdminBookings = () => {
+    try {
+      const savedRaw = localStorage.getItem('etn_user_bookings') || localStorage.getItem('etn_saved_bookings');
+      if (savedRaw) {
+        const parsed = JSON.parse(savedRaw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  };
+  const [bookingsList, setBookingsList] = useState(getInitialAdminBookings);
   const [propertiesList, setPropertiesList] = useState([]);
   const [vehiclesList, setVehiclesList] = useState([]);
   const [ticketsList, setTicketsList] = useState([]);
@@ -163,6 +189,25 @@ export default function SuperAdminControlCenter() {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [ticketReplyText, setTicketReplyText] = useState('');
   const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
+  const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
+
+  // Maintenance Mode States (Local Storage & Socket Driven)
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('etn_maintenance_mode');
+      if (saved) return JSON.parse(saved).isMaintenance || false;
+    } catch (e) {}
+    return false;
+  });
+  const [maintenanceMessage, setMaintenanceMessage] = useState(() => {
+    try {
+      const saved = localStorage.getItem('etn_maintenance_mode');
+      if (saved) return JSON.parse(saved).message || 'Explore Tamil Nadu is undergoing scheduled system upgrades for high-speed performance, live database caching, and enhanced reservation security.';
+    } catch (e) {}
+    return 'Explore Tamil Nadu is undergoing scheduled system upgrades for high-speed performance, live database caching, and enhanced reservation security.';
+  });
+  const [maintenanceDuration, setMaintenanceDuration] = useState('30 Minutes');
+  const [updatingMaintenance, setUpdatingMaintenance] = useState(false);
 
   // Form States
   const [staffName, setStaffName] = useState('');
@@ -202,19 +247,19 @@ export default function SuperAdminControlCenter() {
     if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    if (token && token.length > 20) headers.set('Authorization', `Bearer ${token}`);
 
     const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
     const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
     try {
-      const res = await fetch(url, { ...options, headers, cache: 'no-store' });
-      if (res.ok || res.status === 400 || res.status === 401 || res.status === 403) {
+      const res = await fetch(url, { ...options, headers });
+      if (res && (res.ok || res.status === 400 || res.status === 401 || res.status === 403)) {
         return res;
       }
     } catch (e) {
-      console.warn('Direct backend API fetch error:', e.message);
+      console.warn('API fetch notice for', url, e.message);
     }
-    return await fetch(endpoint, { ...options, headers, cache: 'no-store' });
+    return null;
   }, []);
 
   // Fetch all live collections from database in parallel
@@ -223,8 +268,8 @@ export default function SuperAdminControlCenter() {
     else setLoading(true);
 
     try {
-      const res = await apiFetch('/api/admin/dashboard-all');
-      if (res.ok) {
+      const res = await apiFetch('/api/admin/dashboard-data');
+      if (res && res.ok) {
         const data = await res.json();
         if (Array.isArray(data.users)) setUsersList(data.users);
         if (Array.isArray(data.properties)) setPropertiesList(data.properties);
@@ -257,7 +302,21 @@ export default function SuperAdminControlCenter() {
         }
         if (bRes && bRes.ok) {
           const b = await bRes.json();
-          if (Array.isArray(b)) setBookingsList(b);
+          let serverBks = Array.isArray(b) ? b : [];
+          let localBks = [];
+          try {
+            const saved = localStorage.getItem('etn_user_bookings') || localStorage.getItem('etn_saved_bookings');
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (Array.isArray(parsed)) localBks = parsed;
+            }
+          } catch (e) {}
+          const mergedBks = new Map();
+          [...serverBks, ...localBks].forEach(bk => {
+            const id = bk.bookingId || bk._id || bk.id;
+            if (id && !mergedBks.has(id)) mergedBks.set(id, bk);
+          });
+          setBookingsList(Array.from(mergedBks.values()));
         }
         if (tRes && tRes.ok) {
           const t = await tRes.json();
@@ -268,6 +327,7 @@ export default function SuperAdminControlCenter() {
           if (Array.isArray(s)) setStaffList(s);
         }
       }
+
       setLastUpdated(new Date());
     } catch (err) {
       console.warn('Super admin live fetch notice:', err);
@@ -302,7 +362,19 @@ export default function SuperAdminControlCenter() {
     socket.on('ticket_updated', handleUpdate);
     socket.on('staff_added', handleUpdate);
 
+    const handleLocalBooking = (e) => {
+      if (e.detail) {
+        setBookingsList(prev => {
+          const id = e.detail.bookingId || e.detail.id || e.detail._id;
+          const exists = prev.some(b => (b.bookingId || b.id || b._id) === id);
+          return exists ? prev : [e.detail, ...prev];
+        });
+      }
+    };
+    window.addEventListener('etn_booking_created', handleLocalBooking);
+
     return () => {
+      window.removeEventListener('etn_booking_created', handleLocalBooking);
       socket.off('new_user_registered', handleUpdate);
       socket.off('user_updated', handleUpdate);
       socket.off('new_property', handleUpdate);
@@ -393,11 +465,11 @@ export default function SuperAdminControlCenter() {
 
   // Pending Owner Requests (Both Properties and Vehicles)
   const pendingProperties = useMemo(() => {
-    return propertiesList.filter(p => p.status === 'Pending Approval' || p.status === 'Under Review');
+    return propertiesList.filter(p => p.status === 'Pending Approval' || p.status === 'Under Review' || p.status === 'Pending' || !p.status);
   }, [propertiesList]);
 
   const pendingVehicles = useMemo(() => {
-    return vehiclesList.filter(v => v.status === 'Pending Approval' || v.status === 'Under Review');
+    return vehiclesList.filter(v => v.status === 'Pending Approval' || v.status === 'Under Review' || v.status === 'Pending' || !v.status);
   }, [vehiclesList]);
 
   const totalPendingRequests = pendingProperties.length + pendingVehicles.length;
@@ -578,6 +650,45 @@ export default function SuperAdminControlCenter() {
     setStaffEmail('');
     setStaffPassword('');
     triggerToast(`Staff member "${staffName}" assigned to ${staffRole.replace(/_/g, ' ')}.`);
+  };
+
+  const handleSaveMaintenanceMode = async (e) => {
+    e?.preventDefault();
+    setUpdatingMaintenance(true);
+    const maintData = {
+      isMaintenance: isMaintenanceMode,
+      message: maintenanceMessage,
+      estimatedTime: maintenanceDuration,
+      upgradeTitle: 'Platform Upgrade & Performance Optimization in Progress'
+    };
+    try {
+      localStorage.setItem('etn_maintenance_mode', JSON.stringify(maintData));
+      if (socket) socket.emit('maintenance_mode_changed', maintData);
+      triggerToast(isMaintenanceMode ? '⚡ Maintenance Mode Activated! Public users see Upgrade Screen.' : '🟢 Maintenance Mode Disabled - Platform is LIVE!');
+      setShowMaintenanceModal(false);
+    } catch (err) {
+      triggerToast('Notice: ' + err.message);
+    } finally {
+      setUpdatingMaintenance(false);
+    }
+  };
+
+  const handleQuickToggleMaintenance = async () => {
+    const nextState = !isMaintenanceMode;
+    setIsMaintenanceMode(nextState);
+    const maintData = {
+      isMaintenance: nextState,
+      message: maintenanceMessage,
+      estimatedTime: maintenanceDuration,
+      upgradeTitle: 'Platform Upgrade & Performance Optimization in Progress'
+    };
+    try {
+      localStorage.setItem('etn_maintenance_mode', JSON.stringify(maintData));
+      if (socket) socket.emit('maintenance_mode_changed', maintData);
+      triggerToast(nextState ? '⚡ Maintenance Mode Turned ON!' : '🟢 Maintenance Mode Turned OFF - Platform Live!');
+    } catch (err) {
+      triggerToast('Notice: ' + err.message);
+    }
   };
 
   const handleOpenTicketReply = (ticket) => {
@@ -784,7 +895,7 @@ export default function SuperAdminControlCenter() {
                     <div className="text-xs font-extrabold text-white font-editorial">Jeeva Veeramani</div>
                     <div className="text-[10px] text-cyan-400 font-mono">exploretamizhagam@gmail.com</div>
                     <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-mono text-[9px] font-bold uppercase border border-cyan-400/30">
-                      Super Admin (Full Root Access)
+                      Super Admin
                     </span>
                   </div>
 
@@ -887,7 +998,59 @@ export default function SuperAdminControlCenter() {
                   <div className="text-xl sm:text-2xl font-black text-white font-mono">
                     {touristUsers.length}
                   </div>
-                  <div className="text-[10px] text-indigo-400 font-mono">{propertyOwners.length} Verified Hosts</div>
+                  <div className="text-[10px] text-indigo-400 font-mono">{propertyOwners.length} Registered Hosts</div>
+                </div>
+              </div>
+
+              {/* System Maintenance & Upgrade Control Bar */}
+              <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-colors ${
+                isMaintenanceMode 
+                  ? 'bg-amber-950/40 border-amber-500/50 shadow-lg shadow-amber-950/30' 
+                  : 'bg-[#0c1e2e] border-[#1a344d]'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl ${isMaintenanceMode ? 'bg-amber-400 text-black animate-pulse' : 'bg-slate-800 text-slate-400'}`}>
+                    <Wrench size={18} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white font-editorial">
+                        Platform Maintenance & Upgrade Mode
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold ${
+                        isMaintenanceMode ? 'bg-amber-400 text-black animate-pulse' : 'bg-emerald-500/20 text-emerald-300'
+                      }`}>
+                        {isMaintenanceMode ? '⚡ UPGRADE ACTIVE (PUBLIC SCREEN ON)' : '🟢 PLATFORM IS LIVE'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                      {isMaintenanceMode 
+                        ? `Public tourists see the upgrade screen with countdown (${maintenanceDuration}).` 
+                        : 'Tourists can browse and book stays & cabs without restrictions.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setShowMaintenanceModal(true)}
+                    className="px-3 py-1.5 rounded-xl bg-[#132c42] hover:bg-[#1a3b59] text-slate-200 text-xs font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-[#1a344d]"
+                  >
+                    <Settings size={13} /> Configure Message
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleQuickToggleMaintenance}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-mono font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-md ${
+                      isMaintenanceMode
+                        ? 'bg-emerald-500 hover:bg-emerald-400 text-black'
+                        : 'bg-amber-400 hover:bg-amber-300 text-black'
+                    }`}
+                  >
+                    <Zap size={13} />
+                    <span>{isMaintenanceMode ? 'Deactivate (Go Live)' : 'Activate Maintenance'}</span>
+                  </button>
                 </div>
               </div>
 
@@ -1166,76 +1329,144 @@ export default function SuperAdminControlCenter() {
                 <div className="grid gap-4">
                   {/* Property Requests */}
                   {(requestsFilter === 'all' || requestsFilter === 'stays') && pendingProperties.map(req => (
-                    <div key={req._id || req.id} className="p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold">
-                            🏡 Stay Pending Approval
-                          </span>
-                          <span className="text-xs font-mono text-cyan-300">{req.type || 'Resort'}</span>
+                    <div key={req._id || req.id} className="p-5 rounded-3xl bg-[#0c1e2e] border border-[#1a344d] space-y-4">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold">
+                              🏡 Stay Pending Approval
+                            </span>
+                            <span className="text-xs font-mono text-cyan-300">{req.type || 'Resort'}</span>
+                          </div>
+                          <h4 className="text-base font-bold text-white font-editorial">{req.title}</h4>
+                          <p className="text-xs text-slate-300 font-mono">
+                            📍 {req.location || req.district} · <strong className="text-emerald-400">₹{Number(req.pricePerNight || req.price || 0).toLocaleString()}/night</strong>
+                          </p>
+                          <p className="text-[11px] text-slate-400 font-mono">
+                            👤 Host: <strong className="text-cyan-300">{req.ownerName || 'Host'}</strong> ({req.ownerEmail || 'host@exploretamilnadu.com'})
+                          </p>
                         </div>
-                        <h4 className="text-sm font-bold text-white font-editorial mt-1">{req.title}</h4>
-                        <p className="text-xs text-slate-400 font-mono">
-                          {req.location}, {req.district} · ₹{Number(req.pricePerNight || req.price || 0).toLocaleString()}/night
-                        </p>
-                        <p className="text-[10px] text-cyan-400 font-mono mt-1">
-                          Host: {req.ownerName || 'Host'} ({req.ownerEmail || 'host@exploretamilnadu.com'})
-                        </p>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdatePropertyStatus(req._id || req.id, 'Approved')}
+                            className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs font-mono flex items-center gap-1.5 cursor-pointer shadow-md transition-transform active:scale-95"
+                          >
+                            <Check size={15} /> Approve & Send Onboarding Mail
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdatePropertyStatus(req._id || req.id, 'Rejected')}
+                            className="px-4 py-2.5 rounded-xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 font-bold text-xs font-mono cursor-pointer transition-colors"
+                          >
+                            Reject
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleUpdatePropertyStatus(req._id || req.id, 'Approved')}
-                          className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs font-mono flex items-center gap-1 cursor-pointer"
-                        >
-                          <Check size={14} /> Approve & Publish
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleUpdatePropertyStatus(req._id || req.id, 'Rejected')}
-                          className="px-3 py-2 rounded-xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 font-bold text-xs font-mono cursor-pointer"
-                        >
-                          Reject
-                        </button>
-                      </div>
+                      {/* Photo Gallery Preview */}
+                      {req.images && req.images.length > 0 && (
+                        <div className="flex gap-2.5 overflow-x-auto pt-2 border-t border-[#1a344d]/60 pb-1">
+                          {req.images.slice(0, 4).map((img, i) => (
+                            <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="relative w-20 h-16 rounded-xl overflow-hidden border border-[#1a344d] shrink-0 group">
+                              <img src={img} alt={`Stay Photo ${i+1}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                              <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[8px] text-white text-center py-0.5">Photo {i+1}</span>
+                            </a>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
 
                   {/* Vehicle Requests */}
                   {(requestsFilter === 'all' || requestsFilter === 'vehicles') && pendingVehicles.map(req => (
-                    <div key={req._id || req.id} className="p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-mono text-[10px] font-bold">
-                            🚖 Vehicle Pending Approval
-                          </span>
-                          <span className="text-xs font-mono text-cyan-300">{req.type || 'Cab / Fleet'}</span>
+                    <div key={req._id || req.id} className="p-5 rounded-3xl bg-[#0c1e2e] border border-[#1a344d] space-y-4">
+                      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-mono text-[10px] font-bold">
+                              🚖 Cab / Vehicle Pending Approval
+                            </span>
+                            <span className="text-xs font-mono text-cyan-300">{req.type || 'Cab'}</span>
+                          </div>
+                          <h4 className="text-base font-bold text-white font-editorial">{req.title}</h4>
+                          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                            <span className="px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 font-black tracking-wider">
+                              {req.registrationNumber || req.regNo || req.numberPlate}
+                            </span>
+                            <span className="text-slate-300">📍 {req.location || req.district || 'Tamil Nadu'}</span>
+                            <span className="text-emerald-400 font-bold">₹{Number(req.pricePerDay || req.price || 3500).toLocaleString()}/day</span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 font-mono">
+                            👤 Fleet Provider: <strong className="text-cyan-300">{req.providerName || req.ownerName || 'Transport Vendor'}</strong> ({req.providerEmail || req.ownerEmail || 'vendor@exploretamilnadu.com'})
+                          </p>
+                          <div className="flex items-center gap-2 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20 w-fit">
+                            <span>✓ RC & Insurance Declared</span>
+                            <span>•</span>
+                            <span>✓ Zero-Tolerance Driver Conduct Signed</span>
+                          </div>
                         </div>
-                        <h4 className="text-sm font-bold text-white font-editorial mt-1">{req.title}</h4>
-                        <p className="text-xs text-slate-400 font-mono">
-                          Reg No: <strong className="text-white">{req.regNo}</strong> · ₹{Number(req.pricePerDay || req.price || 0).toLocaleString()}/day ({req.district || 'Tamil Nadu'})
-                        </p>
-                        <p className="text-[10px] text-cyan-400 font-mono mt-1">
-                          Fleet Provider: {req.providerName || req.ownerName || 'Transport Vendor'} ({req.providerEmail || req.ownerEmail || 'vendor@exploretamilnadu.com'})
-                        </p>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedInspectVehicle(req);
+                              setInspectPhotoTab('rc');
+                            }}
+                            className="px-3.5 py-2.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 font-bold text-xs font-mono flex items-center gap-1.5 cursor-pointer transition-colors"
+                          >
+                            <Eye size={14} /> Inspect Details
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateVehicleStatus(req._id || req.id, 'Approved')}
+                            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs font-mono flex items-center gap-1.5 cursor-pointer shadow-md transition-transform active:scale-95"
+                          >
+                            <Check size={15} /> Approve & Mail
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateVehicleStatus(req._id || req.id, 'Rejected')}
+                            className="px-3.5 py-2.5 rounded-xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 font-bold text-xs font-mono cursor-pointer transition-colors"
+                          >
+                            Reject
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateVehicleStatus(req._id || req.id, 'Approved')}
-                          className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs font-mono flex items-center gap-1 cursor-pointer"
-                        >
-                          <Check size={14} /> Approve & Publish
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateVehicleStatus(req._id || req.id, 'Rejected')}
-                          className="px-3 py-2 rounded-xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 font-bold text-xs font-mono cursor-pointer"
-                        >
-                          Reject
-                        </button>
+                      {/* Documents Preview Row (RC Book, Exterior, Interior, Plate) */}
+                      <div className="pt-2 border-t border-[#1a344d]/60 space-y-1.5">
+                        <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider">Submitted Document & Photo Verification:</span>
+                        <div className="flex flex-wrap gap-3">
+                          {req.rcBookImage && (
+                            <a href={req.rcBookImage} target="_blank" rel="noopener noreferrer" className="relative w-28 h-20 rounded-xl overflow-hidden border border-emerald-500/60 shadow-sm group block">
+                              <img src={req.rcBookImage} alt="RC Document" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              <span className="absolute bottom-0 inset-x-0 bg-emerald-950/90 text-[9px] text-emerald-200 font-bold text-center py-0.5">📄 RC Book ↗</span>
+                            </a>
+                          )}
+                          {req.exteriorImage && (
+                            <a href={req.exteriorImage} target="_blank" rel="noopener noreferrer" className="relative w-28 h-20 rounded-xl overflow-hidden border border-[#1a344d] shadow-sm group block">
+                              <img src={req.exteriorImage} alt="Exterior" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] text-white text-center py-0.5">🚗 Exterior ↗</span>
+                            </a>
+                          )}
+                          {req.interiorImage && (
+                            <a href={req.interiorImage} target="_blank" rel="noopener noreferrer" className="relative w-28 h-20 rounded-xl overflow-hidden border border-[#1a344d] shadow-sm group block">
+                              <img src={req.interiorImage} alt="Interior" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] text-white text-center py-0.5">🪑 Interior ↗</span>
+                            </a>
+                          )}
+                          {req.numberPlateImage && (
+                            <a href={req.numberPlateImage} target="_blank" rel="noopener noreferrer" className="relative w-28 h-20 rounded-xl overflow-hidden border border-[#1a344d] shadow-sm group block">
+                              <img src={req.numberPlateImage} alt="Plate" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] text-white text-center py-0.5">🏷️ Plate ↗</span>
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1377,6 +1608,17 @@ export default function SuperAdminControlCenter() {
                         <div className="flex items-center gap-1.5">
                           <button
                             type="button"
+                            onClick={() => {
+                              setSelectedInspectVehicle(veh);
+                              setInspectPhotoTab('rc');
+                            }}
+                            className="px-2 py-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-[11px] text-blue-300 font-bold cursor-pointer transition-colors"
+                            title="Inspect Complete Vehicle Documentation"
+                          >
+                            <Eye size={12} className="inline mr-1" /> Inspect
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleUpdateVehicleStatus(veh._id || veh.id, veh.status === 'Approved' ? 'Disabled' : 'Approved')}
                             className="px-2.5 py-1 rounded-lg bg-[#132c42] hover:bg-[#1a3b59] text-[11px] text-slate-300 cursor-pointer"
                           >
@@ -1419,30 +1661,64 @@ export default function SuperAdminControlCenter() {
                   <table className="w-full text-left text-xs font-mono">
                     <thead className="bg-[#091724] text-slate-400 border-b border-[#1a344d]">
                       <tr>
-                        <th className="p-3.5">Booking ID & Stay</th>
-                        <th className="p-3.5">Guest Info</th>
-                        <th className="p-3.5">Dates</th>
-                        <th className="p-3.5">Total Amount</th>
+                        <th className="p-3.5">Booking ID & Item</th>
+                        <th className="p-3.5">Guest / Traveler</th>
+                        <th className="p-3.5">Dates & Schedule</th>
+                        <th className="p-3.5">Total Fare</th>
                         <th className="p-3.5">Status</th>
                         <th className="p-3.5 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#1a344d]/60">
-                      {bookingsList.map(b => (
+                      {bookingsList.map(b => {
+                        const isCab = b.type === 'cab' || b.itemType === 'vehicle' || b.bookingType === 'cab';
+                        return (
                         <tr key={b._id || b.bookingId} className="hover:bg-[#112a3f] transition-colors">
                           <td className="p-3.5">
-                            <div className="font-bold text-cyan-400">{b.bookingId}</div>
-                            <div className="text-white font-editorial">{b.propertyTitle || b.itemTitle || 'Stay'}</div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-cyan-400">{b.bookingId}</span>
+                              {isCab ? (
+                                <span className="px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-300 text-[9px] font-bold">
+                                  🚖 Cab
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.2 rounded-md bg-blue-500/20 text-blue-300 text-[9px] font-bold">
+                                  🏡 Stay
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-white font-editorial font-bold">{b.propertyTitle || b.itemTitle || (isCab ? 'Cab Transport' : 'Stay')}</div>
+                            {isCab ? (
+                              <div className="text-[10px] text-amber-300/80">
+                                {b.vehicleRegNo} · 📍 {b.pickupLocation || 'Pickup'} ➔ {b.dropLocation || 'Sightseeing'}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-slate-400">{b.destination || b.location || 'Tamil Nadu'}</div>
+                            )}
                           </td>
                           <td className="p-3.5">
-                            <div className="text-white font-bold">{b.customerName || b.userName}</div>
+                            <div className="text-white font-bold">{b.customerName || b.userName || 'Tourist'}</div>
                             <div className="text-[10px] text-slate-400">{b.customerEmail || b.userEmail}</div>
+                            <div className="text-[10px] text-slate-400">{b.customerPhone || b.userPhone}</div>
                           </td>
                           <td className="p-3.5 text-slate-300">
-                            {b.checkIn || b.checkInDate} → {b.checkOut || b.checkOutDate}
+                            {isCab ? (
+                              <div>
+                                <div>🗓️ {b.pickupDate || b.checkInDate} at {b.pickupTime || '09:00'} ({b.days || 1}D)</div>
+                                <div className="text-[10px] text-slate-400">👨‍✈️ {b.driverName || 'Driver'} ({b.driverPhone || ''})</div>
+                              </div>
+                            ) : (
+                              <div>
+                                <div>📅 {b.checkIn || b.checkInDate} → {b.checkOut || b.checkOutDate}</div>
+                                <div className="text-[10px] text-slate-400">👥 {b.guests || 2} Guests ({b.nights || 1}N)</div>
+                              </div>
+                            )}
                           </td>
                           <td className="p-3.5 text-emerald-400 font-bold">
-                            ₹{Number(b.totalAmount || b.amount || 0).toLocaleString()}
+                            <div>₹{Number(b.totalAmount || b.amount || 0).toLocaleString()}</div>
+                            {b.gstAmount !== undefined && (
+                              <div className="text-[9px] text-slate-400 font-normal">Base ₹{b.baseAmount} + 18% GST</div>
+                            )}
                           </td>
                           <td className="p-3.5">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -1473,7 +1749,8 @@ export default function SuperAdminControlCenter() {
                             </a>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1932,6 +2209,305 @@ export default function SuperAdminControlCenter() {
               <button type="button" onClick={() => setShowResetConfirmModal(false)} className="px-4 py-2 rounded-xl bg-[#132c42] text-slate-300 text-xs font-mono cursor-pointer">Cancel</button>
               <button type="button" onClick={handleResetDatabase} className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs font-mono cursor-pointer">Reset to Zero</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔍 SUPER ADMIN VEHICLE FULL INSPECTION MODAL */}
+      {selectedInspectVehicle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+          <div className="bg-[#0c1e2e] rounded-3xl max-w-3xl w-full border border-[#1a344d] shadow-2xl overflow-hidden my-6 max-h-[90vh] flex flex-col">
+            
+            {/* Header */}
+            <div className="p-5 bg-[#091724] border-b border-[#1a344d] flex justify-between items-start shrink-0">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-mono text-[10px] font-bold uppercase">
+                    Vehicle Inspection Dossier
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                    selectedInspectVehicle.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                  }`}>
+                    {selectedInspectVehicle.status || 'Pending Approval'}
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold text-white font-editorial mt-1">{selectedInspectVehicle.title}</h3>
+                <p className="text-xs text-slate-400 font-mono">
+                  Reg: <strong className="text-amber-400">{selectedInspectVehicle.registrationNumber || selectedInspectVehicle.regNo}</strong> · Category: {selectedInspectVehicle.type || 'Cab'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedInspectVehicle(null)}
+                className="p-2 rounded-full bg-[#132c42] hover:bg-[#1a3b59] text-slate-300 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs font-mono">
+              
+              {/* Photo & Document Switcher */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase text-slate-400">
+                    Document & Photo Inspection:
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {selectedInspectVehicle.rcBookImage && (
+                      <button
+                        type="button"
+                        onClick={() => setInspectPhotoTab('rc')}
+                        className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                          inspectPhotoTab === 'rc' ? 'bg-emerald-500 text-black' : 'bg-[#132c42] text-slate-300'
+                        }`}
+                      >
+                        📄 RC Document
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setInspectPhotoTab('exterior')}
+                      className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                        inspectPhotoTab === 'exterior' ? 'bg-cyan-500 text-black' : 'bg-[#132c42] text-slate-300'
+                      }`}
+                    >
+                      🚗 Exterior
+                    </button>
+                    {selectedInspectVehicle.interiorImage && (
+                      <button
+                        type="button"
+                        onClick={() => setInspectPhotoTab('interior')}
+                        className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                          inspectPhotoTab === 'interior' ? 'bg-cyan-500 text-black' : 'bg-[#132c42] text-slate-300'
+                        }`}
+                      >
+                        🪑 Interior
+                      </button>
+                    )}
+                    {selectedInspectVehicle.numberPlateImage && (
+                      <button
+                        type="button"
+                        onClick={() => setInspectPhotoTab('plate')}
+                        className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                          inspectPhotoTab === 'plate' ? 'bg-cyan-500 text-black' : 'bg-[#132c42] text-slate-300'
+                        }`}
+                      >
+                        🏷️ Plate
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="relative h-64 sm:h-72 rounded-2xl overflow-hidden bg-[#07131e] border border-[#1a344d] flex items-center justify-center">
+                  {inspectPhotoTab === 'rc' && (
+                    <img
+                      src={selectedInspectVehicle.rcBookImage || selectedInspectVehicle.exteriorImage}
+                      alt="RC Document"
+                      className="w-full h-full object-contain p-2"
+                    />
+                  )}
+                  {inspectPhotoTab === 'exterior' && (
+                    <img
+                      src={selectedInspectVehicle.exteriorImage || (selectedInspectVehicle.images && selectedInspectVehicle.images[0]) || 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2'}
+                      alt="Exterior"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  {inspectPhotoTab === 'interior' && (
+                    <img
+                      src={selectedInspectVehicle.interiorImage || 'https://images.unsplash.com/photo-1563720223185-11003d516935'}
+                      alt="Interior"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  {inspectPhotoTab === 'plate' && (
+                    <img
+                      src={selectedInspectVehicle.numberPlateImage || selectedInspectVehicle.exteriorImage}
+                      alt="Number Plate"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Provider & Driver Compliance Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-2xl bg-[#091724] border border-[#1a344d] space-y-2">
+                  <span className="text-[10px] text-cyan-300 font-bold uppercase block">👤 Fleet Host Information:</span>
+                  <div className="text-slate-200 space-y-1">
+                    <p><strong>Host:</strong> {selectedInspectVehicle.providerName || selectedInspectVehicle.ownerName || 'Host'}</p>
+                    <p><strong>Email:</strong> {selectedInspectVehicle.providerEmail || selectedInspectVehicle.ownerEmail || 'vendor@exploretamilnadu.com'}</p>
+                    <p><strong>Phone:</strong> {selectedInspectVehicle.providerPhone || '+91 78717 79134'}</p>
+                    <p><strong>Location:</strong> {selectedInspectVehicle.location || selectedInspectVehicle.district || 'Tamil Nadu'}</p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-[#091724] border border-[#1a344d] space-y-2">
+                  <span className="text-[10px] text-emerald-400 font-bold uppercase block">🛡️ Driver & Safety Compliance:</span>
+                  <div className="text-slate-200 space-y-1">
+                    <p><strong>Assigned Driver:</strong> {selectedInspectVehicle.driverName || 'Commercial Driver'}</p>
+                    <p><strong>Driver Contact:</strong> {selectedInspectVehicle.driverPhone || '+91 78717 79134'}</p>
+                    <p><strong>License No:</strong> {selectedInspectVehicle.driverLicense || 'TN43-COMMERCIAL-DL'}</p>
+                    <p className="text-emerald-400 font-bold">✓ Zero-Tolerance Conduct Signed</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Transparent Financial Calculation (+18% GST + 5% Fee) */}
+              {(() => {
+                const p = calculatePricing(selectedInspectVehicle.pricePerDay || selectedInspectVehicle.price || 3500);
+                return (
+                  <div className="p-4 rounded-2xl bg-[#091724] border border-[#1a344d] space-y-2">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">💰 Financial & Tariff Distribution:</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                      <div className="p-2.5 rounded-xl bg-[#0c1e2e] border border-[#1a344d]">
+                        <span className="text-[10px] text-slate-400 block">Host Base Rate</span>
+                        <strong className="text-white text-sm">₹{p.base.toLocaleString()}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-[#0c1e2e] border border-[#1a344d]">
+                        <span className="text-[10px] text-slate-400 block">GST (18%)</span>
+                        <strong className="text-cyan-300 text-sm">₹{p.gst.toLocaleString()}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-[#0c1e2e] border border-[#1a344d]">
+                        <span className="text-[10px] text-slate-400 block">Platform Fee (5%)</span>
+                        <strong className="text-amber-300 text-sm">₹{p.platformFee.toLocaleString()}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                        <span className="text-[10px] text-emerald-400 block">Customer Price</span>
+                        <strong className="text-emerald-300 text-sm">₹{p.total.toLocaleString()}</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Base Location Map Link */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-[#091724] border border-[#1a344d]">
+                <span className="text-slate-300">Base Stand GPS Pin:</span>
+                <a
+                  href={selectedInspectVehicle.googleMapsUrl || `https://www.google.com/maps?q=${encodeURIComponent((selectedInspectVehicle.location || selectedInspectVehicle.title) + ', Tamil Nadu')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-colors"
+                >
+                  🗺️ Open in Google Maps ↗
+                </a>
+              </div>
+
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="p-4 sm:p-5 bg-[#091724] border-t border-[#1a344d] flex items-center justify-between gap-3 shrink-0">
+              <span className="text-xs font-mono text-slate-400">
+                Super Admin Verification Console
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleUpdateVehicleStatus(selectedInspectVehicle._id || selectedInspectVehicle.id, 'Approved');
+                    setSelectedInspectVehicle(null);
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs font-mono flex items-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95"
+                >
+                  <Check size={15} /> Approve & Send Onboarding Mail
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleUpdateVehicleStatus(selectedInspectVehicle._id || selectedInspectVehicle.id, 'Rejected');
+                    setSelectedInspectVehicle(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 font-bold text-xs font-mono cursor-pointer transition-colors"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 🌟 CONFIGURE MAINTENANCE MODE MODAL */}
+      {showMaintenanceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in">
+          <div className="bg-[#0c1e2e] rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-[#1a344d] shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#1a344d] pb-3">
+              <h3 className="text-base font-bold text-white font-editorial flex items-center gap-2">
+                <Wrench size={16} className="text-amber-400" /> Configure System Maintenance & Upgrade
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowMaintenanceModal(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMaintenanceMode} className="space-y-4 text-xs font-mono">
+              <div className="p-3 rounded-2xl bg-[#091724] border border-[#1a344d] flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-white block">Maintenance Status</span>
+                  <span className="text-[11px] text-slate-400">When enabled, public visitors see the upgrade screen.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMaintenanceMode(prev => !prev)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    isMaintenanceMode 
+                      ? 'bg-amber-400 text-slate-950 font-black' 
+                      : 'bg-[#132c42] text-slate-300'
+                  }`}
+                >
+                  {isMaintenanceMode ? '⚡ ENABLED (UPGRADING)' : 'DISABLED (LIVE)'}
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 mb-1">Upgrade Notice / Message to Visitors</label>
+                <textarea
+                  rows={3}
+                  value={maintenanceMessage}
+                  onChange={e => setMaintenanceMessage(e.target.value)}
+                  className="w-full p-3 rounded-xl bg-[#091724] border border-[#1a344d] text-white outline-none focus:border-amber-400 leading-relaxed font-sans"
+                  placeholder="Explain the scheduled upgrade reasons to guests..."
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 mb-1">Estimated Upgrade Duration (e.g. 30 Minutes, 1 Hour)</label>
+                <input
+                  type="text"
+                  value={maintenanceDuration}
+                  onChange={e => setMaintenanceDuration(e.target.value)}
+                  className="w-full p-3 rounded-xl bg-[#091724] border border-[#1a344d] text-white outline-none focus:border-amber-400"
+                  placeholder="30 Minutes"
+                  required
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMaintenanceModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-[#132c42] text-slate-300 hover:bg-[#1a3b59] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingMaintenance}
+                  className="px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  {updatingMaintenance ? 'Saving...' : 'Save & Apply Status'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

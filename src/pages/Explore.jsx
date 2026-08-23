@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Search, 
   MapPin, 
@@ -44,8 +44,12 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { BACKEND_API } from '../config/api';
+import { getWithSWR } from '../utils/cache';
+import { StayCardSkeleton } from '../components/common/SkeletonCard';
 import { downloadBookingReceiptPDF } from '../utils/receiptGenerator';
 import { getGoogleMapsUrl, openGoogleMaps } from '../utils/mapsHelper';
+import { calculatePricing } from '../utils/pricing';
+import { loadRazorpay } from '../utils/razorpay';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=800&q=80';
 
@@ -56,13 +60,31 @@ export default function Explore({ onOpenAuth }) {
   const { currentUser } = useAuth();
   const { socket } = useSocket();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Search & Filter State
-  const [district, setDistrict] = useState('All');
-  const [stayType, setStayType] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
+  const districtParam = searchParams.get('district') || searchParams.get('location') || 'All';
+  const typeParam = searchParams.get('type') || 'All';
+  const searchParam = searchParams.get('search') || '';
+
+  const [district, setDistrict] = useState(districtParam);
+  const [stayType, setStayType] = useState(typeParam);
+  const [searchQuery, setSearchQuery] = useState(searchParam);
   const [liveProperties, setLiveProperties] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Sync URL query params if they change
+  useEffect(() => {
+    if (districtParam && districtParam !== 'All') {
+      setDistrict(districtParam);
+    }
+    if (typeParam && typeParam !== 'All') {
+      setStayType(typeParam);
+    }
+    if (searchParam) {
+      setSearchQuery(searchParam);
+    }
+  }, [districtParam, typeParam, searchParam]);
 
   // 🎟️ Advanced Booking Modal States
   const [selectedStayForBooking, setSelectedStayForBooking] = useState(null);
@@ -304,27 +326,34 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
     return await fetch(endpoint, options);
   }, []);
 
-  // Fetch approved properties from MongoDB Atlas
+  // Fetch approved properties from MongoDB Atlas with SWR 0ms caching
   const fetchProperties = useCallback(async () => {
     try {
-      const res = await apiFetch('/api/properties');
-      if (res && res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const approved = data.filter(p => p.status === 'Approved' || !p.status);
-          
-          // Merge uploaded properties with curated DEFAULT_FEATURED_STAYS
-          const defaultIds = new Set(DEFAULT_FEATURED_STAYS.map(s => s.id));
-          const customProperties = approved.filter(p => !defaultIds.has(p.id) && !defaultIds.has(p._id));
-          
-          setLiveProperties([...customProperties, ...DEFAULT_FEATURED_STAYS]);
-        } else {
-          setLiveProperties(DEFAULT_FEATURED_STAYS);
+      const data = await getWithSWR('properties_catalog', async () => {
+        const res = await apiFetch('/api/properties');
+        if (res && res.ok) {
+          const raw = await res.json();
+          return Array.isArray(raw) ? raw : [];
         }
+        return [];
+      }, {
+        ttlMs: 60000,
+        onUpdate: (freshData) => {
+          if (Array.isArray(freshData)) {
+            const approved = freshData.filter(p => p.status === 'Approved' || !p.status);
+            setLiveProperties(approved);
+          }
+        }
+      });
+
+      if (Array.isArray(data)) {
+        const approved = data.filter(p => p.status === 'Approved' || !p.status);
+        setLiveProperties(approved);
       } else {
         setLiveProperties(DEFAULT_FEATURED_STAYS);
       }
     } catch (err) {
+      console.warn('Properties fetch notice:', err.message);
       setLiveProperties(DEFAULT_FEATURED_STAYS);
     } finally {
       setLoading(false);
@@ -484,8 +513,9 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
       console.warn('Razorpay order backend init notice:', e.message);
     }
 
-    // 2. Open Official Razorpay Checkout Modal if SDK is loaded
-    if (typeof window !== 'undefined' && window.Razorpay) {
+    // 2. Open Official Razorpay Checkout Modal (Dynamically loaded on demand)
+    const isLoaded = await loadRazorpay();
+    if (isLoaded && typeof window !== 'undefined' && window.Razorpay) {
       try {
         const options = {
           key: razorpayKey,
@@ -733,8 +763,14 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
           )}
         </div>
 
-        {/* Empty State */}
-        {displayedProperties.length === 0 ? (
+        {/* Loading Skeletons */}
+        {loading && liveProperties.length === 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 py-4">
+            {[1, 2, 3, 4, 5, 6].map(n => (
+              <StayCardSkeleton key={n} />
+            ))}
+          </div>
+        ) : displayedProperties.length === 0 ? (
           <div className="p-10 sm:p-14 text-center text-slate-500 rounded-3xl bg-white/90 border border-[#242429]/15 shadow-sm space-y-4 max-w-2xl mx-auto my-8">
             <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center mx-auto shadow-inner">
               <Building2 size={32} />
@@ -777,7 +813,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
           /* Property Cards Grid */
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6">
             {displayedProperties.map((stay) => {
-              const stayPrice = stay.pricePerNight || stay.price || 4800;
+              const stayPricing = calculatePricing(stay.pricePerNight || stay.price || 4800);
               const stayImg = (stay.images && stay.images[0]) || stay.image || FALLBACK_IMAGE;
               const stayAmenities = stay.amenities || ['Mountain View', 'Free WiFi', 'Private Balcony', 'Organic Dining'];
               
@@ -800,12 +836,6 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                     />
                     
-                    {/* Top Left: Verified Seal Badge */}
-                    <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-3 py-1 rounded-full border border-black/15 shadow-md flex items-center gap-1.5 text-[10px] font-fira-mono font-black text-black">
-                      <Sparkles size={11} className="text-amber-500" />
-                      <span>VERIFIED LUXURY</span>
-                    </div>
-
                     {/* ❤️ TOP RIGHT: HEART / FAVOURITES BUTTON */}
                     <button
                       type="button"
@@ -884,10 +914,13 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                     {/* Pricing & Booking Button */}
                     <div className="pt-3 border-t border-[#242429]/15 flex items-center justify-between gap-2">
                       <div>
-                        <span className="text-base sm:text-lg font-black font-fira-mono text-black">
-                          ₹{Number(stayPrice).toLocaleString()}
+                        <div className="text-base sm:text-lg font-black font-fira-mono text-black leading-none">
+                          ₹{stayPricing.base.toLocaleString()}
+                          <span className="text-[10px] font-mono text-slate-500 font-normal"> / NIGHT</span>
+                        </div>
+                        <span className="text-[9px] font-mono text-slate-500 block pt-0.5">
+                          + 18% GST & 5% Service Fee at booking
                         </span>
-                        <span className="text-[10px] font-mono text-slate-500"> / NIGHT</span>
                       </div>
 
                       <button 
@@ -1053,9 +1086,9 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                       🛡️
                     </div>
                     <div>
-                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase block">Verified Host</span>
-                      <p className="font-bold text-slate-900 text-xs">{stay.ownerName || 'Last Zetas (Superhost)'}</p>
-                      <span className="text-[10px] text-emerald-600 font-medium">⚡ 100% Response Rate</span>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase block">Property Host</span>
+                      <p className="font-bold text-slate-900 text-xs">{stay.ownerName || 'Property Host'}</p>
+                      <span className="text-[10px] text-emerald-600 font-medium">⚡ Fast Response Rate</span>
                     </div>
                   </div>
 
@@ -1064,12 +1097,12 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                       ⭐
                     </div>
                     <div>
-                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase block">Listing Verification</span>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase block">Guest Feedback</span>
                       <p className="font-bold text-slate-900 text-xs">
-                        {stay.reviews && stay.reviews.length > 0 ? `${stay.rating || '4.9'} / 5.0 Rating` : 'Verified Stay'}
+                        {stay.reviews && stay.reviews.length > 0 ? `${stay.rating || '4.9'} / 5.0 Rating` : 'Top Rated Stay'}
                       </p>
                       <span className="text-[10px] text-amber-700 font-medium">
-                        {stay.reviews && stay.reviews.length > 0 ? `${stay.reviews.length} Guest Reviews` : 'Certified Quality Stay'}
+                        {stay.reviews && stay.reviews.length > 0 ? `${stay.reviews.length} Guest Reviews` : 'Authentic Hospitality'}
                       </span>
                     </div>
                   </div>

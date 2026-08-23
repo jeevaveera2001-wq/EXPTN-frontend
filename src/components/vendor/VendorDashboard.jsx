@@ -47,6 +47,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { BACKEND_API } from '../../config/api';
 import InteractiveLocationMapPicker from '../common/InteractiveLocationMapPicker';
+import { calculatePricing } from '../../utils/pricing';
 
 const TAMIL_NADU_LANDMARKS = [
   { name: '🌲 Kodai Lake & Coaker Walk', district: 'Dindigul (Kodaikanal)', address: 'Coaker Walk, Kodaikanal, Dindigul', lat: 10.2381, lng: 77.4892 },
@@ -73,13 +74,35 @@ export default function VendorDashboard() {
 
   // Active Tab State (Synced with URL search params)
   const [activeTab, setActiveTab] = useState(tabFromUrl || 'properties_vehicles');
+  const [subTab, setSubTab] = useState(role === 'vendor' || tabFromUrl === 'vehicles' ? 'vehicles' : 'properties');
   const [actionSuccess, setActionSuccess] = useState('');
+  const [inspectedVehicleModal, setInspectedVehicleModal] = useState(null);
+  const [vehInspectPhotoTab, setVehInspectPhotoTab] = useState('exterior');
 
   useEffect(() => {
-    if (tabFromUrl && ['properties_vehicles', 'bank_payouts', 'bookings_calendar', 'vendor_tickets', 'vendor_profile', 'help_guide'].includes(tabFromUrl)) {
-      setActiveTab(tabFromUrl);
+    if (tabFromUrl) {
+      if (['properties_vehicles', 'properties', 'vehicles', 'bank_accounts', 'bank_payouts', 'payouts', 'bookings', 'bookings_calendar', 'vendor_tickets', 'support', 'profile', 'vendor_profile', 'help_guide'].includes(tabFromUrl)) {
+        if (tabFromUrl === 'vehicles') {
+          setActiveTab('properties_vehicles');
+          setSubTab('vehicles');
+        } else if (tabFromUrl === 'properties') {
+          setActiveTab('properties_vehicles');
+          setSubTab('properties');
+        } else {
+          setActiveTab(tabFromUrl);
+        }
+      }
     }
-  }, [tabFromUrl]);
+    if (actionFromUrl === 'add_vehicle' || (tabFromUrl === 'vehicles' && actionFromUrl === 'add')) {
+      setActiveTab('properties_vehicles');
+      setSubTab('vehicles');
+      setShowAddVehModal(true);
+    } else if (actionFromUrl === 'add_property' || (tabFromUrl === 'properties' && actionFromUrl === 'add')) {
+      setActiveTab('properties_vehicles');
+      setSubTab('properties');
+      setShowAddPropModal(true);
+    }
+  }, [tabFromUrl, actionFromUrl]);
 
   // Profile Form State
   const getInitialAvatar = () => {
@@ -149,19 +172,44 @@ export default function VendorDashboard() {
   const [googleMapsInput, setGoogleMapsInput] = useState('');
   const [isSearchingMap, setIsSearchingMap] = useState(false);
 
-  // Modals for Adding Vehicle
+  // 🚖 Upgraded Vehicle & Cab Fleet Form States
   const [showAddVehModal, setShowAddVehModal] = useState(false);
   const [vehTitle, setVehTitle] = useState('');
-  const [vehType, setVehType] = useState('Innova Crysta (7 Seater)');
+  const [vehType, setVehType] = useState('Innova');
   const [vehRegNo, setVehRegNo] = useState('');
   const [vehPrice, setVehPrice] = useState('3500');
+  const [vehPerKmRate, setVehPerKmRate] = useState('16');
   const [vehDistrict, setVehDistrict] = useState('Nilgiris (Ooty)');
+  const [vehLocation, setVehLocation] = useState('Commercial Road, Ooty');
+  const [vehCoordinates, setVehCoordinates] = useState({ lat: 11.4102, lng: 76.6950 });
+  const [vehFuelType, setVehFuelType] = useState('Diesel');
+  const [vehAcType, setVehAcType] = useState('AC');
+  const [vehSeatingCapacity, setVehSeatingCapacity] = useState('7');
+  const [vehDriverName, setVehDriverName] = useState('Ramesh V.');
+  const [vehDriverPhone, setVehDriverPhone] = useState('+91 78717 79134');
+  const [vehDriverLicense, setVehDriverLicense] = useState('TN-38-20150001234');
+  const [vehRcImage, setVehRcImage] = useState('');
+  const [vehExteriorImage, setVehExteriorImage] = useState('');
+  const [vehInteriorImage, setVehInteriorImage] = useState('');
+  const [vehNumberPlateImage, setVehNumberPlateImage] = useState('');
+  const [vehConductDeclared, setVehConductDeclared] = useState(false);
+  const [vehError, setVehError] = useState('');
 
   // Payouts Log
   const [payoutsList, setPayoutsList] = useState([]);
 
-  // Bookings List
-  const [vendorBookings, setVendorBookings] = useState([]);
+  // Bookings List (0ms Instant Load)
+  const getInitialVendorBookings = () => {
+    try {
+      const savedRaw = localStorage.getItem('etn_user_bookings') || localStorage.getItem('etn_saved_bookings');
+      if (savedRaw) {
+        const parsed = JSON.parse(savedRaw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  };
+  const [vendorBookings, setVendorBookings] = useState(getInitialVendorBookings);
 
   // Support Tickets
   const [vendorTickets, setVendorTickets] = useState([]);
@@ -175,22 +223,31 @@ export default function VendorDashboard() {
     const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
     try {
       const res = await fetch(url, options);
-      if (res.ok || res.status === 400 || res.status === 401 || res.status === 403) {
+      if (res && (res.ok || res.status === 400 || res.status === 401 || res.status === 403)) {
         return res;
       }
     } catch (e) {
-      console.warn('Direct backend API fetch error:', e.message);
+      console.warn('API fetch notice for', url, e.message);
     }
-    return await fetch(endpoint, options);
+    return null;
   };
 
   const fetchVendorData = async () => {
     try {
+      const userEmail = (currentUser?.email || vendorEmail || '').toLowerCase().trim();
+      const userName = (currentUser?.name || vendorName || '').toLowerCase().trim();
+
       const propsRes = await apiFetch('/api/properties');
       if (propsRes.ok) {
         const allProps = await propsRes.json();
         if (Array.isArray(allProps)) {
-          setMyPropertiesList(allProps.filter(p => p.ownerEmail === currentUser?.email || p.ownerName === currentUser?.name || currentUser?.role === 'super_admin'));
+          setMyPropertiesList(allProps.filter(p => {
+            const pEmail = (p.ownerEmail || '').toLowerCase().trim();
+            const pName = (p.ownerName || '').toLowerCase().trim();
+            return (userEmail && pEmail && pEmail === userEmail) || 
+                   (userName && pName && pName === userName) || 
+                   currentUser?.role === 'super_admin';
+          }));
         }
       }
 
@@ -198,31 +255,68 @@ export default function VendorDashboard() {
       if (vehsRes.ok) {
         const allVehs = await vehsRes.json();
         if (Array.isArray(allVehs)) {
-          setMyVehiclesList(allVehs.filter(v => v.providerEmail === currentUser?.email || v.providerName === currentUser?.name || currentUser?.role === 'super_admin'));
+          setMyVehiclesList(allVehs.filter(v => {
+            const vEmail = (v.providerEmail || v.ownerEmail || '').toLowerCase().trim();
+            const vName = (v.providerName || v.ownerName || '').toLowerCase().trim();
+            return (userEmail && vEmail && vEmail === userEmail) || 
+                   (userName && vName && vName === userName) || 
+                   currentUser?.role === 'super_admin';
+          }));
         }
       }
 
+      // Fetch Bookings from Server & Local Storage
+      let serverBks = [];
       const bksRes = await apiFetch('/api/bookings');
-      if (bksRes.ok) {
+      if (bksRes && bksRes.ok) {
         const allBks = await bksRes.json();
         if (Array.isArray(allBks)) {
-          setVendorBookings(allBks);
+          serverBks = allBks;
         }
       }
+      let localBks = [];
+      try {
+        const savedRaw = localStorage.getItem('etn_user_bookings') || localStorage.getItem('etn_saved_bookings');
+        if (savedRaw) {
+          const parsed = JSON.parse(savedRaw);
+          if (Array.isArray(parsed)) localBks = parsed;
+        }
+      } catch (e) {}
+
+      const mergedBksMap = new Map();
+      [...serverBks, ...localBks].forEach(b => {
+        const id = b.bookingId || b._id || b.id;
+        if (id && !mergedBksMap.has(id)) {
+          mergedBksMap.set(id, b);
+        }
+      });
+      setVendorBookings(Array.from(mergedBksMap.values()));
 
       const tckRes = await apiFetch('/api/tickets');
-      if (tckRes.ok) {
+      if (tckRes && tckRes.ok) {
         const allTcks = await tckRes.json();
         if (Array.isArray(allTcks)) {
-          const vEmail = (currentUser?.email || '').toLowerCase().trim();
-          setVendorTickets(allTcks.filter(t => (t.senderEmail || '').toLowerCase().trim() === vEmail || currentUser?.role === 'super_admin'));
+          setVendorTickets(allTcks.filter(t => (t.senderEmail || '').toLowerCase().trim() === userEmail || currentUser?.role === 'super_admin'));
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('fetchVendorData error:', e.message);
+    }
   };
 
   useEffect(() => {
     fetchVendorData();
+
+    const handleBookingCreated = (e) => {
+      if (e.detail) {
+        setVendorBookings(prev => {
+          const id = e.detail.bookingId || e.detail.id || e.detail._id;
+          const exists = prev.some(b => (b.bookingId || b.id || b._id) === id);
+          return exists ? prev : [e.detail, ...prev];
+        });
+      }
+    };
+    window.addEventListener('etn_booking_created', handleBookingCreated);
 
     if (socket) {
       socket.on('new_property', fetchVendorData);
@@ -244,6 +338,7 @@ export default function VendorDashboard() {
     const interval = setInterval(fetchVendorData, 4000);
 
     return () => {
+      window.removeEventListener('etn_booking_created', handleBookingCreated);
       clearInterval(interval);
       if (socket) {
         socket.off('new_property');
@@ -303,6 +398,19 @@ export default function VendorDashboard() {
         const compressedBase64 = await compressImage(file);
         setPropImages(prev => [...prev, compressedBase64]);
       }
+    }
+  };
+
+  const handleSingleFileUpload = async (e, setter) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setVehError('');
+    try {
+      const compressed = await compressImage(file);
+      setter(compressed);
+      triggerSuccess('Document / Photo uploaded successfully!');
+    } catch (err) {
+      console.warn('File upload error:', err);
     }
   };
 
@@ -479,6 +587,9 @@ export default function VendorDashboard() {
       return;
     }
 
+    const uEmail = (currentUser?.email || vendorEmail || 'vendor@exploretamilnadu.com').toLowerCase().trim();
+    const uName = currentUser?.name || vendorName || 'Property Host';
+
     const rulesArray = propRules
       .split('\n')
       .map(r => r.trim())
@@ -487,7 +598,6 @@ export default function VendorDashboard() {
     const googleMapsUrl = `https://www.google.com/maps?q=${propCoordinates.lat},${propCoordinates.lng}`;
 
     const newProp = {
-      id: 'p-' + Date.now(),
       title: propTitle,
       type: propType,
       district: propDistrict,
@@ -500,13 +610,29 @@ export default function VendorDashboard() {
       isLocationConfirmed: true,
       description: propDesc || `${propType} in ${propLocation || propDistrict}.`,
       ownerRules: rulesArray,
-      ownerEmail: currentUser?.email || 'vendor@exploretamilnadu.com',
-      ownerName: currentUser?.name || 'Property Host',
+      ownerEmail: uEmail,
+      ownerName: uName,
       status: 'Pending Approval',
       createdAt: new Date().toISOString()
     };
 
-    setMyPropertiesList([newProp, ...myPropertiesList]);
+    try {
+      const res = await apiFetch('/api/properties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newProp)
+      });
+      if (res && (res.ok || res.status === 201)) {
+        const saved = await res.json();
+        setMyPropertiesList(prev => [saved, ...prev.filter(p => (p._id || p.id) !== (saved._id || saved.id))]);
+      } else {
+        setMyPropertiesList(prev => [{ ...newProp, id: 'p-' + Date.now() }, ...prev]);
+      }
+    } catch (err) {
+      console.warn('Backend property add error:', err);
+      setMyPropertiesList(prev => [{ ...newProp, id: 'p-' + Date.now() }, ...prev]);
+    }
+
     setShowAddPropModal(false);
     setPropTitle('');
     setPropPrice('3800');
@@ -514,55 +640,118 @@ export default function VendorDashboard() {
     setPropImages([]);
     setPropError('');
 
-    try {
-      await apiFetch('/api/properties', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newProp)
-      });
-    } catch (err) {
-      console.warn('Backend property add error:', err);
-    }
-
-    triggerSuccess(`Property "${propTitle}" with ${propImages.length} photos and Google Maps location submitted for Super Admin approval!`);
+    triggerSuccess(`Property "${propTitle}" with ${propImages.length} photos submitted for Super Admin approval!`);
   };
 
-  // Add Vehicle with Real-Time Backend API Persistence
+  // Add Vehicle with Real-Time Backend API Persistence & RC/Photo/Conduct Verification
   const handleAddVehicleSubmit = async (e) => {
     e.preventDefault();
-    if (!vehTitle || !vehRegNo) return;
+    setVehError('');
+
+    if (!vehTitle || !vehRegNo) {
+      setVehError('⚠️ Please enter Vehicle Title and Registration Number.');
+      return;
+    }
+
+    if (!vehRcImage) {
+      setVehError('⚠️ RC Book Document Image is required! Please upload RC copy.');
+      return;
+    }
+
+    if (!vehExteriorImage) {
+      setVehError('⚠️ Vehicle Exterior Photo is required! Please upload exterior image.');
+      return;
+    }
+
+    if (!vehInteriorImage) {
+      setVehError('⚠️ Vehicle Interior Photo is required! Please upload interior/seating image.');
+      return;
+    }
+
+    if (!vehConductDeclared) {
+      setVehError('⚠️ Please accept the Mandatory Zero-Tolerance Driver Conduct & Substance Policy.');
+      return;
+    }
+
+    const cleanRegNo = vehRegNo.toUpperCase().trim();
+    const googleMapsUrl = `https://www.google.com/maps?q=${vehCoordinates.lat},${vehCoordinates.lng}`;
+    const uEmail = (currentUser?.email || vendorEmail || 'vendor@exploretamilnadu.com').toLowerCase().trim();
+    const uName = currentUser?.name || vendorName || 'Vehicle Host';
+
+    let backendType = 'Innova';
+    const rawType = (vehType || '').toLowerCase();
+    if (rawType.includes('innova')) backendType = 'Innova';
+    else if (rawType.includes('tempo') || rawType.includes('traveller')) backendType = 'Tempo Traveller';
+    else if (rawType.includes('sedan') || rawType.includes('dzire') || rawType.includes('etios')) backendType = 'Sedan';
+    else if (rawType.includes('suv') || rawType.includes('scorpio') || rawType.includes('xuv') || rawType.includes('hatchback')) backendType = 'Cab SUV';
+    else if (rawType.includes('bus') || rawType.includes('coach')) backendType = 'Luxury Bus';
+    else if (rawType.includes('bike') || rawType.includes('scooter')) backendType = 'Rental Bike';
+    else backendType = 'Innova';
 
     const newVeh = {
-      id: 'v-' + Date.now(),
       title: vehTitle,
-      type: vehType,
-      regNo: vehRegNo.toUpperCase().trim(),
+      type: backendType,
+      category: vehType,
+      vehicleModel: vehTitle,
+      registrationNumber: cleanRegNo,
+      regNo: cleanRegNo,
+      numberPlate: cleanRegNo,
+      numberPlateImage: vehNumberPlateImage || vehExteriorImage,
+      rcBookImage: vehRcImage,
+      exteriorImage: vehExteriorImage,
+      interiorImage: vehInteriorImage,
+      images: [vehExteriorImage, vehInteriorImage, vehRcImage, vehNumberPlateImage].filter(Boolean),
+      location: vehLocation || `${vehDistrict}, Tamil Nadu`,
       district: vehDistrict,
+      coordinates: vehCoordinates,
+      googleMapsUrl,
+      fuelType: vehFuelType,
+      acType: vehAcType,
+      seatingCapacity: Number(vehSeatingCapacity || 7),
+      driverIncluded: true,
+      driverName: vehDriverName || 'Verified Driver',
+      driverPhone: vehDriverPhone || vendorPhone || '+91 78717 79134',
+      driverLicense: vehDriverLicense || 'Valid Commercial RTO License',
       price: Number(vehPrice || 3500),
       pricePerDay: Number(vehPrice || 3500),
+      perKmRate: Number(vehPerKmRate || 16),
+      conductDeclared: true,
       status: 'Pending Approval',
-      providerEmail: currentUser?.email || vendorEmail || 'vendor@exploretamilnadu.com',
-      providerName: currentUser?.name || vendorName || 'Vehicle Host',
+      providerEmail: uEmail,
+      providerName: uName,
+      ownerEmail: uEmail,
+      ownerName: uName,
       createdAt: new Date().toISOString()
     };
 
-    setMyVehiclesList([newVeh, ...myVehiclesList]);
-    setShowAddVehModal(false);
-    setVehTitle('');
-    setVehRegNo('');
-    setVehPrice('3500');
-
     try {
-      await apiFetch('/api/vehicles', {
+      const res = await apiFetch('/api/vehicles', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newVeh)
       });
-      triggerSuccess(`Vehicle "${vehTitle}" (${newVeh.regNo}) submitted for Super Admin approval!`);
+      if (res && (res.ok || res.status === 201)) {
+        const saved = await res.json();
+        setMyVehiclesList(prev => [saved, ...prev.filter(v => (v._id || v.id) !== (saved._id || saved.id))]);
+      } else {
+        setMyVehiclesList(prev => [{ ...newVeh, id: 'v-' + Date.now() }, ...prev]);
+      }
     } catch (err) {
       console.warn('Backend vehicle add error:', err);
-      triggerSuccess(`Vehicle "${vehTitle}" submitted for approval!`);
+      setMyVehiclesList(prev => [{ ...newVeh, id: 'v-' + Date.now() }, ...prev]);
     }
+
+    setShowAddVehModal(false);
+    setVehTitle('');
+    setVehRegNo('');
+    setVehRcImage('');
+    setVehExteriorImage('');
+    setVehInteriorImage('');
+    setVehNumberPlateImage('');
+    setVehConductDeclared(false);
+    setVehError('');
+
+    triggerSuccess(`Vehicle "${vehTitle}" (${cleanRegNo}) with RC & photos submitted for Super Admin approval!`);
   };
 
   const handleCreateTicketSubmit = async (e) => {
@@ -613,7 +802,9 @@ export default function VendorDashboard() {
 
   // Nav Menu Items for Vendors & Property Hosts
   const navMenuItems = [
-    { id: 'properties_vehicles', label: 'My Properties & Vehicles', icon: <Building2 size={18} />, badge: myPropertiesList.length + myVehiclesList.length },
+    { id: 'properties_vehicles', label: 'Overview & Inventory', icon: <Building2 size={18} />, badge: myPropertiesList.length + myVehiclesList.length },
+    { id: 'vehicles', label: '🚖 My Vehicle Fleet', icon: <Car size={18} />, badge: myVehiclesList.length },
+    { id: 'properties', label: '🏡 My Listed Stays', icon: <Building2 size={18} />, badge: myPropertiesList.length },
     { id: 'profile', label: 'Vendor Profile & Security', icon: <User size={18} /> },
     { id: 'bank_accounts', label: 'Bank Accounts', icon: <CreditCard size={18} />, badge: bankAccountsList.length },
     { id: 'payouts', label: 'Payouts & Earnings', icon: <DollarSign size={18} />, badge: confirmedEarnings > 0 ? `₹${confirmedEarnings.toLocaleString()}` : '₹0' },
@@ -635,7 +826,7 @@ export default function VendorDashboard() {
             <div>
               <span className="text-sm font-extrabold text-white block leading-tight truncate max-w-[130px]">{vendorName}</span>
               <span className="text-[10px] font-mono text-amber-400 block font-bold mt-0.5">
-                {role === 'owner_and_vendor' ? '🏡🚖 Host & Vendor' : '🏡 Property Host'}
+                {role === 'owner_and_vendor' ? '🏡🚖 Host & Vendor' : role === 'vendor' ? '🚖 Vehicle Fleet Host' : '🏡 Property Host'}
               </span>
             </div>
           </div>
@@ -646,12 +837,22 @@ export default function VendorDashboard() {
               <button
                 key={item.id}
                 onClick={() => {
-                  setActiveTab(item.id);
-                  setSearchParams({ tab: item.id });
+                  if (item.id === 'vehicles') {
+                    setActiveTab('properties_vehicles');
+                    setSubTab('vehicles');
+                    setSearchParams({ tab: 'vehicles' });
+                  } else if (item.id === 'properties') {
+                    setActiveTab('properties_vehicles');
+                    setSubTab('properties');
+                    setSearchParams({ tab: 'properties' });
+                  } else {
+                    setActiveTab(item.id);
+                    setSearchParams({ tab: item.id });
+                  }
                 }}
                 title={item.label}
                 className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === item.id 
+                  (activeTab === item.id || (item.id === 'vehicles' && activeTab === 'properties_vehicles' && subTab === 'vehicles') || (item.id === 'properties' && activeTab === 'properties_vehicles' && subTab === 'properties'))
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' 
                     : 'text-slate-300 hover:bg-[#0c2a54] hover:text-white'
                 }`}
@@ -662,7 +863,7 @@ export default function VendorDashboard() {
                 </div>
                 {item.badge !== undefined && (
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold ${
-                    activeTab === item.id ? 'bg-white/20 text-white' : 'bg-[#123875] text-cyan-300'
+                    (activeTab === item.id || (item.id === 'vehicles' && activeTab === 'properties_vehicles' && subTab === 'vehicles')) ? 'bg-white/20 text-white' : 'bg-[#123875] text-cyan-300'
                   }`}>
                     {item.badge}
                   </span>
@@ -672,34 +873,46 @@ export default function VendorDashboard() {
           </nav>
         </div>
 
-        {/* Sidebar Footer Controls */}
-        <div className="pt-6 border-t border-[#0e2e5c]">
-          <div className="flex items-center gap-2 text-[11px] font-mono text-emerald-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>Verified Host & Fleet Provider</span>
-          </div>
-        </div>
       </aside>
 
       {/* 💻 MAIN CONTENT AREA (100% Full Width on Mobile with zero sidebars) */}
       <main className="flex-1 p-3.5 sm:p-6 lg:p-10 bg-slate-50 overflow-y-auto min-h-screen">
         
-        {/* Header Status Bar */}
-        <div className="flex justify-between items-center mb-4 sm:mb-8 pb-3 sm:pb-4 border-b border-slate-200">
+        {/* Header Status Bar & Quick Actions */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 sm:mb-8 pb-3 sm:pb-4 border-b border-slate-200">
           <div>
-            <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-amber-100 text-amber-900 border border-amber-300 font-mono">
-              🏡🚖 Host & Transport Vendor Portal
-            </span>
-            <h2 className="text-2xl font-black text-slate-900 mt-2 capitalize">
-              {navMenuItems.find(i => i.id === activeTab)?.label}
+            <h2 className="text-2xl font-black text-slate-900 capitalize">
+              {navMenuItems.find(i => i.id === activeTab)?.label || 'Host Dashboard'}
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">Manage stay listings, vehicle fleets, bank accounts, and payouts.</p>
+            <p className="text-xs text-slate-500 mt-0.5">Manage stay listings, vehicle fleets, bank accounts, and guest bookings.</p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="px-3 py-1.5 rounded-full text-xs font-mono font-bold bg-green-100 text-green-800 border border-green-300">
-              🟢 Host Verified
-            </span>
+          {/* Quick Master Add Actions */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('properties_vehicles');
+                setSubTab('vehicles');
+                setShowAddVehModal(true);
+              }}
+              className="px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs font-mono flex items-center gap-2 shadow-sm transition-transform active:scale-95 cursor-pointer"
+            >
+              <Car size={16} />
+              <span>+ Add Vehicle / Cab</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('properties_vehicles');
+                setSubTab('properties');
+                setShowAddPropModal(true);
+              }}
+              className="px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs font-mono flex items-center gap-2 shadow-sm transition-transform active:scale-95 cursor-pointer"
+            >
+              <Building2 size={16} />
+              <span>+ Add Stay / Property</span>
+            </button>
           </div>
         </div>
 
@@ -710,36 +923,62 @@ export default function VendorDashboard() {
           </div>
         )}
 
-        {/* 🏡🚖 TAB 1: MY PROPERTIES & VEHICLES */}
+        {/* 🏡🚖 TAB 1: MY PROPERTIES & VEHICLES WITH SUBTAB TOGGLE */}
         {activeTab === 'properties_vehicles' && (
           <div className="space-y-8">
-            {/* Properties Section */}
-            <div className="bg-white rounded-3xl p-6 lg:p-8 border border-slate-200 shadow-sm space-y-6">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900">🏡 My Listed Properties</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Hotels, homestays, & lakeview resorts managed by you.</p>
-                </div>
-                <button 
-                  onClick={() => setShowAddPropModal(!showAddPropModal)}
-                  className="glass-button text-xs px-4 py-2.5 flex items-center gap-2"
-                >
-                  <Plus size={16} /> Add New Property
-                </button>
-              </div>
+            
+            {/* Sub-view toggle pills */}
+            <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-200/80 border border-slate-300/80 w-fit">
+              <button
+                type="button"
+                onClick={() => setSubTab('vehicles')}
+                className={`px-4 py-2 rounded-xl text-xs font-extrabold font-mono flex items-center gap-2 transition-all cursor-pointer ${
+                  subTab === 'vehicles' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-700 hover:text-black'
+                }`}
+              >
+                <Car size={15} className="text-amber-400" />
+                <span>🚖 My Vehicle Fleet ({myVehiclesList.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubTab('properties')}
+                className={`px-4 py-2 rounded-xl text-xs font-extrabold font-mono flex items-center gap-2 transition-all cursor-pointer ${
+                  subTab === 'properties' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-700 hover:text-black'
+                }`}
+              >
+                <Building2 size={15} className="text-blue-400" />
+                <span>🏡 My Listed Stays ({myPropertiesList.length})</span>
+              </button>
+            </div>
 
-              {/* 📸🗺️ Add Property Form with Photo Upload (Min 2) & Google Maps Location Confirmation */}
-              {showAddPropModal && (
-                <form onSubmit={handleAddPropertySubmit} className="p-6 lg:p-8 rounded-3xl bg-slate-50 border-2 border-blue-200 shadow-md space-y-6 animate-fade-in">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm">🏡</span>
-                      <h4 className="text-base font-extrabold text-slate-900">Add New Property / Stay Listing</h4>
-                    </div>
-                    <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
-                      📸 2+ Photos & Google Maps Pin Confirmation Required
-                    </span>
+            {/* View A: Properties Section */}
+            {(subTab === 'properties') && (
+              <div className="bg-white rounded-3xl p-6 lg:p-8 border border-slate-200 shadow-sm space-y-6 animate-in fade-in">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-900">🏡 My Listed Properties</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Hotels, homestays, & lakeview resorts managed by you.</p>
                   </div>
+                  <button 
+                    onClick={() => setShowAddPropModal(!showAddPropModal)}
+                    className="glass-button text-xs px-4 py-2.5 flex items-center gap-2"
+                  >
+                    <Plus size={16} /> Add New Property
+                  </button>
+                </div>
+
+                {/* 📸🗺️ Add Property Form with Photo Upload (Min 2) & Google Maps Location Confirmation */}
+                {showAddPropModal && (
+                  <form onSubmit={handleAddPropertySubmit} className="p-6 lg:p-8 rounded-3xl bg-slate-50 border-2 border-blue-200 shadow-md space-y-6 animate-fade-in">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm">🏡</span>
+                        <h4 className="text-base font-extrabold text-slate-900">Add New Property / Stay Listing</h4>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
+                        📸 2+ Photos & Google Maps Pin Confirmation Required
+                      </span>
+                    </div>
 
                   {propError && (
                     <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold flex items-center gap-2 animate-fade-in">
@@ -1080,62 +1319,497 @@ export default function VendorDashboard() {
                   </div>
                 ))}
               </div>
-            </div>
 
-            {/* Vehicles Section */}
-            <div className="bg-white rounded-3xl p-6 lg:p-8 border border-slate-200 shadow-sm space-y-6">
-              <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+              {myPropertiesList.length === 0 && !showAddPropModal && (
+                <div className="p-12 text-center rounded-3xl bg-slate-50 border border-dashed border-slate-300 space-y-3">
+                  <Building2 size={36} className="mx-auto text-slate-400" />
+                  <h4 className="font-extrabold text-slate-900 text-sm">No Properties Listed Yet</h4>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    List your homestay, resort, or villa in Tamil Nadu with genuine photos, tariffs, and Google Maps pin.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPropModal(true)}
+                    className="px-5 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs font-mono inline-flex items-center gap-2 shadow-md transition-all cursor-pointer"
+                  >
+                    <Plus size={15} /> + List Your First Property
+                  </button>
+                </div>
+              )}
+            </div>
+            )}
+
+            {/* View B: Vehicles Section */}
+            {(subTab === 'vehicles') && (
+            <div className="bg-white rounded-3xl p-6 lg:p-8 border border-slate-200 shadow-sm space-y-6 animate-in fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                 <div>
-                  <h3 className="text-xl font-bold text-slate-900">🚖 My Vehicle Transport Fleet</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Cabs, Tempo Travellers, & rental vehicles managed by you.</p>
+                  <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <span>🚖</span> My Vehicle Transport Fleet ({myVehiclesList.length})
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Cabs, Innova Crystas, Tempo Travellers, & rental vehicles managed by you.</p>
                 </div>
                 <button 
                   onClick={() => setShowAddVehModal(!showAddVehModal)}
-                  className="glass-button text-xs px-4 py-2.5 flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs font-mono flex items-center gap-2 shadow-sm transition-all cursor-pointer"
                 >
-                  <Plus size={16} /> Add New Vehicle
+                  <Plus size={16} /> + Add New Vehicle / Cab
                 </button>
               </div>
 
               {/* Add Vehicle Modal Form */}
+              {/* Add Vehicle Modal Form */}
               {showAddVehModal && (
-                <form onSubmit={handleAddVehicleSubmit} className="p-6 rounded-2xl bg-slate-50 border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Vehicle Title</label>
-                    <input type="text" placeholder="E.g. Innova Crysta Cab" value={vehTitle} onChange={e => setVehTitle(e.target.value)} className="glass-input text-xs" required />
+                <form onSubmit={handleAddVehicleSubmit} className="p-6 lg:p-8 rounded-3xl bg-slate-50 border border-slate-200 space-y-6 animate-in fade-in">
+                  
+                  {/* Form Header */}
+                  <div className="flex justify-between items-center border-b border-slate-200 pb-4">
+                    <div>
+                      <h4 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                        <span>🚖</span> Register Vehicle / Cab to Transport Fleet
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Submit vehicle specifications, RC book documentation, photos, and driver details for Super Admin verification.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddVehModal(false)}
+                      className="p-2 rounded-full hover:bg-slate-200 text-slate-500 transition-colors"
+                    >
+                      <X size={18} />
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Registration Number</label>
-                    <input type="text" placeholder="TN-37-ET-2026" value={vehRegNo} onChange={e => setVehRegNo(e.target.value)} className="glass-input text-xs font-mono font-bold" required />
+
+                  {vehError && (
+                    <div className="p-3.5 rounded-2xl bg-rose-100 border border-rose-300 text-rose-800 text-xs font-bold flex items-center gap-2">
+                      <AlertCircle size={16} className="shrink-0" />
+                      <span>{vehError}</span>
+                    </div>
+                  )}
+
+                  {/* 📜 SECTION 1: MANDATORY COMPLIANCE & DRIVER ZERO-TOLERANCE CONDUCT NOTICE */}
+                  <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 space-y-3 shadow-xs">
+                    <div className="flex items-center gap-2 text-amber-900 font-black text-xs uppercase tracking-wide">
+                      <ShieldCheck size={18} className="text-amber-600" />
+                      <span>Mandatory Vehicle Compliance & Zero-Tolerance Driver Conduct Policy</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-amber-950 font-medium">
+                      <div className="p-3 rounded-xl bg-white/80 border border-amber-200">
+                        <strong className="block text-slate-900 mb-1">📄 Mandatory Documents:</strong>
+                        Vehicle must have a valid <strong>RC (Registration Certificate)</strong>, active <strong>Insurance</strong>, and the driver must possess a valid <strong>Commercial/RTO Driving License</strong>.
+                      </div>
+                      <div className="p-3 rounded-xl bg-rose-50/90 border border-rose-200 text-rose-900">
+                        <strong className="block text-rose-950 mb-1">🚫 Zero-Tolerance Substance Policy:</strong>
+                        The driver is strictly prohibited from <strong>smoking, consuming alcohol, drugs, pan masala, hans, cool lip</strong>, or any tobacco substances in front of passengers or inside the vehicle.
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Daily Rate (₹)</label>
-                    <input type="number" placeholder="3500" value={vehPrice} onChange={e => setVehPrice(e.target.value)} className="glass-input text-xs" required />
+
+                  {/* 📸 SECTION 2: COMPULSORY RC & VEHICLE PHOTO UPLOADS */}
+                  <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-sm">
+                    <h5 className="text-xs font-extrabold text-slate-900 uppercase tracking-wide border-b border-slate-100 pb-2">
+                      📸 Mandatory Documentation & Photo Gallery (Upload Genuine Photos)
+                    </h5>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* 1. RC Book Image */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-black text-slate-800 uppercase">
+                          1. RC Book / Smart Card <span className="text-red-500">*</span>
+                        </label>
+                        {vehRcImage ? (
+                          <div className="relative w-full h-32 rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-sm group">
+                            <img src={vehRcImage} alt="RC Document" className="w-full h-full object-cover" />
+                            <span className="absolute top-2 left-2 bg-emerald-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-md">✓ RC Uploaded</span>
+                            <button
+                              type="button"
+                              onClick={() => setVehRcImage('')}
+                              className="absolute top-2 right-2 p-1 bg-rose-600 text-white rounded-full hover:bg-rose-700 transition-colors"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="w-full h-32 rounded-2xl border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50 hover:bg-blue-50/40 flex flex-col items-center justify-center p-3 text-center cursor-pointer transition-all">
+                            <FileText size={22} className="text-slate-400 mb-1" />
+                            <span className="text-[11px] font-bold text-slate-700">Upload RC Book</span>
+                            <span className="text-[9px] text-slate-400">PDF / Image</span>
+                            <input type="file" accept="image/*" onChange={e => handleSingleFileUpload(e, setVehRcImage)} className="hidden" />
+                          </label>
+                        )}
+                      </div>
+
+                      {/* 2. Exterior Image */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-black text-slate-800 uppercase">
+                          2. Vehicle Exterior <span className="text-red-500">*</span>
+                        </label>
+                        {vehExteriorImage ? (
+                          <div className="relative w-full h-32 rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-sm group">
+                            <img src={vehExteriorImage} alt="Exterior" className="w-full h-full object-cover" />
+                            <span className="absolute top-2 left-2 bg-emerald-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-md">✓ Exterior</span>
+                            <button
+                              type="button"
+                              onClick={() => setVehExteriorImage('')}
+                              className="absolute top-2 right-2 p-1 bg-rose-600 text-white rounded-full hover:bg-rose-700 transition-colors"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="w-full h-32 rounded-2xl border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50 hover:bg-blue-50/40 flex flex-col items-center justify-center p-3 text-center cursor-pointer transition-all">
+                            <Car size={22} className="text-slate-400 mb-1" />
+                            <span className="text-[11px] font-bold text-slate-700">Upload Exterior Photo</span>
+                            <span className="text-[9px] text-slate-400">Front / Side View</span>
+                            <input type="file" accept="image/*" onChange={e => handleSingleFileUpload(e, setVehExteriorImage)} className="hidden" />
+                          </label>
+                        )}
+                      </div>
+
+                      {/* 3. Interior Image */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-black text-slate-800 uppercase">
+                          3. Vehicle Interior <span className="text-red-500">*</span>
+                        </label>
+                        {vehInteriorImage ? (
+                          <div className="relative w-full h-32 rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-sm group">
+                            <img src={vehInteriorImage} alt="Interior" className="w-full h-full object-cover" />
+                            <span className="absolute top-2 left-2 bg-emerald-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-md">✓ Interior</span>
+                            <button
+                              type="button"
+                              onClick={() => setVehInteriorImage('')}
+                              className="absolute top-2 right-2 p-1 bg-rose-600 text-white rounded-full hover:bg-rose-700 transition-colors"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="w-full h-32 rounded-2xl border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50 hover:bg-blue-50/40 flex flex-col items-center justify-center p-3 text-center cursor-pointer transition-all">
+                            <Camera size={22} className="text-slate-400 mb-1" />
+                            <span className="text-[11px] font-bold text-slate-700">Upload Interior Photo</span>
+                            <span className="text-[9px] text-slate-400">Seats & Dashboard</span>
+                            <input type="file" accept="image/*" onChange={e => handleSingleFileUpload(e, setVehInteriorImage)} className="hidden" />
+                          </label>
+                        )}
+                      </div>
+
+                      {/* 4. Number Plate Image */}
+                      <div className="space-y-1.5">
+                        <label className="block text-[11px] font-black text-slate-800 uppercase">
+                          4. Number Plate Photo
+                        </label>
+                        {vehNumberPlateImage ? (
+                          <div className="relative w-full h-32 rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-sm group">
+                            <img src={vehNumberPlateImage} alt="Number Plate" className="w-full h-full object-cover" />
+                            <span className="absolute top-2 left-2 bg-emerald-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-md">✓ Number Plate</span>
+                            <button
+                              type="button"
+                              onClick={() => setVehNumberPlateImage('')}
+                              className="absolute top-2 right-2 p-1 bg-rose-600 text-white rounded-full hover:bg-rose-700 transition-colors"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="w-full h-32 rounded-2xl border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50 hover:bg-blue-50/40 flex flex-col items-center justify-center p-3 text-center cursor-pointer transition-all">
+                            <ShieldCheck size={22} className="text-slate-400 mb-1" />
+                            <span className="text-[11px] font-bold text-slate-700">Upload Plate Image</span>
+                            <span className="text-[9px] text-slate-400">Clear Yellow/White Plate</span>
+                            <input type="file" accept="image/*" onChange={e => handleSingleFileUpload(e, setVehNumberPlateImage)} className="hidden" />
+                          </label>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="md:col-span-3 flex justify-end gap-2">
-                    <button type="submit" className="glass-button text-xs py-2 px-6">Submit for Approval</button>
-                    <button type="button" onClick={() => setShowAddVehModal(false)} className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+
+                  {/* 🚗 SECTION 3: VEHICLE SPECIFICATIONS & TARIFF */}
+                  <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-sm">
+                    <h5 className="text-xs font-extrabold text-slate-900 uppercase tracking-wide border-b border-slate-100 pb-2">
+                      🚘 Vehicle Specifications & Rates
+                    </h5>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Vehicle Title / Model <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          placeholder="E.g. Toyota Innova Crysta Luxury Cab"
+                          value={vehTitle}
+                          onChange={e => setVehTitle(e.target.value)}
+                          className="glass-input text-xs font-bold"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Registration Number <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          placeholder="TN-43-AB-9876"
+                          value={vehRegNo}
+                          onChange={e => setVehRegNo(e.target.value.toUpperCase())}
+                          className="glass-input text-xs font-mono font-bold tracking-wider"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Vehicle Category</label>
+                        <select
+                          value={vehType}
+                          onChange={e => setVehType(e.target.value)}
+                          className="glass-input text-xs font-bold"
+                        >
+                          <option value="Innova">🚖 Innova Crysta (7 Seater)</option>
+                          <option value="Sedan">🚗 Sedan (Dzire / Etios 4 Seater)</option>
+                          <option value="Cab SUV">🚙 Cab SUV (XUV700 / Scorpio 6 Seater)</option>
+                          <option value="Tempo Traveller">🚐 Tempo Traveller (12 Seater)</option>
+                          <option value="Luxury Bus">🚌 Luxury Coach / Bus (21 Seater)</option>
+                          <option value="Rental Bike">🏍️ Rental Bike / Scooter</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Daily Full-Day Tariff (₹) <span className="text-red-500">*</span></label>
+                        <input
+                          type="number"
+                          placeholder="3500"
+                          value={vehPrice}
+                          onChange={e => setVehPrice(e.target.value)}
+                          className="glass-input text-xs font-bold"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Per-Kilometer Tariff (₹/km)</label>
+                        <input
+                          type="number"
+                          placeholder="16"
+                          value={vehPerKmRate}
+                          onChange={e => setVehPerKmRate(e.target.value)}
+                          className="glass-input text-xs font-bold"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Fuel Type</label>
+                        <select
+                          value={vehFuelType}
+                          onChange={e => setVehFuelType(e.target.value)}
+                          className="glass-input text-xs font-bold"
+                        >
+                          <option value="Diesel">Diesel</option>
+                          <option value="Petrol">Petrol</option>
+                          <option value="EV">Electric Vehicle (EV)</option>
+                          <option value="CNG">CNG</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Air Conditioning</label>
+                        <select
+                          value={vehAcType}
+                          onChange={e => setVehAcType(e.target.value)}
+                          className="glass-input text-xs font-bold"
+                        >
+                          <option value="AC">AC (Air Conditioned)</option>
+                          <option value="Non-AC">Non-AC</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Seating Capacity (Guests)</label>
+                        <input
+                          type="number"
+                          value={vehSeatingCapacity}
+                          onChange={e => setVehSeatingCapacity(e.target.value)}
+                          className="glass-input text-xs font-bold"
+                          min={1}
+                          max={50}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Driver Name & Contact</label>
+                        <input
+                          type="text"
+                          placeholder="Ramesh V. (+91 78717 79134)"
+                          value={vehDriverName}
+                          onChange={e => setVehDriverName(e.target.value)}
+                          className="glass-input text-xs font-bold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 📍 SECTION 4: VEHICLE BASE LOCATION & INTERACTIVE MAP PIN */}
+                  <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-sm">
+                    <h5 className="text-xs font-extrabold text-slate-900 uppercase tracking-wide border-b border-slate-100 pb-2">
+                      📍 Vehicle Ownership & Operating Location (Drag pin to operating garage / stand)
+                    </h5>
+
+                    <InteractiveLocationMapPicker
+                      initialPosition={vehCoordinates}
+                      onLocationChange={(coords, address) => {
+                        setVehCoordinates(coords);
+                        if (address) setVehLocation(address);
+                      }}
+                      onDistrictChange={dist => setVehDistrict(dist)}
+                    />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Base Stand / Garage Address</label>
+                        <input
+                          type="text"
+                          value={vehLocation}
+                          onChange={e => setVehLocation(e.target.value)}
+                          className="glass-input text-xs font-bold"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Primary Operating District</label>
+                        <input
+                          type="text"
+                          value={vehDistrict}
+                          onChange={e => setVehDistrict(e.target.value)}
+                          className="glass-input text-xs font-bold"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ✍️ SECTION 5: MANDATORY SIGNED ZERO-TOLERANCE DECLARATION */}
+                  <div className="p-4 rounded-2xl bg-slate-100 border border-slate-300">
+                    <label className="flex items-start gap-3 text-xs text-slate-900 font-bold cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={vehConductDeclared}
+                        onChange={e => setVehConductDeclared(e.target.checked)}
+                        className="w-5 h-5 mt-0.5 rounded accent-blue-600 cursor-pointer shrink-0"
+                        required
+                      />
+                      <span className="leading-relaxed">
+                        I hereby declare and confirm that this vehicle possesses a <strong>valid RC (Registration Certificate)</strong>, active <strong>Insurance</strong>, and the assigned driver holds a <strong>valid commercial driving license</strong>. Furthermore, I agree that the driver will strictly comply with the platform's <strong>Zero-Tolerance Policy</strong> (No smoking, alcohol, narcotics/drugs, pan masala, hans, or cool lip in front of passengers or inside the vehicle). <span className="text-red-600">*</span>
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Submit Actions */}
+                  <div className="flex justify-between items-center pt-3 border-t border-slate-200">
+                    <span className="text-xs text-slate-500 font-medium">
+                      {!vehRcImage || !vehExteriorImage || !vehInteriorImage ? '⚠️ Please upload RC, Exterior, and Interior photos.' : !vehConductDeclared ? '⚠️ Please tick the Zero-Tolerance Declaration.' : '✅ All documents attached. Ready to submit.'}
+                    </span>
+                    <div className="flex gap-2">
+                      <button type="submit" className="glass-button text-xs py-3 px-8 shadow-lg">
+                        Submit Vehicle for Super Admin Approval
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddVehModal(false)}
+                        className="px-5 py-3 rounded-2xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 </form>
               )}
 
               {/* Vehicles Directory */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {myVehiclesList.map(v => (
-                  <div key={v.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex justify-between items-center text-xs">
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-sm">{v.title}</h4>
-                      <p className="text-blue-600 font-mono font-bold">{v.regNo} • <span className="font-bold text-slate-900">₹{v.price}/day</span></p>
+                  <div key={v.id || v._id} className="p-5 rounded-3xl bg-slate-50 border border-slate-200 space-y-4 hover:shadow-md transition-all">
+                    {/* Vehicle Photos Preview */}
+                    <div className="relative w-full h-44 rounded-2xl overflow-hidden border border-slate-200 shadow-sm group">
+                      <img
+                        src={v.exteriorImage || (v.images && v.images[0]) || 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80'}
+                        alt={v.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <span className="absolute top-2.5 left-2.5 px-3 py-1 rounded-full bg-black/75 backdrop-blur-md text-white text-[10px] font-mono font-bold">
+                        🚖 {v.type || 'Cab'}
+                      </span>
+                      <span className={`absolute top-2.5 right-2.5 px-3 py-1 rounded-full text-[10px] font-extrabold font-mono uppercase ${
+                        v.status === 'Approved' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
+                      }`}>
+                        {v.status === 'Approved' ? '🟢 Approved' : '⏳ Pending Approval'}
+                      </span>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-extrabold font-mono uppercase ${
-                      v.status === 'Approved' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
-                    }`}>
-                      {v.status === 'Approved' ? '🟢 Approved' : '⏳ Pending'}
-                    </span>
+
+                    <div>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-50 text-amber-900 border border-amber-200">
+                            {v.registrationNumber || v.regNo || v.numberPlate}
+                          </span>
+                          <h4 className="font-extrabold text-slate-900 text-base mt-1">{v.title}</h4>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-black text-blue-600 text-base">
+                            ₹{Number(v.price || v.pricePerDay || 3500).toLocaleString()}
+                            <span className="text-xs font-normal text-slate-500">/day</span>
+                          </span>
+                          <p className="text-[10px] font-mono text-slate-500">₹{v.perKmRate || 16}/km</p>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-600 mt-1">📍 {v.location || v.district || 'Tamil Nadu'}</p>
+
+                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-200 text-[11px] font-mono text-slate-500">
+                        <span>👤 Driver: {v.driverName || 'Assigned Driver'}</span>
+                        <span>•</span>
+                        <span>👥 {v.seatingCapacity || 7} Seats</span>
+                      </div>
+
+                      {/* Google Maps Tracking & View Details Button */}
+                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInspectedVehicleModal(v);
+                            setVehInspectPhotoTab('exterior');
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                        >
+                          <Eye size={13} /> View Details
+                        </button>
+                        <a
+                          href={v.googleMapsUrl || `https://www.google.com/maps?q=${encodeURIComponent((v.location || v.district || 'Tamil Nadu') + ', Tamil Nadu')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1 rounded-xl transition-all shadow-sm"
+                        >
+                          🗺️ Track Base ↗
+                        </a>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
+
+              {myVehiclesList.length === 0 && !showAddVehModal && (
+                <div className="p-12 text-center rounded-3xl bg-slate-50 border border-dashed border-slate-300 space-y-3">
+                  <Car size={36} className="mx-auto text-slate-400" />
+                  <h4 className="font-extrabold text-slate-900 text-sm">No Vehicles Registered in Your Fleet Yet</h4>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Register your Innova Crysta, Sedan, Tempo Traveller, or Bus. Provide RC documentation, exterior/interior photos, and driver conduct declaration for Super Admin approval.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddVehModal(true)}
+                    className="px-5 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs font-mono inline-flex items-center gap-2 shadow-md transition-all cursor-pointer"
+                  >
+                    <Plus size={15} /> + Add Your First Vehicle / Cab
+                  </button>
+                </div>
+              )}
             </div>
+            )}
           </div>
         )}
 
@@ -1396,6 +2070,7 @@ export default function VendorDashboard() {
               ) : (
                 vendorBookings.map(bk => {
                   const bId = bk.bookingId || bk.id || bk._id;
+                  const isCab = bk.type === 'cab' || bk.itemType === 'vehicle' || bk.bookingType === 'cab';
                   const isConfirmed = bk.status === 'Confirmed';
                   const isCancelled = bk.status === 'Cancelled';
                   const isPending = !isConfirmed && !isCancelled;
@@ -1406,9 +2081,18 @@ export default function VendorDashboard() {
                       <div className="space-y-1.5 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-mono text-blue-700 font-bold px-2.5 py-0.5 bg-blue-100/70 rounded-md border border-blue-200">{bId}</span>
+                          {isCab ? (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold font-mono text-[10px] border border-amber-300">
+                              🚖 Cab Booking
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 font-bold font-mono text-[10px] border border-blue-300">
+                              🏡 Stay Booking
+                            </span>
+                          )}
                           {isConfirmed ? (
                             <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold font-mono text-[11px] flex items-center gap-1">
-                              <CheckCircle2 size={12} className="text-emerald-600" /> Confirmed & Voucher Sent
+                              <CheckCircle2 size={12} className="text-emerald-600" /> Confirmed & Voucher Active
                             </span>
                           ) : isCancelled ? (
                             <span className="px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold font-mono text-[11px] flex items-center gap-1">
@@ -1416,7 +2100,7 @@ export default function VendorDashboard() {
                             </span>
                           ) : (
                             <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 font-bold font-mono text-[11px] flex items-center gap-1 border border-amber-300">
-                              <Clock size={12} className="text-amber-600 animate-pulse" /> Awaiting Property Owner Approval
+                              <Clock size={12} className="text-amber-600 animate-pulse" /> Awaiting Host Verification
                             </span>
                           )}
                           <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 font-bold">
@@ -1424,25 +2108,56 @@ export default function VendorDashboard() {
                           </span>
                         </div>
 
-                        <h4 className="font-bold text-slate-900 text-sm sm:text-base font-editorial mt-1">
-                          {bk.propertyTitle || bk.itemTitle || 'Verified Stay'}
-                        </h4>
-
-                        <div className="grid sm:grid-cols-2 gap-1 text-slate-600 font-mono text-[11px]">
-                          <p>
-                            👤 Guest: <strong className="text-slate-900">{bk.customerName || bk.userName || bk.guestName || 'Tourist'}</strong>
-                            {bk.customerEmail || bk.userEmail ? ` (${bk.customerEmail || bk.userEmail})` : ''}
-                          </p>
-                          <p>
-                            📞 Phone: <strong className="text-slate-900">{bk.customerPhone || bk.userPhone || '+91 78717 79134'}</strong>
-                          </p>
-                          <p>
-                            📅 Dates: <strong className="text-slate-900">{bk.checkIn || bk.checkInDate || '2026-08-21'} → {bk.checkOut || bk.checkOutDate || '2026-08-22'}</strong> ({bk.nights || 1} Night(s))
-                          </p>
-                          <p>
-                            👥 Party: <strong className="text-slate-900">{bk.guests || 2} Guests</strong> {bk.guestType ? `(${bk.guestType})` : ''}
-                          </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <h4 className="font-bold text-slate-900 text-sm sm:text-base font-editorial">
+                            {bk.propertyTitle || bk.itemTitle || (isCab ? 'Cab Transport' : 'Stay')}
+                          </h4>
+                          {isCab && bk.vehicleRegNo && (
+                            <span className="font-mono text-xs font-bold text-slate-800 px-2 py-0.5 bg-amber-100 border border-amber-300 rounded-lg">
+                              {bk.vehicleRegNo}
+                            </span>
+                          )}
                         </div>
+
+                        {isCab ? (
+                          <div className="grid sm:grid-cols-2 gap-1 text-slate-600 font-mono text-[11px]">
+                            <p>
+                              👤 Traveler: <strong className="text-slate-900">{bk.customerName || bk.userName || 'Tourist'}</strong>
+                              {bk.customerEmail || bk.userEmail ? ` (${bk.customerEmail || bk.userEmail})` : ''}
+                            </p>
+                            <p>
+                              📞 Phone: <strong className="text-slate-900">{bk.customerPhone || bk.userPhone || '+91 78717 79134'}</strong>
+                            </p>
+                            <p>
+                              📍 Route: <strong className="text-slate-900">{bk.pickupLocation || 'Pickup Stand'} ➔ {bk.dropLocation || 'Sightseeing'}</strong>
+                            </p>
+                            <p>
+                              🗓️ Schedule: <strong className="text-slate-900">{bk.pickupDate || bk.checkInDate} at {bk.pickupTime || '09:00'}</strong> ({bk.days || 1} Day)
+                            </p>
+                            <p>
+                              👨‍✈️ Driver: <strong className="text-slate-900">{bk.driverName || 'Assigned Driver'}</strong> ({bk.driverPhone || ''})
+                            </p>
+                            <p>
+                              👥 Passengers: <strong className="text-slate-900">{bk.passengerCount || bk.guests || 4}</strong> ({bk.tripType || 'Full Day Tour'})
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="grid sm:grid-cols-2 gap-1 text-slate-600 font-mono text-[11px]">
+                            <p>
+                              👤 Guest: <strong className="text-slate-900">{bk.customerName || bk.userName || bk.guestName || 'Tourist'}</strong>
+                              {bk.customerEmail || bk.userEmail ? ` (${bk.customerEmail || bk.userEmail})` : ''}
+                            </p>
+                            <p>
+                              📞 Phone: <strong className="text-slate-900">{bk.customerPhone || bk.userPhone || '+91 78717 79134'}</strong>
+                            </p>
+                            <p>
+                              📅 Dates: <strong className="text-slate-900">{bk.checkIn || bk.checkInDate || '2026-08-21'} → {bk.checkOut || bk.checkOutDate || '2026-08-22'}</strong> ({bk.nights || 1} Night(s))
+                            </p>
+                            <p>
+                              👥 Party: <strong className="text-slate-900">{bk.guests || 2} Guests</strong> {bk.guestType ? `(${bk.guestType})` : ''}
+                            </p>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end justify-between gap-3 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-200 shrink-0">
@@ -1660,6 +2375,206 @@ export default function VendorDashboard() {
         )}
 
       </main>
+
+      {/* 🔍 HOST / VENDOR VEHICLE INSPECTION & DETAILS MODAL */}
+      {inspectedVehicleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden my-6 max-h-[90vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="p-5 bg-slate-950 text-white flex justify-between items-start shrink-0">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-mono text-[10px] font-black uppercase">
+                    {inspectedVehicleModal.type || 'Cab'}
+                  </span>
+                  <span className={`px-2.5 py-0.5 rounded-full font-mono text-[10px] font-bold ${
+                    inspectedVehicleModal.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                  }`}>
+                    {inspectedVehicleModal.status === 'Approved' ? '🟢 Live & Verified' : '⏳ Pending Super Admin Review'}
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold font-editorial text-white mt-1">{inspectedVehicleModal.title}</h3>
+                <p className="text-xs text-slate-400 font-mono">
+                  Registration: <strong className="text-amber-300">{inspectedVehicleModal.registrationNumber || inspectedVehicleModal.regNo}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectedVehicleModal(null)}
+                className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 text-xs font-mono">
+              
+              {/* Photo & Document Tabs */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase text-slate-600">
+                    Uploaded Photos & Legal Documents:
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setVehInspectPhotoTab('exterior')}
+                      className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                        vehInspectPhotoTab === 'exterior' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      🚗 Exterior
+                    </button>
+                    {inspectedVehicleModal.interiorImage && (
+                      <button
+                        type="button"
+                        onClick={() => setVehInspectPhotoTab('interior')}
+                        className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                          vehInspectPhotoTab === 'interior' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        🪑 Interior
+                      </button>
+                    )}
+                    {inspectedVehicleModal.numberPlateImage && (
+                      <button
+                        type="button"
+                        onClick={() => setVehInspectPhotoTab('plate')}
+                        className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                          vehInspectPhotoTab === 'plate' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        🏷️ Plate
+                      </button>
+                    )}
+                    {inspectedVehicleModal.rcBookImage && (
+                      <button
+                        type="button"
+                        onClick={() => setVehInspectPhotoTab('rc')}
+                        className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                          vehInspectPhotoTab === 'rc' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                        }`}
+                      >
+                        📄 RC Document
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="relative h-60 sm:h-72 rounded-2xl overflow-hidden bg-slate-900 border border-slate-200 flex items-center justify-center">
+                  {vehInspectPhotoTab === 'exterior' && (
+                    <img
+                      src={inspectedVehicleModal.exteriorImage || (inspectedVehicleModal.images && inspectedVehicleModal.images[0]) || 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2'}
+                      alt="Exterior View"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  {vehInspectPhotoTab === 'interior' && (
+                    <img
+                      src={inspectedVehicleModal.interiorImage || 'https://images.unsplash.com/photo-1563720223185-11003d516935'}
+                      alt="Interior View"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  {vehInspectPhotoTab === 'plate' && (
+                    <img
+                      src={inspectedVehicleModal.numberPlateImage || inspectedVehicleModal.exteriorImage}
+                      alt="Number Plate"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  {vehInspectPhotoTab === 'rc' && (
+                    <img
+                      src={inspectedVehicleModal.rcBookImage || inspectedVehicleModal.exteriorImage}
+                      alt="RC Smart Card"
+                      className="w-full h-full object-contain p-2"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Specifications & Driver Details Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <span className="text-[10px] text-blue-700 font-bold uppercase block">📋 Vehicle Specs:</span>
+                  <div className="text-slate-800 space-y-1">
+                    <p><strong>Category:</strong> {inspectedVehicleModal.type || 'Cab'}</p>
+                    <p><strong>Seating Capacity:</strong> {inspectedVehicleModal.seatingCapacity || 7} Passengers</p>
+                    <p><strong>Fuel & AC:</strong> {inspectedVehicleModal.fuelType || 'Diesel'} · {inspectedVehicleModal.acType || 'AC'}</p>
+                    <p><strong>Base Location:</strong> {inspectedVehicleModal.location || inspectedVehicleModal.district || 'Tamil Nadu'}</p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                  <span className="text-[10px] text-emerald-700 font-bold uppercase block">🛡️ Driver & Safety Info:</span>
+                  <div className="text-slate-800 space-y-1">
+                    <p><strong>Driver Name:</strong> {inspectedVehicleModal.driverName || 'Assigned Driver'}</p>
+                    <p><strong>Driver Phone:</strong> {inspectedVehicleModal.driverPhone || '+91 78717 79134'}</p>
+                    <p><strong>License Number:</strong> {inspectedVehicleModal.driverLicense || 'TN43-COMMERCIAL-DL'}</p>
+                    <p className="text-emerald-700 font-bold">✓ Zero-Tolerance Conduct Declared</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pricing & Customer Tariff Calculation */}
+              {(() => {
+                const p = calculatePricing(inspectedVehicleModal.price || inspectedVehicleModal.pricePerDay || 3500);
+                return (
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase block">💰 Pricing & Customer Billing Structure:</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                      <div className="p-2.5 rounded-xl bg-white border border-slate-200 shadow-xs">
+                        <span className="text-[10px] text-slate-500 block">Your Base Rate</span>
+                        <strong className="text-slate-900 text-sm">₹{p.base.toLocaleString()}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white border border-slate-200 shadow-xs">
+                        <span className="text-[10px] text-slate-500 block">GST (18%)</span>
+                        <strong className="text-blue-700 text-sm">₹{p.gst.toLocaleString()}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white border border-slate-200 shadow-xs">
+                        <span className="text-[10px] text-slate-500 block">Platform Fee (5%)</span>
+                        <strong className="text-amber-700 text-sm">₹{p.platformFee.toLocaleString()}</strong>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-300">
+                        <span className="text-[10px] text-emerald-800 font-bold block">Customer Price</span>
+                        <strong className="text-emerald-700 text-sm">₹{p.total.toLocaleString()}</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* GPS Map Pin */}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="text-slate-700">Base Stand Location Pin:</span>
+                <a
+                  href={inspectedVehicleModal.googleMapsUrl || `https://www.google.com/maps?q=${encodeURIComponent((inspectedVehicleModal.location || inspectedVehicleModal.title) + ', Tamil Nadu')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 font-bold transition-all shadow-xs"
+                >
+                  🗺️ Open Base on Google Maps ↗
+                </a>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setInspectedVehicleModal(null)}
+                className="px-5 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs cursor-pointer hover:bg-black transition-colors"
+              >
+                Close Inspection
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

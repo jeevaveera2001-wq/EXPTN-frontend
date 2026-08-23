@@ -26,7 +26,7 @@ export const downloadBookingReceiptPDF = (bk) => {
     const nights = bk.nights || 1;
     const guests = bk.guests || 2;
     const guestType = bk.guestType || 'Stay';
-    const hostName = bk.ownerName || 'Verified Host';
+    const hostName = bk.ownerName || bk.providerName || (isCab ? 'Transport Fleet Host' : 'Property Host');
     const paymentId = bk.paymentId || 'pay_rzp_captured';
     const issueDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 

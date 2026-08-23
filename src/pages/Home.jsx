@@ -40,7 +40,20 @@ export default function Home({ onOpenAuth }) {
 
   const handleSearchNavigate = (e) => {
     e.preventDefault();
-    navigate('/explore');
+    const params = new URLSearchParams();
+    if (district && district !== 'All Tamil Nadu') {
+      const cleanDest = district.split('(')[0].trim();
+      params.set('district', cleanDest);
+    }
+    if (stayType && stayType !== 'All') {
+      params.set('type', stayType);
+    }
+    navigate(`/explore?${params.toString()}`);
+  };
+
+  const handleDestinationClick = (place) => {
+    const cleanRegion = place.region || place.name;
+    navigate(`/explore?district=${encodeURIComponent(cleanRegion)}&search=${encodeURIComponent(place.name)}`);
   };
 
   const filteredPlaces = TOURISM_PLACES.filter(p => {
@@ -49,10 +62,10 @@ export default function Home({ onOpenAuth }) {
   });
 
   return (
-    <div>
+    <div className="w-full overflow-x-hidden">
       
       {/* 🌲 Kobu Editorial Hero Banner with Glassmorphism */}
-      <section className="w-full py-8 sm:py-20 px-3 sm:px-4 text-center">
+      <section className="w-full py-8 sm:py-20 px-3 sm:px-6 text-center">
         <div className="max-w-4xl mx-auto">
 
           {/* Fira Mono Printed Tagline Badge */}
@@ -69,7 +82,7 @@ export default function Home({ onOpenAuth }) {
             Curated mountain view cottages, serene lakefront villas, and heritage homestays across the Western Ghats and Tamil circuits.
           </p>
 
-          {/* Search Console leading directly to Explore */}
+          {/* Search Console leading directly to Explore with parameters */}
           <form onSubmit={handleSearchNavigate} className="glass-panel p-3 sm:p-6 max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-4 text-left border border-[#242429]/20 shadow-2xl rounded-2xl sm:rounded-3xl">
             <div>
               <label className="block font-fira-mono text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.18em] text-[#919191] mb-1">Destination Circuit</label>
@@ -88,8 +101,8 @@ export default function Home({ onOpenAuth }) {
             </div>
 
             <div className="flex items-end">
-              <button type="submit" className="glass-button w-full h-[40px] sm:h-[45px] text-xs font-bold font-editorial flex items-center justify-center gap-2">
-                <Search size={14} /> Search Stays
+              <button type="submit" className="glass-button w-full h-[40px] sm:h-[45px] text-xs font-bold font-editorial flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95 transition-all">
+                <Search size={14} /> Search Stays & Cabs
               </button>
             </div>
           </form>
@@ -98,7 +111,7 @@ export default function Home({ onOpenAuth }) {
       </section>
 
       {/* Main Content Area: Overview Catalog */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6">
 
         {/* 🛕 Destinations Catalog Section */}
         <section className="pb-12 sm:pb-16 pt-2 sm:pt-4">
@@ -114,7 +127,7 @@ export default function Home({ onOpenAuth }) {
               <button
                 key={cat.id}
                 onClick={() => setSelectedPlaceCategory(cat.id)}
-                className={`glass-button font-fira-mono text-[10px] sm:text-[11px] px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-1.5 shrink-0 whitespace-nowrap rounded-full transition-all ${
+                className={`glass-button font-fira-mono text-[10px] sm:text-[11px] px-3 sm:px-4 py-1.5 sm:py-2 flex items-center gap-1.5 shrink-0 whitespace-nowrap rounded-full transition-all cursor-pointer ${
                   selectedPlaceCategory === cat.id ? 'ring-1 ring-[#242429] bg-[#242429] text-white shadow-sm' : 'glass-button-secondary'
                 }`}
               >
@@ -124,37 +137,58 @@ export default function Home({ onOpenAuth }) {
           </div>
 
           {/* Destination Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {filteredPlaces.map(place => (
-              <div key={place.id} className="glass-panel glass-panel-hover overflow-hidden rounded-2xl bg-[#ffffff] border border-[#242429]/20 shadow-md">
-                <div className="h-44 overflow-hidden relative">
-                  <img 
-                    src={place.image} 
-                    alt={place.name} 
-                    onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE; }}
-                    className="w-full h-full object-cover" 
-                  />
-                  <span className="museum-badge absolute top-3 right-3 shadow text-[10px]">
-                    {place.subCategory || 'DESTINATION'}
-                  </span>
-                </div>
-                <div className="p-5">
-                  <h3 className="text-lg font-editorial font-bold text-[#000000] mb-1">{place.name}</h3>
-                  <div className="font-fira-mono text-[10px] mb-2 flex items-center gap-1 uppercase tracking-wider">
-                    <button
-                      type="button"
-                      onClick={(e) => openGoogleMaps({ title: place.name, location: place.region, district: place.region }, e)}
-                      className="inline-flex items-center gap-1 text-[#666666] hover:text-blue-600 hover:underline cursor-pointer group/loc transition-colors"
-                      title="Click to open destination in Google Maps ↗"
-                    >
-                      <MapPin size={12} className="text-[#242429] group-hover/loc:text-blue-600 shrink-0" />
-                      <span>{place.region}</span>
-                      <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1 py-0.2 rounded">
-                        Maps ↗
-                      </span>
-                    </button>
+              <div 
+                key={place.id} 
+                onClick={() => handleDestinationClick(place)}
+                className="glass-panel glass-panel-hover overflow-hidden rounded-2xl sm:rounded-3xl bg-[#ffffff] border border-[#242429]/20 shadow-md flex flex-col justify-between cursor-pointer group transition-all"
+              >
+                <div>
+                  <div className="h-44 sm:h-48 overflow-hidden relative">
+                    <img 
+                      src={place.image} 
+                      alt={place.name} 
+                      onError={(e) => { e.target.onerror = null; e.target.src = FALLBACK_IMAGE; }}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                    />
+                    <span className="museum-badge absolute top-3 right-3 shadow text-[9px] sm:text-[10px]">
+                      {place.subCategory || 'DESTINATION'}
+                    </span>
+                    <span className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-xs text-white text-[10px] font-mono font-bold">
+                      📍 {place.region}
+                    </span>
                   </div>
-                  <p className="text-xs text-[#3e3e3e] leading-relaxed line-clamp-3 font-editorial">{place.desc}</p>
+                  
+                  <div className="p-4 sm:p-5 space-y-2">
+                    <h3 className="text-base sm:text-lg font-editorial font-bold text-[#000000] group-hover:text-blue-700 transition-colors">
+                      {place.name}
+                    </h3>
+                    
+                    <p className="text-xs text-[#3e3e3e] leading-relaxed line-clamp-2 font-editorial">
+                      {place.desc}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Card Action Controls */}
+                <div className="p-4 pt-2 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold font-editorial text-blue-700 flex items-center gap-1 group-hover:underline">
+                    <span>Explore Stays</span>
+                    <ChevronRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openGoogleMaps({ title: place.name, location: place.region, district: place.region }, e);
+                    }}
+                    className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded-lg transition-all"
+                  >
+                    <MapPin size={11} className="text-emerald-700" />
+                    <span>Maps ↗</span>
+                  </button>
                 </div>
               </div>
             ))}
@@ -162,7 +196,7 @@ export default function Home({ onOpenAuth }) {
         </section>
 
         {/* 🌟 Call to Action to Explore Verified Properties */}
-        <section className="my-12 p-8 sm:p-12 rounded-3xl bg-gradient-to-br from-[#242429] to-[#0f1115] text-white text-center space-y-4 shadow-2xl relative overflow-hidden">
+        <section className="my-8 sm:my-12 p-6 sm:p-12 rounded-3xl bg-gradient-to-br from-[#242429] to-[#0f1115] text-white text-center space-y-4 shadow-2xl relative overflow-hidden">
           <div className="relative z-10 max-w-2xl mx-auto space-y-3">
             <span className="px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs font-mono font-bold inline-flex items-center gap-1.5">
               <Sparkles size={13} /> VERIFIED LUXURY PORTAL

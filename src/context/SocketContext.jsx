@@ -13,10 +13,11 @@ export function SocketProvider({ children }) {
     let s = null;
     try {
       s = io(SOCKET_URL, {
-        transports: ['websocket', 'polling'],
-        reconnectionAttempts: 10,
-        reconnectionDelay: 1000,
-        timeout: 10000
+        transports: ['websocket'],
+        reconnectionAttempts: 5,
+        reconnectionDelay: 2000,
+        timeout: 5000,
+        autoConnect: true
       });
 
       s.on('connect', () => {

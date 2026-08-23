@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { X, AlertCircle, ArrowLeft, ShieldCheck, Check, Eye, EyeOff, User, Building, Lock, Mail, Phone } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { BACKEND_API } from '../../config/api';
@@ -13,6 +13,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
   const [loginIdentifier, setLoginIdentifier] = useState(''); // Email address or username
   const [loginPassword, setLoginPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
+  const [acceptLoginTerms, setAcceptLoginTerms] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
   // --- REGISTER FIELDS ---
@@ -102,6 +103,11 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
     }
     if (!loginPassword) {
       setErrorMsg('Please enter your password.');
+      return;
+    }
+
+    if (!acceptLoginTerms) {
+      setErrorMsg('Please read and accept the Terms & Conditions, Privacy Policy, and Refund Policy to login.');
       return;
     }
 
@@ -383,6 +389,25 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
                   </button>
                 </div>
 
+                {/* 📜 MANDATORY: Terms & Conditions Acceptance Before Login */}
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1 my-1">
+                  <label className="flex items-start gap-2.5 text-xs text-white/90 font-medium cursor-pointer select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={acceptLoginTerms}
+                      onChange={e => setAcceptLoginTerms(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 rounded accent-[#009bb0] cursor-pointer shrink-0"
+                      required
+                    />
+                    <span className="leading-snug text-[11px] text-white/80">
+                      I have read and agree to the{' '}
+                      <Link to="/terms" onClick={onClose} className="text-cyan-300 font-bold underline hover:text-white">Terms & Conditions</Link>,{' '}
+                      <Link to="/privacy-policy" onClick={onClose} className="text-cyan-300 font-bold underline hover:text-white">Privacy Policy</Link>, and{' '}
+                      <Link to="/cancellation-refund" onClick={onClose} className="text-cyan-300 font-bold underline hover:text-white">Refund Policy</Link>. <span className="text-red-400 font-bold">*</span>
+                    </span>
+                  </label>
+                </div>
+
                 {/* LOGIN BUTTON */}
                 <button 
                   type="submit" 
@@ -573,8 +598,8 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
                 </div>
 
                 {/* 7. REQUIRED: Accept Terms and Privacy Policy */}
-                <div className="pt-1">
-                  <label className="flex items-start gap-2.5 text-xs text-white/80 cursor-pointer select-none">
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-1 my-1">
+                  <label className="flex items-start gap-2.5 text-xs text-white/90 font-medium cursor-pointer select-none">
                     <input 
                       type="checkbox" 
                       checked={acceptTerms}
@@ -582,8 +607,11 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
                       required
                       className="w-4 h-4 mt-0.5 rounded accent-[#009bb0] cursor-pointer shrink-0"
                     />
-                    <span>
-                      I accept the <a href="#terms" onClick={e => e.preventDefault()} className="text-cyan-300 underline font-bold">Terms of Service</a> and <a href="#privacy" onClick={e => e.preventDefault()} className="text-cyan-300 underline font-bold">Privacy Policy</a> <span className="text-red-400">*</span>
+                    <span className="leading-snug text-[11px] text-white/80">
+                      I have read and agree to the{' '}
+                      <Link to="/terms" onClick={onClose} className="text-cyan-300 font-bold underline hover:text-white">Terms & Conditions</Link>,{' '}
+                      <Link to="/privacy-policy" onClick={onClose} className="text-cyan-300 font-bold underline hover:text-white">Privacy Policy</Link>, and{' '}
+                      <Link to="/cancellation-refund" onClick={onClose} className="text-cyan-300 font-bold underline hover:text-white">Refund Policy</Link>. <span className="text-red-400 font-bold">*</span>
                     </span>
                   </label>
                 </div>

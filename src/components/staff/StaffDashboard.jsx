@@ -339,13 +339,6 @@ export default function StaffDashboard({ overrideRole }) {
           </nav>
         </div>
 
-        {/* Sidebar Footer Controls */}
-        <div className="hidden md:block pt-6 border-t border-[#0e2e5c]">
-          <div className="flex items-center justify-start gap-2 text-[11px] font-mono text-emerald-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>MongoDB Workstation Live</span>
-          </div>
-        </div>
       </aside>
 
       {/* 💻 MAIN STAFF WORKSTATION CONTENT AREA */}
@@ -354,20 +347,13 @@ export default function StaffDashboard({ overrideRole }) {
         {/* Top Header Status Bar */}
         <div className="flex justify-between items-center mb-4 sm:mb-8 pb-3 sm:pb-4 border-b border-slate-200">
           <div>
-            <span className={`px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-extrabold border uppercase tracking-wider font-mono ${currentConfig.badgeColor}`}>
-              {role.replace(/_/g, ' ')} Workstation
-            </span>
-            <h2 className="text-2xl font-black text-slate-900 mt-2 capitalize">
+            <h2 className="text-2xl font-black text-slate-900 capitalize">
               {currentConfig.navItems.find(i => i.id === activeNavTab)?.label}
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">Real-time live database synchronization active.</p>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="hidden sm:inline-block px-3 py-1.5 rounded-full text-xs font-mono font-extrabold bg-green-100 text-green-800 border border-green-300">
-              🟢 Shift Active
-            </span>
-
             {/* Staff Profile Dropdown Button */}
             <div className="relative">
               <button

@@ -310,7 +310,8 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
     { name: 'Beachfront Resort', label: 'Beachfront Resort', icon: '🏖️' },
     { name: 'River View Resort', label: 'River View Resort', icon: '🌊' },
     { name: 'Heritage Palace', label: 'Heritage Palace & Villa', icon: '🏛️' },
-    { name: 'Heritage Cottage', label: 'Heritage Cottage', icon: '🛖' }
+    { name: 'Heritage Cottage', label: 'Heritage Cottage', icon: '🛖' },
+    { name: 'Packages', label: 'Property Packages', icon: '🎁', isComingSoon: true }
   ];
 
   const apiFetch = useCallback(async (endpoint, options = {}) => {
@@ -326,6 +327,25 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
     }
     return await fetch(endpoint, options);
   }, []);
+
+  // Filter strictly admitted properties (no demo entries, only approved/accepted)
+  const filterAdmittedProperties = (list) => {
+    if (!Array.isArray(list)) return [];
+    const map = new Map();
+    list.forEach(p => {
+      if (!p) return;
+      const st = String(p.status || '').toLowerCase().trim();
+      const isApproved = st === 'approved' || st === 'accepted';
+      const isDemo = String(p._id || p.id || '').startsWith('demo-') || String(p._id || p.id || '').startsWith('stay-');
+      if (isApproved && !isDemo) {
+        const key = `${(p.title || '').toLowerCase().trim()}_${(p.district || p.location || '').toLowerCase().trim()}`;
+        if (!map.has(key)) {
+          map.set(key, p);
+        }
+      }
+    });
+    return Array.from(map.values());
+  };
 
   // Fetch approved properties from MongoDB Atlas with SWR 0ms caching
   const fetchProperties = useCallback(async () => {
@@ -344,23 +364,21 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
         onUpdate: (freshData) => {
           const list = Array.isArray(freshData) ? freshData : (freshData?.data || []);
           if (Array.isArray(list)) {
-            const approved = list.filter(p => p.status === 'Approved' || !p.status);
-            setLiveProperties(approved);
+            setLiveProperties(filterAdmittedProperties(list));
           }
         }
       });
 
       const list = Array.isArray(data) ? data : (data?.data || []);
       if (Array.isArray(list) && list.length > 0) {
-        const approved = list.filter(p => p.status === 'Approved' || !p.status);
-        setLiveProperties(approved);
+        setLiveProperties(filterAdmittedProperties(list));
       } else {
-        setLiveProperties(DEFAULT_FEATURED_STAYS);
+        setLiveProperties([]);
       }
     } catch (err) {
       console.warn('Properties fetch notice:', err.message);
       setFetchError(err.message || 'Unable to load stays at this moment.');
-      setLiveProperties(DEFAULT_FEATURED_STAYS);
+      setLiveProperties([]);
     } finally {
       setLoading(false);
     }
@@ -699,6 +717,11 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
               >
                 <span>{cat.icon}</span>
                 <span>{cat.label}</span>
+                {cat.isComingSoon && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[8px] font-mono font-extrabold uppercase">
+                    SOON
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -788,8 +811,38 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
           </div>
         )}
 
-        {/* Loading Skeletons */}
-        {loading && liveProperties.length === 0 ? (
+        {/* Property Packages Coming Soon Card */}
+        {stayType === 'Packages' ? (
+          <div className="p-8 sm:p-12 my-6 rounded-3xl bg-gradient-to-br from-amber-50 via-white to-amber-50/50 border border-amber-300 text-center max-w-3xl mx-auto shadow-md space-y-4">
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-950 text-[10px] sm:text-xs font-mono font-bold shadow-xs">
+              <Sparkles size={13} className="text-amber-700 animate-pulse" />
+              <span>🎁 ALL-INCLUSIVE PROPERTY & TOUR PACKAGES · AVAILABLE SOON</span>
+            </div>
+            <h3 className="text-2xl sm:text-3xl md:text-4xl font-editorial font-bold text-black tracking-tight">
+              Curated All-Inclusive Stays, Native Guides & Cabs
+            </h3>
+            <p className="text-xs sm:text-sm md:text-base text-slate-600 font-editorial max-w-xl mx-auto leading-relaxed">
+              We are handcrafting complete all-inclusive multi-day travel packages combining <strong>verified 5-star stays</strong>, <strong>licensed native tour guides</strong>, and <strong>private chauffeur transport</strong> across all Tamil Nadu circuits.
+            </p>
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => navigate('/packages')}
+                className="px-6 py-3 rounded-2xl bg-[#242429] text-white hover:bg-black font-editorial font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
+              >
+                <span>Preview Upcoming Packages</span>
+                <ArrowRight size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setStayType('All')}
+                className="px-5 py-3 rounded-2xl bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-editorial font-bold text-xs shadow-xs transition-all cursor-pointer"
+              >
+                <span>View Admitted Stays Now</span>
+              </button>
+            </div>
+          </div>
+        ) : loading && liveProperties.length === 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 py-4">
             {[1, 2, 3, 4, 5, 6].map(n => (
               <StayCardSkeleton key={n} />
@@ -803,11 +856,11 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
             <div className="space-y-1">
               <h3 className="text-xl font-bold text-slate-900 font-editorial">
                 {district !== 'All' && district !== 'All Tamil Nadu'
-                  ? `No Luxury Stays Uploaded in ${district} Yet`
-                  : 'No Properties Uploaded in Catalog Yet'}
+                  ? `No Admitted Stays in ${district} Yet`
+                  : 'No Admitted Properties Found'}
               </h3>
               <p className="text-xs text-slate-500 font-mono max-w-md mx-auto leading-relaxed">
-                All stays and luxury resorts on Explore Tamil Nadu are uploaded and verified manually by authenticated hosts and resort owners.
+                Only authenticated properties reviewed and admitted by Super Admin are showcased here.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
@@ -816,7 +869,7 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                 onClick={() => { setDistrict('All'); setStayType('All'); setSearchQuery(''); }}
                 className="px-5 py-2.5 rounded-2xl bg-[#242429] text-white hover:bg-black text-xs font-bold font-editorial transition-all shadow-sm cursor-pointer"
               >
-                View All Stays
+                View All Admitted Stays
               </button>
               <button
                 type="button"

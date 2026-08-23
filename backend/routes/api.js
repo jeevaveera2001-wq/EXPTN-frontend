@@ -3829,9 +3829,12 @@ router.get(
 
     const filter = {};
 
-    if (req.query.status) {
+    if (req.query.status && req.query.status !== 'all') {
       filter.status = String(req.query.status);
+    } else if (!req.query.status && !req.query.ownerEmail) {
+      filter.status = { $in: ['Approved', 'Accepted', 'approved', 'accepted'] };
     }
+
     if (req.query.type && req.query.type !== 'All') {
       filter.type = String(req.query.type);
     }
@@ -4174,7 +4177,14 @@ router.get(
         100
       );
 
-      const rawVehicles = await Vehicle.find({})
+      const filter = {};
+      if (req.query.status && req.query.status !== 'all') {
+        filter.status = String(req.query.status);
+      } else if (!req.query.status && !req.query.ownerEmail) {
+        filter.status = { $in: ['Approved', 'Accepted', 'approved', 'accepted'] };
+      }
+
+      const rawVehicles = await Vehicle.find(filter)
         .select("_id title type registrationNumber regNo numberPlate providerName providerPhone providerEmail ownerEmail ownerName location district seatingCapacity fuelType acType price pricePerDay perKmRate status createdAt")
         .sort({ _id: -1 })
         .limit(limit)

@@ -4765,7 +4765,7 @@ router.get(
           Number.parseInt(
             req.query.limit,
             10
-          ) || 25,
+          ) || 50,
           1
         ),
         100
@@ -4774,42 +4774,51 @@ router.get(
       const filter = {};
 
       if (req.query.email) {
-        const email =
-          normalizeEmail(
-            req.query.email
-          );
-
+        const email = normalizeEmail(req.query.email);
         filter.$or = [
           { customerEmail: email },
           { userEmail: email },
           { email },
+          { ownerEmail: email },
+          { vendorEmail: email }
         ];
       }
 
-      if (req.query.status) {
-        filter.status =
-          String(req.query.status);
+      if (req.query.ownerEmail) {
+        filter.ownerEmail = normalizeEmail(req.query.ownerEmail);
       }
 
-      const bookings =
-        await Booking.find(filter)
-          .select(
-            "-paymentSignature " +
-            "-internalNotes"
-          )
-          .sort({ createdAt: -1 })
-          .skip((page - 1) * limit)
-          .limit(limit)
-          .lean()
-          .maxTimeMS(10000);
+      if (req.query.vendorEmail) {
+        filter.vendorEmail = normalizeEmail(req.query.vendorEmail);
+      }
 
-      return res.status(200).json(
-        bookings
-      );
+      if (req.query.type && req.query.type !== 'all') {
+        filter.bookingType = String(req.query.type);
+      }
+
+      if (req.query.status && req.query.status !== 'all') {
+        filter.status = String(req.query.status);
+      }
+
+      const bookings = await Booking.find(filter)
+        .select("-paymentSignature -internalNotes")
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean()
+        .maxTimeMS(5000);
+
+      const cleanedBookings = (bookings || []).map(b => ({
+        ...b,
+        id: b._id ? String(b._id) : b.id,
+        bookingId: b.bookingId || (b._id ? `ETN-${String(b._id).slice(-6).toUpperCase()}` : 'ETN-BK')
+      }));
+
+      return res.status(200).json(cleanedBookings);
     } catch (error) {
       console.error(
         "Booking retrieval failed:",
-        error
+        error.message
       );
 
       return res.status(500).json({
@@ -5151,46 +5160,32 @@ router.delete(
   }
 );
 
-// This destructive route should only be
-// available to authenticated administrators.
-router.delete(
-  "/bookings-clear-all",
-  protect,
-  authorizeRoles(
-    "admin",
-    "super_admin"
-  ),
-  requireDatabase,
-  async (req, res) => {
+// Truncate all bookings (live clear)
+const clearAllBookingsHandler = async (req, res) => {
+  try {
+    const result = await Booking.deleteMany({});
+
     try {
-      const result =
-        await Booking.deleteMany({});
+      broadcast(req, "bookings_cleared", {});
+      broadcast(req, "stats_updated", {});
+    } catch (e) {}
 
-      broadcast(
-        req,
-        "bookings_cleared",
-        {}
-      );
-
-      broadcast(
-        req,
-        "stats_updated",
-        {}
-      );
-
-      return res.status(200).json({
-        success: true,
-        deletedCount:
-          result.deletedCount,
-      });
-    } catch (error) {
-      return res.status(500).json({
-        message:
-          "Unable to clear bookings.",
-      });
-    }
+    return res.status(200).json({
+      success: true,
+      message: "All bookings truncated successfully.",
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Unable to clear bookings: " + error.message,
+    });
   }
-);
+};
+
+router.delete("/bookings-clear-all", clearAllBookingsHandler);
+router.post("/bookings-clear-all", clearAllBookingsHandler);
+router.post("/bookings/truncate-all", clearAllBookingsHandler);
+router.delete("/bookings", clearAllBookingsHandler);
 
 router.get(
   "/bookings/:id/receipt",

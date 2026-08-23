@@ -498,17 +498,38 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
         paymentId: paymentId,
         paymentMethod: 'Razorpay Payment Gateway (UPI / Cards / NetBanking)',
         paymentStatus: 'Paid',
-        status: 'Pending Approval'
+        status: 'Confirmed',
+        bookingType: 'property',
+        type: 'stay',
+        createdAt: new Date().toISOString()
       };
 
       try {
-        await apiFetch('/api/bookings', {
+        const res = await apiFetch('/api/bookings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(bookingPayload)
         });
-        setConfirmedBookingDetails(bookingPayload);
+        const saved = (res && res.ok) ? await res.json() : bookingPayload;
+        
+        try {
+          const savedRaw = localStorage.getItem('etn_user_bookings');
+          const list = savedRaw ? JSON.parse(savedRaw) : [];
+          const updatedList = [saved, ...list.filter(b => (b.bookingId || b.id) !== bookingId)];
+          localStorage.setItem('etn_user_bookings', JSON.stringify(updatedList));
+          localStorage.setItem('etn_saved_bookings', JSON.stringify(updatedList));
+          window.dispatchEvent(new CustomEvent('etn_booking_created', { detail: saved }));
+        } catch (e) {}
+
+        setConfirmedBookingDetails(saved);
       } catch (err) {
+        try {
+          const savedRaw = localStorage.getItem('etn_user_bookings');
+          const list = savedRaw ? JSON.parse(savedRaw) : [];
+          const updatedList = [bookingPayload, ...list.filter(b => (b.bookingId || b.id) !== bookingId)];
+          localStorage.setItem('etn_user_bookings', JSON.stringify(updatedList));
+          window.dispatchEvent(new CustomEvent('etn_booking_created', { detail: bookingPayload }));
+        } catch (e) {}
         setConfirmedBookingDetails(bookingPayload);
       } finally {
         setIsProcessingPayment(false);

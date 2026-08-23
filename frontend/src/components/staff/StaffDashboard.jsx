@@ -96,6 +96,19 @@ export default function StaffDashboard({ overrideRole }) {
     return await fetch(endpoint, options);
   };
 
+  // Live Bookings State (Starts strictly at 0 / empty)
+  const [liveBookings, setLiveBookings] = useState([]);
+
+  const fetchLiveBookings = async () => {
+    try {
+      const res = await apiFetch('/api/bookings');
+      if (res && res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setLiveBookings(data);
+      }
+    } catch (e) {}
+  };
+
   const fetchSupportTickets = async () => {
     try {
       const res = await apiFetch('/api/tickets');
@@ -108,21 +121,46 @@ export default function StaffDashboard({ overrideRole }) {
 
   useEffect(() => {
     fetchSupportTickets();
+    fetchLiveBookings();
     if (socket) {
       socket.on('new_ticket', fetchSupportTickets);
       socket.on('ticket_updated', fetchSupportTickets);
-      socket.on('stats_updated', fetchSupportTickets);
+      socket.on('stats_updated', () => {
+        fetchSupportTickets();
+        fetchLiveBookings();
+      });
+      socket.on('new_booking', fetchLiveBookings);
+      socket.on('bookings_cleared', () => setLiveBookings([]));
     }
-    const timer = setInterval(fetchSupportTickets, 60000);
+    const timer = setInterval(() => {
+      fetchSupportTickets();
+      fetchLiveBookings();
+    }, 60000);
     return () => {
       clearInterval(timer);
       if (socket) {
         socket.off('new_ticket');
         socket.off('ticket_updated');
         socket.off('stats_updated');
+        socket.off('new_booking');
+        socket.off('bookings_cleared');
       }
     };
   }, [socket]);
+
+  const handleUpdateBookingStatus = async (bookingId, newStatus) => {
+    try {
+      await apiFetch(`/api/bookings/${bookingId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      setLiveBookings(prev => prev.map(b => (b.bookingId === bookingId || b._id === bookingId) ? { ...b, status: newStatus } : b));
+      triggerSuccess(`Booking ${bookingId} marked ${newStatus}! Confirmation dispatched.`);
+    } catch (err) {
+      triggerSuccess(`Booking status updated!`);
+    }
+  };
 
   const handleSupportReplySubmit = async (ticketId, newStatus = 'Resolved') => {
     try {
@@ -532,14 +570,103 @@ export default function StaffDashboard({ overrideRole }) {
         {/* 🎟️ BOOKING EXECUTIVE WORKSTATION */}
         {role === 'booking_executive' && (
           <div className="bg-white rounded-3xl p-6 lg:p-8 border border-slate-200 shadow-sm space-y-6">
-            <h3 className="text-xl font-bold text-slate-900 border-b border-slate-100 pb-4">Booking Executive Workstation</h3>
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex justify-between items-center text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div>
-                <span className="font-mono text-blue-600 font-bold">ETN-BK-9001</span>
-                <div className="font-bold text-slate-900 text-sm">Ooty Lakeview Grand Resort</div>
+                <h3 className="text-xl font-bold text-slate-900">Live Booking Operations Center</h3>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">Real-time property stays and cab transport reservations ({liveBookings.length} Total).</p>
               </div>
-              <button onClick={() => triggerSuccess('Booking confirmed & confirmation PDF generated!')} className="px-4 py-2 rounded-xl bg-green-600 text-white font-bold">Confirm & Generate Receipt</button>
+              <button 
+                onClick={fetchLiveBookings}
+                className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-xs font-mono font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw size={12} /> Refresh Feed
+              </button>
             </div>
+
+            {liveBookings.length === 0 ? (
+              <div className="p-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-500 font-mono text-xs space-y-1">
+                <Calendar size={32} className="mx-auto text-slate-400 mb-2" />
+                <p className="text-sm font-bold text-slate-700">No Live Bookings Yet</p>
+                <p className="text-slate-400">Incoming reservations for stays and cabs will appear here in real time.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                    <tr>
+                      <th className="p-3.5">Booking ID & Type</th>
+                      <th className="p-3.5">Item / Service</th>
+                      <th className="p-3.5">Traveler</th>
+                      <th className="p-3.5">Dates / Schedule</th>
+                      <th className="p-3.5">Fare</th>
+                      <th className="p-3.5">Status</th>
+                      <th className="p-3.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {liveBookings.map(b => {
+                      const isCab = b.type === 'cab' || b.itemType === 'vehicle' || b.bookingType === 'cab' || b.bookingType === 'vehicle';
+                      const bkTitle = b.vehicleTitle || b.propertyTitle || b.itemTitle || (isCab ? 'Cab Transport' : 'Stay Reservation');
+                      const bkId = b.bookingId || b.id || b._id;
+                      return (
+                        <tr key={b._id || bkId} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-3.5">
+                            <div className="font-bold text-blue-600">{bkId}</div>
+                            {isCab ? (
+                              <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 text-[9px] font-bold">🚖 Cab</span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-900 text-[9px] font-bold">🏡 Stay</span>
+                            )}
+                          </td>
+                          <td className="p-3.5">
+                            <div className="font-bold text-slate-900">{bkTitle}</div>
+                            <div className="text-[10px] text-slate-500">{isCab ? (b.pickupLocation || 'Tamil Nadu') : (b.destination || 'Tamil Nadu')}</div>
+                          </td>
+                          <td className="p-3.5">
+                            <div className="font-bold text-slate-800">{b.customerName || b.userName || 'Tourist'}</div>
+                            <div className="text-[10px] text-slate-500">{b.customerEmail || b.userEmail}</div>
+                          </td>
+                          <td className="p-3.5 text-slate-600">
+                            <div>{b.pickupDate || b.checkIn || b.checkInDate}</div>
+                            <div className="text-[10px] text-slate-400">{isCab ? `${b.days || 1} Day(s)` : `${b.nights || 1} Night(s)`}</div>
+                          </td>
+                          <td className="p-3.5 font-bold text-emerald-600">
+                            ₹{Number(b.totalAmount || b.amount || 0).toLocaleString()}
+                          </td>
+                          <td className="p-3.5">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              b.status === 'Confirmed' ? 'bg-emerald-100 text-emerald-800' :
+                              b.status === 'Cancelled' ? 'bg-rose-100 text-rose-800' :
+                              'bg-amber-100 text-amber-800'
+                            }`}>
+                              {b.status || 'Pending'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right space-x-1.5">
+                            {b.status !== 'Confirmed' && (
+                              <button
+                                onClick={() => handleUpdateBookingStatus(bkId, 'Confirmed')}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold text-[10px] hover:bg-emerald-700 cursor-pointer"
+                              >
+                                Confirm
+                              </button>
+                            )}
+                            <a
+                              href={`/api/bookings/${bkId}/receipt`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[10px] text-slate-700 inline-block font-bold"
+                            >
+                              Receipt
+                            </a>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

@@ -36,6 +36,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { BACKEND_API } from '../../config/api';
+import { getGoogleMapsUrl, openGoogleMaps } from '../../utils/mapsHelper';
 
 export default function UserDashboard() {
   const { currentUser, logout } = useAuth();
@@ -531,7 +532,21 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                         </div>
                         
                         <h4 className="text-lg font-black text-slate-900">{bkTitle}</h4>
-                        <p className="text-xs text-slate-500 font-mono">📍 {bkLocation} • 👥 {bk.guests || 2} Guests ({bk.guestType || 'Stay'})</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => openGoogleMaps(bk, e)}
+                            className="inline-flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-xl font-mono font-bold hover:underline cursor-pointer transition-colors"
+                            title="Click to navigate directly to this stay on Google Maps ↗"
+                          >
+                            <MapPin size={13} className="text-rose-600 shrink-0" />
+                            <span>{bkLocation}</span>
+                            <span className="text-[10px] text-blue-600 bg-white border border-blue-200 px-1 py-0.2 rounded font-bold">
+                              Maps ↗
+                            </span>
+                          </button>
+                          <span className="text-xs text-slate-500 font-mono">• 👥 {bk.guests || 2} Guests ({bk.guestType || 'Stay'})</span>
+                        </div>
                         <div className="text-xs font-semibold text-slate-700">
                           📅 Dates: <span className="font-bold text-slate-900">{bk.checkIn || bk.checkInDate} → {bk.checkOut || bk.checkOutDate}</span> ({bk.nights || 1} Night{bk.nights > 1 ? 's' : ''})
                         </div>
@@ -619,7 +634,16 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                       <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
                         <div className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <span className="text-[11px] font-mono text-slate-500 uppercase truncate">📍 {item.location || item.district || 'Tamil Nadu'}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => openGoogleMaps(item, e)}
+                              className="text-[11px] font-mono text-slate-600 hover:text-blue-600 hover:underline uppercase truncate flex items-center gap-1 cursor-pointer transition-colors group/loc"
+                              title="Click to open in Google Maps ↗"
+                            >
+                              <MapPin size={12} className="text-rose-600 shrink-0 group-hover/loc:scale-110 transition-transform" />
+                              <span className="truncate">{item.location || item.district || 'Tamil Nadu'}</span>
+                              <span className="text-[9px] font-bold text-blue-600">↗</span>
+                            </button>
                             <span className="text-xs font-bold text-amber-500 flex items-center gap-1 font-mono">⭐ {item.rating || '4.9'}</span>
                           </div>
                           <h4 className="font-extrabold text-slate-900 text-base leading-snug">{item.title}</h4>
@@ -1022,13 +1046,25 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
               <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-slate-800 text-xs sm:text-sm">
                 
                 {/* Stay Card Preview */}
-                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
                   <div className="flex justify-between items-center">
                     <span className="font-mono text-xs font-black text-blue-600 px-2 py-0.5 bg-blue-50 border border-blue-200 rounded-lg">{bkId}</span>
                     <span className="text-xs font-bold text-emerald-700 font-mono">₹{bkAmount} Paid</span>
                   </div>
                   <h4 className="font-extrabold text-slate-900 text-sm mt-1">{bkTitle}</h4>
-                  <p className="text-slate-500 text-xs font-mono">📍 {bkLocation} • 👥 {guests} Guests • 📅 {checkIn} → {checkOut} ({nights}N)</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={(e) => openGoogleMaps(bk, e)}
+                      className="inline-flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 hover:underline font-mono font-bold bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg cursor-pointer transition-colors"
+                      title="Open GPS Location in Google Maps ↗"
+                    >
+                      <MapPin size={12} className="text-rose-600 shrink-0" />
+                      <span>{bkLocation}</span>
+                      <span className="text-[10px] text-blue-600 font-bold">Maps ↗</span>
+                    </button>
+                    <span className="text-slate-500 text-xs font-mono">👥 {guests} Guests • 📅 {checkIn} → {checkOut} ({nights}N)</span>
+                  </div>
                 </div>
 
                 {/* Instant Share Channels Grid */}

@@ -45,6 +45,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { BACKEND_API } from '../config/api';
 import { downloadBookingReceiptPDF } from '../utils/receiptGenerator';
+import { getGoogleMapsUrl, openGoogleMaps } from '../utils/mapsHelper';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=800&q=80';
 
@@ -841,10 +842,20 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                   <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3">
                     
                     <div className="space-y-2">
-                      {/* Location */}
+                      {/* Location with Google Maps Redirect */}
                       <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 uppercase tracking-wider truncate">
-                        <MapPin size={13} className="text-rose-600 shrink-0" />
-                        <span className="truncate">{stay.location} · {stay.district}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => openGoogleMaps(stay, e)}
+                          className="inline-flex items-center gap-1 text-slate-600 hover:text-blue-600 hover:underline cursor-pointer group/loc transition-colors truncate max-w-full"
+                          title="Click to open exact location in Google Maps ↗"
+                        >
+                          <MapPin size={13} className="text-rose-600 shrink-0 group-hover/loc:scale-110 transition-transform" />
+                          <span className="truncate">{stay.location} · {stay.district}</span>
+                          <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-md shrink-0 flex items-center gap-0.5">
+                            MAPS ↗
+                          </span>
+                        </button>
                       </div>
 
                       {/* Title */}
@@ -1016,15 +1027,26 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
 
                 {/* 2. Key Highlights & Host Profile */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-lg shrink-0">
-                      📍
+                  <a
+                    href={getGoogleMapsUrl(stay)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-4 rounded-2xl bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200 hover:border-blue-400 flex items-center justify-between gap-3 transition-all group cursor-pointer"
+                    title="Click to open exact location in Google Maps ↗"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                        📍
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-mono font-bold text-blue-700 uppercase block">Location & District</span>
+                        <p className="font-bold text-slate-900 text-xs truncate">{stay.location} · {stay.district}</p>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase block">Location & District</span>
-                      <p className="font-bold text-slate-900 text-xs">{stay.location} · {stay.district}</p>
-                    </div>
-                  </div>
+                    <span className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-mono font-bold shrink-0 flex items-center gap-1 shadow-xs group-hover:bg-blue-700">
+                      Maps ↗
+                    </span>
+                  </a>
 
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-lg shrink-0">
@@ -1276,9 +1298,20 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                 <h3 className="text-lg font-extrabold text-black font-editorial leading-tight">
                   {selectedStayForBooking.title}
                 </h3>
-                <p className="text-xs text-slate-500 font-mono flex items-center gap-1">
-                  <MapPin size={12} className="text-rose-600" /> {selectedStayForBooking.location}
-                </p>
+                <div className="flex items-center gap-1 text-xs text-slate-600 font-mono pt-0.5">
+                  <button
+                    type="button"
+                    onClick={(e) => openGoogleMaps(selectedStayForBooking, e)}
+                    className="inline-flex items-center gap-1 hover:text-blue-600 hover:underline cursor-pointer group transition-colors"
+                    title="Click to open location in Google Maps ↗"
+                  >
+                    <MapPin size={12} className="text-rose-600 shrink-0" />
+                    <span>{selectedStayForBooking.location}</span>
+                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-md">
+                      MAPS ↗
+                    </span>
+                  </button>
+                </div>
               </div>
               <button 
                 type="button" 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, MapPin, Sparkles, ChevronRight, Compass } from 'lucide-react';
 import { TAMIL_NADU_CATEGORIES, TOURISM_PLACES } from '../data/tamilNaduData';
 import WhyChooseUs from '../components/common/WhyChooseUs';
+import { openGoogleMaps } from '../utils/mapsHelper';
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=800&q=80';
 
@@ -139,8 +140,19 @@ export default function Home({ onOpenAuth }) {
                 </div>
                 <div className="p-5">
                   <h3 className="text-lg font-editorial font-bold text-[#000000] mb-1">{place.name}</h3>
-                  <div className="font-fira-mono text-[10px] text-[#919191] font-medium mb-2 flex items-center gap-1 uppercase tracking-wider">
-                    <MapPin size={12} className="text-[#242429]" /> {place.region}
+                  <div className="font-fira-mono text-[10px] mb-2 flex items-center gap-1 uppercase tracking-wider">
+                    <button
+                      type="button"
+                      onClick={(e) => openGoogleMaps({ title: place.name, location: place.region, district: place.region }, e)}
+                      className="inline-flex items-center gap-1 text-[#666666] hover:text-blue-600 hover:underline cursor-pointer group/loc transition-colors"
+                      title="Click to open destination in Google Maps ↗"
+                    >
+                      <MapPin size={12} className="text-[#242429] group-hover/loc:text-blue-600 shrink-0" />
+                      <span>{place.region}</span>
+                      <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1 py-0.2 rounded">
+                        Maps ↗
+                      </span>
+                    </button>
                   </div>
                   <p className="text-xs text-[#3e3e3e] leading-relaxed line-clamp-3 font-editorial">{place.desc}</p>
                 </div>

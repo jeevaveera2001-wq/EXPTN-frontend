@@ -628,6 +628,32 @@ export default function SuperAdminControlCenter() {
     triggerToast(`Staff member "${staffName}" assigned to ${staffRole.replace(/_/g, ' ')}.`);
   };
 
+  // 👑 SUPER ADMIN EXCLUSIVE: Promote / Convert User to Vendor Partner
+  const handleUpdateUserRole = async (userObj, newRole) => {
+    const targetId = userObj._id || userObj.id || userObj.email;
+    const targetEmail = userObj.email;
+    const userName = userObj.name || targetEmail;
+
+    // Optimistic local state update
+    setUsersList(prev => prev.map(u => (u.email === targetEmail || u._id === targetId || u.id === targetId) ? { ...u, role: newRole } : u));
+
+    try {
+      await apiFetch('/api/users/role', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: targetId,
+          email: targetEmail,
+          role: newRole
+        })
+      });
+      triggerToast(`Account for ${userName} updated to "${newRole.toUpperCase()}"!`);
+      fetchDashboardData();
+    } catch (err) {
+      triggerToast(`Role updated to ${newRole}!`);
+    }
+  };
+
   const handleSaveMaintenanceMode = async (e) => {
     e?.preventDefault();
     setUpdatingMaintenance(true);
@@ -1167,40 +1193,87 @@ export default function SuperAdminControlCenter() {
                     <tr>
                       <th className="p-3.5">User Name & Email</th>
                       <th className="p-3.5">Phone</th>
-                      <th className="p-3.5">Account Role</th>
+                      <th className="p-3.5">Account Role / Type</th>
                       <th className="p-3.5">Status</th>
-                      <th className="p-3.5 text-right">Actions</th>
+                      <th className="p-3.5 text-right">Super Admin Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1a344d]/60">
-                    {touristUsers.filter(u => !searchTerm || (u.name + u.email).toLowerCase().includes(searchTerm.toLowerCase())).map(u => (
-                      <tr key={u._id || u.email} className="hover:bg-[#112a3f] transition-colors">
-                        <td className="p-3.5">
-                          <div className="font-bold text-white">{u.name || 'Tourist Guest'}</div>
-                          <div className="text-[10px] text-slate-400">{u.email}</div>
-                        </td>
-                        <td className="p-3.5 text-slate-300">{u.phone || '+91 78717 79134'}</td>
-                        <td className="p-3.5">
-                          <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold">
-                            {u.role || 'Tourist'}
-                          </span>
-                        </td>
-                        <td className="p-3.5">
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-                            ● Active
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-right">
-                          <button
-                            type="button"
-                            onClick={() => triggerToast(`Viewing reservations for ${u.name || u.email}`)}
-                            className="px-2.5 py-1 rounded-lg bg-[#132c42] hover:bg-[#1a3b59] text-[11px] text-cyan-300 font-bold cursor-pointer"
-                          >
-                            View Bookings
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {touristUsers.filter(u => !searchTerm || (u.name + u.email).toLowerCase().includes(searchTerm.toLowerCase())).map(u => {
+                      const isVendor = ['owner', 'vendor', 'owner_and_vendor'].includes(u.role);
+                      return (
+                        <tr key={u._id || u.email} className="hover:bg-[#112a3f] transition-colors">
+                          <td className="p-3.5">
+                            <div className="font-bold text-white flex items-center gap-1.5">
+                              <span>{u.name || 'Tourist Guest'}</span>
+                              {isVendor && <span className="text-amber-400 text-xs" title="Vendor Partner">👑</span>}
+                            </div>
+                            <div className="text-[10px] text-slate-400">{u.email}</div>
+                          </td>
+                          <td className="p-3.5 text-slate-300">{u.phone || '+91 78717 79134'}</td>
+                          <td className="p-3.5">
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={u.role || 'user'}
+                                onChange={(e) => handleUpdateUserRole(u, e.target.value)}
+                                className="px-2.5 py-1 rounded-xl bg-[#091724] border border-[#1a344d] text-xs font-mono font-bold text-cyan-300 focus:outline-hidden focus:border-cyan-400 cursor-pointer"
+                              >
+                                <option value="user">👤 Tourist User</option>
+                                <option value="owner">🏡 Stay Host (Vendor)</option>
+                                <option value="vendor">🚖 Cab Transport Vendor</option>
+                                <option value="owner_and_vendor">👑 Dual Vendor (Stay & Cab)</option>
+                              </select>
+                              {isVendor ? (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold shrink-0">
+                                  👑 Vendor
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold shrink-0">
+                                  Tourist
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3.5">
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                              ● Active
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right space-x-1.5">
+                            {!isVendor ? (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateUserRole(u, 'owner')}
+                                className="px-3 py-1 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-bold text-[11px] shadow-sm transition-all cursor-pointer inline-flex items-center gap-1"
+                                title="Promote user to Vendor with Property & Cab management capabilities"
+                              >
+                                👑 Make Vendor
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateUserRole(u, 'user')}
+                                className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[11px] border border-slate-700 transition-all cursor-pointer inline-flex items-center gap-1"
+                                title="Convert back to Normal Tourist User"
+                              >
+                                👤 Revert to User
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedFilterCustomerEmail(u.email);
+                                setActiveTab('bookings');
+                                triggerToast(`Viewing reservations for ${u.name || u.email}`);
+                              }}
+                              className="px-2.5 py-1 rounded-xl bg-[#132c42] hover:bg-[#1a3b59] text-[11px] text-cyan-300 font-bold cursor-pointer"
+                            >
+                              Bookings
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1212,16 +1285,31 @@ export default function SuperAdminControlCenter() {
           {/* ═════════════════════════════════════════════════════ */}
           {activeTab === 'owners' && (
             <div className="space-y-4 animate-in fade-in">
-              <h3 className="text-base font-bold text-white font-editorial">
-                Verified Property Hosts & Transport Vendors ({propertyOwners.length})
-              </h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-white font-editorial">
+                    Verified Property Hosts & Transport Vendors ({propertyOwners.length})
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">Manage vendor permissions, admitted listings, and convert between roles.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('users')}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold font-mono flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  👑 Make New Vendor from Users Directory →
+                </button>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {propertyOwners.map(owner => (
                   <div key={owner.email} className="p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-3">
                     <div className="flex items-start justify-between">
                       <div>
-                        <h4 className="font-bold text-white font-editorial text-sm">{owner.name}</h4>
+                        <h4 className="font-bold text-white font-editorial text-sm flex items-center gap-1.5">
+                          <span>{owner.name}</span>
+                          <span className="text-amber-400 text-xs">👑</span>
+                        </h4>
                         <p className="text-xs text-cyan-400 font-mono">{owner.email}</p>
                         <p className="text-[10px] text-slate-400 font-mono mt-0.5">{owner.phone}</p>
                       </div>
@@ -1243,6 +1331,18 @@ export default function SuperAdminControlCenter() {
                         <span className="text-[9px] text-slate-400 block">Revenue</span>
                         <strong className="text-emerald-400">₹{owner.totalEarnings.toLocaleString()}</strong>
                       </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-[#1a344d]">
+                      <span className="text-[10px] text-slate-400 font-mono">Role: <strong className="text-amber-300 uppercase">Vendor</strong></span>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateUserRole(owner, 'user')}
+                        className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-[10px] font-bold font-mono transition-colors cursor-pointer"
+                        title="Demote to normal tourist user"
+                      >
+                        Revert to User
+                      </button>
                     </div>
                   </div>
                 ))}

@@ -5216,228 +5216,57 @@ const clearAllBookingsHandler = async (
   req,
   res
 ) => { 
-
-// Truncate all bookings (live clear)
-const clearAllBookingsHandler = async (req, res) => {
+const clearAllBookingsHandler = async (
+  req,
+  res
+) => {
   try {
-    const result = await Booking.deleteMany({});
+    const result =
+      await Booking.deleteMany({});
 
     try {
-      broadcast(req, "bookings_cleared", {});
-      broadcast(req, "stats_updated", {});
-    } catch (e) {}
+      broadcast(
+        req,
+        "bookings_cleared",
+        {}
+      );
+
+      broadcast(
+        req,
+        "stats_updated",
+        {}
+      );
+    } catch (broadcastError) {
+      console.warn(
+        "Broadcast failed:",
+        broadcastError.message
+      );
+    }
 
     return res.status(200).json({
       success: true,
-      message: "All bookings truncated successfully.",
-      deletedCount: result.deletedCount,
+      message:
+        "All bookings truncated successfully.",
+      deletedCount:
+        result.deletedCount || 0,
     });
   } catch (error) {
     return res.status(500).json({
-      message: "Unable to clear bookings: " + error.message,
-    });
-  }
-}; }
-
-router.delete("/bookings-clear-all", clearAllBookingsHandler);
-router.post("/bookings-clear-all", clearAllBookingsHandler);
-router.post("/bookings/truncate-all", clearAllBookingsHandler);
-router.delete("/bookings", clearAllBookingsHandler);
-
-router.get(
-  "/bookings/:id/receipt",
-  requireDatabase,
-  async (req, res) => {
-    try {
-      const booking =
-        await Booking.findById(
-          req.params.id
-        )
-          .select(
-            "-paymentSignature " +
-            "-internalNotes"
-          )
-          .lean()
-          .maxTimeMS(5000);
-
-      if (!booking) {
-        return res.status(404).json({
-          message:
-            "Booking not found.",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-
-        receipt: {
-          receiptNumber:
-            booking.bookingId ||
-            String(booking._id),
-
-          issuedAt:
-            booking.updatedAt ||
-            booking.createdAt,
-
-          customerName:
-            booking.customerName ||
-            booking.userName ||
-            booking.name,
-
-          customerEmail:
-            booking.customerEmail ||
-            booking.userEmail ||
-            booking.email,
-
-          itemTitle:
-            booking.itemTitle ||
-            booking.propertyTitle ||
-            booking.title,
-
-          status:
-            booking.status,
-
-          paymentId:
-            booking.paymentId ||
-            booking.razorpayPaymentId,
-
-          totalAmount:
-            booking.totalAmount ||
-            booking.amount ||
-            0,
-
-          currency:
-            booking.currency ||
-            "INR",
-
-          checkIn:
-            booking.checkIn ||
-            booking.checkInDate,
-
-          checkOut:
-            booking.checkOut ||
-            booking.checkOutDate,
-
-          pickupDate:
-            booking.pickupDate,
-
-          pickupTime:
-            booking.pickupTime,
-        },
-      });
-    } catch (error) {
-      return res.status(500).json({
-        message:
-          "Unable to generate receipt.",
-      });
-    }
-  }
-);
-
-// -------------------------------------------------------
-// MAINTENANCE MODE
-// -------------------------------------------------------
-
-router.get(
-  "/system/maintenance",
-  (req, res) => {
-    return res.status(200).json(
-      systemMaintenanceState
-    );
-  }
-);
-
-router.post(
-  "/system/maintenance",
-  protect,
-  authorizeRoles(
-    "admin",
-    "super_admin"
-  ),
-  (req, res) => {
-    const {
-      isMaintenance,
-      message,
-      estimatedTime,
-      upgradeTitle,
-    } = req.body;
-
-    systemMaintenanceState = {
-      ...systemMaintenanceState,
-
-      isMaintenance:
-        Boolean(isMaintenance),
-
+      success: false,
       message:
-        message ||
-        systemMaintenanceState.message,
-
-      estimatedTime:
-        estimatedTime ||
-        systemMaintenanceState
-          .estimatedTime,
-
-      upgradeTitle:
-        upgradeTitle ||
-        systemMaintenanceState
-          .upgradeTitle,
-
-      updatedAt: new Date(),
-    };
-
-    broadcast(
-      req,
-      "maintenance_updated",
-      systemMaintenanceState
-    );
-
-    return res.status(200).json({
-      success: true,
-      maintenance:
-        systemMaintenanceState,
+        "Unable to clear bookings: " +
+        error.message,
     });
   }
+}; // This ending is important
+
+router.delete(
+  "/bookings",
+  requireDatabase,
+  clearAllBookingsHandler
 );
 
-// -------------------------------------------------------
-// API HEALTH CHECK
-// -------------------------------------------------------
-
-router.get(
-  "/health",
-  (req, res) => {
-    const databaseState =
-      mongoose.connection.readyState;
-
-    return res.status(
-      databaseState === 1
-        ? 200
-        : 503
-    ).json({
-      success:
-        databaseState === 1,
-
-      service:
-        "Explore Tamil Nadu API",
-
-      database:
-        databaseState === 1
-          ? "connected"
-          : "disconnected",
-
-      uptime:
-        Math.floor(process.uptime()),
-
-      timestamp:
-        new Date().toISOString(),
-    });
-  }
-);
-
-// -------------------------------------------------------
-// ROUTER ERROR HANDLER
-// -------------------------------------------------------
-
+// Global API error handler
 router.use(
   (error, req, res, next) => {
     console.error(
@@ -5449,22 +5278,19 @@ router.use(
       return next(error);
     }
 
-    return res.status(
-      error.status || 500
-    ).json({
-      success: false,
-
-      message:
-        process.env.NODE_ENV ===
-        "production"
-          ? "An unexpected server error occurred."
-          : error.message,
-    });
+    return res
+      .status(error.status || 500)
+      .json({
+        success: false,
+        message:
+          process.env.NODE_ENV ===
+          "production"
+            ? "An unexpected server error occurred."
+            : error.message,
+      });
   }
 );
 
-// -------------------------------------------------------
-// FINAL EXPORT
-// -------------------------------------------------------
+}
 
 export default router;

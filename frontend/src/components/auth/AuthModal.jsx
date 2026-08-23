@@ -249,6 +249,21 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
       }
     }
 
+    // Super Admin instant Google login
+    if (targetEmail.toLowerCase() === 'exploretamizhagam@gmail.com') {
+      const superAdminObj = {
+        id: 'super-admin-jeeva',
+        name: 'Jeeva Veeramani',
+        email: 'exploretamizhagam@gmail.com',
+        phone: '+91 78717 79134',
+        role: 'super_admin'
+      };
+      setGoogleLoading(false);
+      setSuccessMsg('Signed in with Google successfully!');
+      setTimeout(() => handleSuccessfulAuth(superAdminObj), 150);
+      return;
+    }
+
     setGoogleLoading(true);
 
     try {
@@ -259,7 +274,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
           email: targetEmail,
           name: (mode === 'register' ? fullName : '') || targetEmail.split('@')[0],
           accountType,
-          role: targetEmail.toLowerCase() === 'exploretamizhagam@gmail.com' ? 'super_admin' : (accountType === 'Property Owner' ? 'owner' : 'user'),
+          role: accountType === 'Property Owner' ? 'owner' : 'user',
           phone: mobileNumber ? `+91 ${mobileNumber.replace(/\D/g, '')}` : '+91 78717 79134'
         })
       });

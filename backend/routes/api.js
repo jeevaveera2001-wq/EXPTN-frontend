@@ -3932,22 +3932,36 @@ router.get(
 
     try {
       const rawProperties = await Property.find(filter)
-        .select("_id title district location type price pricePerNight rating reviewsCount status ownerName ownerEmail createdAt")
+        .select("_id title district location type price pricePerNight rating reviewsCount status ownerName ownerEmail images image photos amenities coordinates createdAt")
         .sort({ _id: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean()
         .maxTimeMS(4000);
 
-      const cleaned = (rawProperties || []).map(p => ({
-        ...p,
-        id: p._id ? String(p._id) : p.id,
-        price: Number(p.price || p.pricePerNight || 3800),
-        pricePerNight: Number(p.pricePerNight || p.price || 3800),
-        images: getPropertyImages(p),
-        amenities: ['Free WiFi', 'Mountain View', 'Breakfast Included', 'Parking'],
-        coordinates: { lat: 11.4102, lng: 76.6950 }
-      }));
+      const cleaned = (rawProperties || []).map(p => {
+        let vendorImages = [];
+        if (Array.isArray(p.images) && p.images.length > 0) {
+          vendorImages = p.images.map(img => typeof img === 'string' ? img : img?.url).filter(Boolean);
+        } else if (Array.isArray(p.photos) && p.photos.length > 0) {
+          vendorImages = p.photos.map(img => typeof img === 'string' ? img : img?.url).filter(Boolean);
+        } else if (p.image && typeof p.image === 'string' && p.image.trim()) {
+          vendorImages = [p.image.trim()];
+        }
+
+        const finalImages = vendorImages.length > 0 ? vendorImages : getPropertyImages(p);
+
+        return {
+          ...p,
+          id: p._id ? String(p._id) : p.id,
+          price: Number(p.price || p.pricePerNight || 3800),
+          pricePerNight: Number(p.pricePerNight || p.price || 3800),
+          images: finalImages,
+          image: finalImages[0],
+          amenities: Array.isArray(p.amenities) && p.amenities.length > 0 ? p.amenities : ['Free WiFi', 'Mountain View', 'Breakfast Included', 'Parking'],
+          coordinates: p.coordinates || { lat: 11.4102, lng: 76.6950 }
+        };
+      });
 
       propertiesListCache = {
         key: cacheKey,
@@ -4252,22 +4266,30 @@ router.get(
       }
 
       const rawVehicles = await Vehicle.find(filter)
-        .select("_id title type registrationNumber regNo numberPlate providerName providerPhone providerEmail ownerEmail ownerName location district seatingCapacity fuelType acType price pricePerDay perKmRate status createdAt")
+        .select("_id title type registrationNumber regNo numberPlate providerName providerPhone providerEmail ownerEmail ownerName location district seatingCapacity fuelType acType price pricePerDay perKmRate status images image exteriorImage interiorImage rcBookImage numberPlateImage createdAt")
         .sort({ _id: -1 })
         .limit(limit)
         .lean()
         .maxTimeMS(4000);
 
       const cleanedVehicles = (rawVehicles || []).map(v => {
-        const vImgs = getVehicleImages(v);
+        let vendorImages = [];
+        if (Array.isArray(v.images) && v.images.length > 0) {
+          vendorImages = v.images.map(img => typeof img === 'string' ? img : img?.url).filter(Boolean);
+        } else if (v.exteriorImage || v.interiorImage || v.image) {
+          vendorImages = [v.exteriorImage, v.interiorImage, v.image].filter(Boolean);
+        }
+
+        const finalImages = vendorImages.length > 0 ? vendorImages : getVehicleImages(v);
+
         return {
           ...v,
           id: v._id ? String(v._id) : v.id,
           price: Number(v.price || v.pricePerDay || 2500),
           pricePerDay: Number(v.pricePerDay || v.price || 2500),
-          images: vImgs,
-          exteriorImage: vImgs[0],
-          interiorImage: vImgs[1] || vImgs[0]
+          images: finalImages,
+          exteriorImage: v.exteriorImage || finalImages[0],
+          interiorImage: v.interiorImage || finalImages[1] || finalImages[0]
         };
       });
 

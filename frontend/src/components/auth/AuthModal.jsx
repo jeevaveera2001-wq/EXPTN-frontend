@@ -225,9 +225,11 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
     setErrorMsg('');
     setSuccessMsg('');
 
-    const targetEmail = (mode === 'register' ? registerEmail : loginIdentifier).trim();
+    let targetEmail = (mode === 'register' ? registerEmail : loginIdentifier).trim();
     if (!targetEmail || !targetEmail.includes('@')) {
-      setErrorMsg('Please enter your Google Email address above to continue with Google.');
+      setErrorMsg('Please enter your Google Email address in the field above to continue with Google.');
+      const inputEl = document.querySelector(mode === 'register' ? 'input[type="email"]' : 'input[type="text"]');
+      if (inputEl) inputEl.focus();
       return;
     }
 

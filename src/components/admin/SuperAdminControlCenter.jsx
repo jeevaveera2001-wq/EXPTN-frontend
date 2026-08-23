@@ -45,11 +45,36 @@ import {
   FileText,
   UserCheck,
   Building,
-  DollarSign
+  DollarSign,
+  Navigation
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { BACKEND_API } from '../../config/api';
+import InteractiveLocationMapPicker from '../common/InteractiveLocationMapPicker';
+
+const TAMIL_NADU_DISTRICTS = [
+  'Dindigul (Kodaikanal)',
+  'Nilgiris (Ooty & Coonoor)',
+  'Salem (Yercaud)',
+  'Coimbatore (Valparai & Pollachi)',
+  'Theni (Meghamalai & Suruli)',
+  'Namakkal (Kolli Hills)',
+  'Tirupathur (Yelagiri Hills)',
+  'Ramanathapuram (Rameshwaram & Dhanushkodi)',
+  'Kanyakumari',
+  'Madurai',
+  'Chengalpattu (Mahabalipuram & ECR)',
+  'Chennai',
+  'Thanjavur & Kumbakonam',
+  'Tirunelveli & Courtallam',
+  'Tiruvannamalai',
+  'Dharmapuri (Hogenakkal Falls)',
+  'Cuddalore (Chidambaram & Pichavaram)',
+  'Sivagangai (Chettinad Heritage)',
+  'Kanchipuram',
+  'Tiruchirappalli'
+];
 
 export default function SuperAdminControlCenter() {
   const { currentUser, logout } = useAuth();
@@ -66,11 +91,16 @@ export default function SuperAdminControlCenter() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
 
+  // Sub-filter for Owner Requests & Properties
+  const [requestsFilter, setRequestsFilter] = useState('all'); // 'all', 'stays', 'vehicles'
+  const [propertiesViewTab, setPropertiesViewTab] = useState('stays'); // 'stays', 'vehicles'
+
   // Live Collection States
   const [usersList, setUsersList] = useState([]);
   const [staffList, setStaffList] = useState([]);
   const [bookingsList, setBookingsList] = useState([]);
   const [propertiesList, setPropertiesList] = useState([]);
+  const [vehiclesList, setVehiclesList] = useState([]);
   const [ticketsList, setTicketsList] = useState([]);
   const [enquiriesList, setEnquiriesList] = useState([
     {
@@ -128,6 +158,7 @@ export default function SuperAdminControlCenter() {
   // Modal States
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [showAddPropertyModal, setShowAddPropertyModal] = useState(false);
+  const [showAddVehicleModal, setShowAddVehicleModal] = useState(false);
   const [showReplyTicketModal, setShowReplyTicketModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [ticketReplyText, setTicketReplyText] = useState('');
@@ -140,13 +171,25 @@ export default function SuperAdminControlCenter() {
   const [staffRole, setStaffRole] = useState('operations_manager');
   const [staffPassword, setStaffPassword] = useState('');
 
+  // Property Form State
   const [propTitle, setPropTitle] = useState('');
   const [propLocation, setPropLocation] = useState('');
-  const [propDistrict, setPropDistrict] = useState('Nilgiris (Ooty)');
+  const [propDistrict, setPropDistrict] = useState('Nilgiris (Ooty & Coonoor)');
   const [propType, setPropType] = useState('Resort');
   const [propPrice, setPropPrice] = useState('');
   const [propOwnerName, setPropOwnerName] = useState('Jeeva Veeramani');
   const [propOwnerEmail, setPropOwnerEmail] = useState('exploretamizhagam@gmail.com');
+  const [propCoordinates, setPropCoordinates] = useState({ lat: 11.4064, lng: 76.6932 });
+  const [googleMapsUrlInput, setGoogleMapsUrlInput] = useState('');
+
+  // Vehicle Form State
+  const [vehTitle, setVehTitle] = useState('');
+  const [vehType, setVehType] = useState('Innova Crysta (7 Seater)');
+  const [vehRegNo, setVehRegNo] = useState('');
+  const [vehPrice, setVehPrice] = useState('3500');
+  const [vehDistrict, setVehDistrict] = useState('Nilgiris (Ooty & Coonoor)');
+  const [vehProviderName, setVehProviderName] = useState('Jeeva Veeramani');
+  const [vehProviderEmail, setVehProviderEmail] = useState('exploretamizhagam@gmail.com');
 
   const triggerToast = (msg) => {
     setToastMessage(msg);
@@ -185,14 +228,16 @@ export default function SuperAdminControlCenter() {
         const data = await res.json();
         if (Array.isArray(data.users)) setUsersList(data.users);
         if (Array.isArray(data.properties)) setPropertiesList(data.properties);
+        if (Array.isArray(data.vehicles)) setVehiclesList(data.vehicles);
         if (Array.isArray(data.bookings)) setBookingsList(data.bookings);
         if (Array.isArray(data.staff)) setStaffList(data.staff);
         if (Array.isArray(data.tickets)) setTicketsList(data.tickets);
       } else {
         // Fallback parallel requests
-        const [uRes, pRes, bRes, tRes, sRes] = await Promise.all([
+        const [uRes, pRes, vRes, bRes, tRes, sRes] = await Promise.all([
           apiFetch('/api/users').catch(() => null),
           apiFetch('/api/properties').catch(() => null),
+          apiFetch('/api/vehicles').catch(() => null),
           apiFetch('/api/bookings').catch(() => null),
           apiFetch('/api/tickets').catch(() => null),
           apiFetch('/api/admin/staff').catch(() => null)
@@ -205,6 +250,10 @@ export default function SuperAdminControlCenter() {
         if (pRes && pRes.ok) {
           const p = await pRes.json();
           if (Array.isArray(p)) setPropertiesList(p);
+        }
+        if (vRes && vRes.ok) {
+          const v = await vRes.json();
+          if (Array.isArray(v)) setVehiclesList(v);
         }
         if (bRes && bRes.ok) {
           const b = await bRes.json();
@@ -230,7 +279,7 @@ export default function SuperAdminControlCenter() {
 
   useEffect(() => {
     fetchLiveData();
-    const interval = setInterval(() => fetchLiveData({ background: true }), 10000);
+    const interval = setInterval(() => fetchLiveData({ background: true }), 8000);
     return () => clearInterval(interval);
   }, [fetchLiveData]);
 
@@ -243,6 +292,10 @@ export default function SuperAdminControlCenter() {
     socket.on('user_updated', handleUpdate);
     socket.on('new_property', handleUpdate);
     socket.on('property_updated', handleUpdate);
+    socket.on('property_deleted', handleUpdate);
+    socket.on('new_vehicle', handleUpdate);
+    socket.on('vehicle_updated', handleUpdate);
+    socket.on('vehicle_deleted', handleUpdate);
     socket.on('new_booking', handleUpdate);
     socket.on('booking_updated', handleUpdate);
     socket.on('new_ticket', handleUpdate);
@@ -254,6 +307,10 @@ export default function SuperAdminControlCenter() {
       socket.off('user_updated', handleUpdate);
       socket.off('new_property', handleUpdate);
       socket.off('property_updated', handleUpdate);
+      socket.off('property_deleted', handleUpdate);
+      socket.off('new_vehicle', handleUpdate);
+      socket.off('vehicle_updated', handleUpdate);
+      socket.off('vehicle_deleted', handleUpdate);
       socket.off('new_booking', handleUpdate);
       socket.off('booking_updated', handleUpdate);
       socket.off('new_ticket', handleUpdate);
@@ -269,20 +326,21 @@ export default function SuperAdminControlCenter() {
 
   const propertyOwners = useMemo(() => {
     const ownersMap = new Map();
-    // 1. From Users with owner role
+    // 1. From Users with owner/vendor role
     usersList.filter(u => ['owner', 'vendor', 'owner_and_vendor'].includes(u.role)).forEach(u => {
       ownersMap.set(u.email?.toLowerCase(), {
         name: u.name || 'Property Host',
         email: u.email,
         phone: u.phone || '+91 78717 79134',
         propertiesCount: 0,
+        vehiclesCount: 0,
         totalBookings: 0,
         totalEarnings: 0,
         status: 'Verified Host'
       });
     });
 
-    // 2. Map properties and bookings to owners
+    // 2. Map properties to owners
     propertiesList.forEach(p => {
       const email = (p.ownerEmail || 'exploretamizhagam@gmail.com').toLowerCase();
       if (!ownersMap.has(email)) {
@@ -291,6 +349,7 @@ export default function SuperAdminControlCenter() {
           email: email,
           phone: p.ownerPhone || '+91 78717 79134',
           propertiesCount: 0,
+          vehiclesCount: 0,
           totalBookings: 0,
           totalEarnings: 0,
           status: 'Verified Host'
@@ -300,6 +359,26 @@ export default function SuperAdminControlCenter() {
       o.propertiesCount += 1;
     });
 
+    // 3. Map vehicles to owners
+    vehiclesList.forEach(v => {
+      const email = (v.providerEmail || v.ownerEmail || 'exploretamizhagam@gmail.com').toLowerCase();
+      if (!ownersMap.has(email)) {
+        ownersMap.set(email, {
+          name: v.providerName || v.ownerName || 'Vehicle Host',
+          email: email,
+          phone: v.providerPhone || '+91 78717 79134',
+          propertiesCount: 0,
+          vehiclesCount: 0,
+          totalBookings: 0,
+          totalEarnings: 0,
+          status: 'Verified Fleet'
+        });
+      }
+      const o = ownersMap.get(email);
+      o.vehiclesCount += 1;
+    });
+
+    // 4. Map bookings to owners
     bookingsList.forEach(b => {
       const email = (b.ownerEmail || 'exploretamizhagam@gmail.com').toLowerCase();
       if (ownersMap.has(email)) {
@@ -310,15 +389,26 @@ export default function SuperAdminControlCenter() {
     });
 
     return Array.from(ownersMap.values());
-  }, [usersList, propertiesList, bookingsList]);
+  }, [usersList, propertiesList, vehiclesList, bookingsList]);
 
-  const ownerRequests = useMemo(() => {
+  // Pending Owner Requests (Both Properties and Vehicles)
+  const pendingProperties = useMemo(() => {
     return propertiesList.filter(p => p.status === 'Pending Approval' || p.status === 'Under Review');
   }, [propertiesList]);
+
+  const pendingVehicles = useMemo(() => {
+    return vehiclesList.filter(v => v.status === 'Pending Approval' || v.status === 'Under Review');
+  }, [vehiclesList]);
+
+  const totalPendingRequests = pendingProperties.length + pendingVehicles.length;
 
   const activeProperties = useMemo(() => {
     return propertiesList.filter(p => p.status !== 'Pending Approval' && p.status !== 'Rejected');
   }, [propertiesList]);
+
+  const activeVehicles = useMemo(() => {
+    return vehiclesList.filter(v => v.status !== 'Pending Approval' && v.status !== 'Rejected');
+  }, [vehiclesList]);
 
   const totalGrossRevenue = useMemo(() => {
     return bookingsList.reduce((acc, b) => {
@@ -366,18 +456,31 @@ export default function SuperAdminControlCenter() {
     triggerToast(`Property status updated to: ${status}`);
   };
 
+  const handleUpdateVehicleStatus = async (vehId, status) => {
+    setVehiclesList(prev => prev.map(v => (v._id === vehId || v.id === vehId) ? { ...v, status } : v));
+    try {
+      await apiFetch(`/api/vehicles/${vehId}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ status })
+      });
+    } catch (e) {}
+    triggerToast(`Vehicle status updated to: ${status}`);
+  };
+
   const handleCreateProperty = async (e) => {
     e.preventDefault();
     if (!propTitle || !propPrice) return;
     const newProp = {
       _id: 'prop-' + Date.now(),
       title: propTitle,
-      location: propLocation || 'Tamil Nadu',
+      location: propLocation || `${propDistrict}, Tamil Nadu`,
       district: propDistrict,
       type: propType,
       pricePerNight: Number(propPrice),
       price: Number(propPrice),
       status: 'Approved',
+      coordinates: propCoordinates,
+      googleMapsUrl: `https://www.google.com/maps?q=${propCoordinates.lat},${propCoordinates.lng}`,
       ownerName: propOwnerName || currentUser?.name || 'Super Admin Jeeva',
       ownerEmail: propOwnerEmail || currentUser?.email || 'exploretamizhagam@gmail.com'
     };
@@ -391,7 +494,36 @@ export default function SuperAdminControlCenter() {
     setShowAddPropertyModal(false);
     setPropTitle('');
     setPropPrice('');
-    triggerToast(`Property "${propTitle}" published successfully.`);
+    setPropLocation('');
+    triggerToast(`Stay "${propTitle}" published successfully!`);
+  };
+
+  const handleCreateVehicle = async (e) => {
+    e.preventDefault();
+    if (!vehTitle || !vehRegNo) return;
+    const newVeh = {
+      _id: 'veh-' + Date.now(),
+      title: vehTitle,
+      type: vehType,
+      regNo: vehRegNo.toUpperCase().trim(),
+      district: vehDistrict,
+      pricePerDay: Number(vehPrice || 3500),
+      price: Number(vehPrice || 3500),
+      status: 'Approved',
+      providerName: vehProviderName || 'Jeeva Veeramani (Super Admin)',
+      providerEmail: vehProviderEmail || 'exploretamizhagam@gmail.com'
+    };
+    setVehiclesList(prev => [newVeh, ...prev]);
+    try {
+      await apiFetch('/api/vehicles', {
+        method: 'POST',
+        body: JSON.stringify(newVeh)
+      });
+    } catch (e) {}
+    setShowAddVehicleModal(false);
+    setVehTitle('');
+    setVehRegNo('');
+    triggerToast(`Vehicle "${vehTitle}" published successfully!`);
   };
 
   const handleDeleteProperty = async (propId) => {
@@ -400,6 +532,14 @@ export default function SuperAdminControlCenter() {
       await apiFetch(`/api/properties/${propId}`, { method: 'DELETE' });
     } catch (e) {}
     triggerToast('Property removed.');
+  };
+
+  const handleDeleteVehicle = async (vehId) => {
+    setVehiclesList(prev => prev.filter(v => v._id !== vehId && v.id !== vehId));
+    try {
+      await apiFetch(`/api/vehicles/${vehId}`, { method: 'DELETE' });
+    } catch (e) {}
+    triggerToast('Vehicle removed.');
   };
 
   const handleUpdateBookingStatus = async (bookingId, status) => {
@@ -467,6 +607,7 @@ export default function SuperAdminControlCenter() {
       await apiFetch('/api/admin/reset-database', { method: 'POST' });
       setBookingsList([]);
       setPropertiesList([]);
+      setVehiclesList([]);
       setUsersList([]);
       setTicketsList([]);
       setShowResetConfirmModal(false);
@@ -481,8 +622,8 @@ export default function SuperAdminControlCenter() {
     { id: 'dashboard', label: 'Dashboard', icon: '⏸️', lucide: LayoutDashboard, badge: null },
     { id: 'users', label: 'Users', icon: '👥', lucide: Users, badge: touristUsers.length },
     { id: 'owners', label: 'Property Owners', icon: '🏡', lucide: Building2, badge: propertyOwners.length },
-    { id: 'owner_requests', label: 'Owner Requests', icon: '📋', lucide: FileText, badge: ownerRequests.length || null, highlight: ownerRequests.length > 0 },
-    { id: 'properties', label: 'Properties', icon: '🏬', lucide: Building, badge: propertiesList.length },
+    { id: 'owner_requests', label: 'Owner Requests', icon: '📋', lucide: FileText, badge: totalPendingRequests || null, highlight: totalPendingRequests > 0 },
+    { id: 'properties', label: 'Properties', icon: '🏬', lucide: Building, badge: propertiesList.length + vehiclesList.length },
     { id: 'bookings', label: 'Bookings', icon: '📅', lucide: CalendarDays, badge: bookingsList.length },
     { id: 'reviews', label: 'Reviews', icon: '⭐', lucide: Star, badge: reviewsList.length },
     { id: 'support', label: 'Support', icon: '🎧', lucide: MessageSquare, badge: openTickets.length || null, highlight: openTickets.length > 0 },
@@ -526,7 +667,7 @@ export default function SuperAdminControlCenter() {
             <button
               type="button"
               onClick={() => { setSidebarOpen(false); setMobileDrawerOpen(false); }}
-              className="lg:hidden p-1.5 rounded-xl hover:bg-[#132c42] text-slate-400 hover:text-white"
+              className="lg:hidden p-1.5 rounded-xl hover:bg-[#132c42] text-slate-400 hover:text-white cursor-pointer"
             >
               <X size={16} />
             </button>
@@ -653,8 +794,8 @@ export default function SuperAdminControlCenter() {
                       <strong className="text-white">+91 78717 79134</strong>
                     </div>
                     <div className="p-2 rounded-xl bg-[#112a3f] flex items-center justify-between text-[11px]">
-                      <span>Active Stays:</span>
-                      <strong className="text-emerald-400">{propertiesList.length} Properties</strong>
+                      <span>Active Inventory:</span>
+                      <strong className="text-emerald-400">{propertiesList.length} Stays · {vehiclesList.length} Cabs</strong>
                     </div>
                   </div>
 
@@ -727,13 +868,15 @@ export default function SuperAdminControlCenter() {
 
                 <div className="p-4 sm:p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-1 shadow-sm">
                   <div className="text-[10px] font-mono uppercase text-slate-400 font-bold flex items-center justify-between">
-                    <span>Active Properties</span>
+                    <span>Inventory Catalog</span>
                     <Building2 size={14} className="text-amber-400" />
                   </div>
                   <div className="text-xl sm:text-2xl font-black text-white font-mono">
-                    {propertiesList.length}
+                    {propertiesList.length + vehiclesList.length}
                   </div>
-                  <div className="text-[10px] text-amber-400 font-mono">{ownerRequests.length} Pending Approval</div>
+                  <div className="text-[10px] text-amber-400 font-mono">
+                    {propertiesList.length} Stays · {vehiclesList.length} Cabs ({totalPendingRequests} Pending)
+                  </div>
                 </div>
 
                 <div className="p-4 sm:p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] space-y-1 shadow-sm">
@@ -759,7 +902,14 @@ export default function SuperAdminControlCenter() {
                     onClick={() => setShowAddPropertyModal(true)}
                     className="px-3.5 py-1.5 rounded-xl bg-cyan-500 text-black text-xs font-bold flex items-center gap-1.5 hover:bg-cyan-400 transition-all cursor-pointer"
                   >
-                    <Plus size={14} /> Add Property
+                    <Plus size={14} /> Add Stay / Resort
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddVehicleModal(true)}
+                    className="px-3.5 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 hover:bg-blue-500 transition-all cursor-pointer"
+                  >
+                    <Car size={14} /> Add Vehicle / Cab
                   </button>
                   <button
                     type="button"
@@ -773,7 +923,7 @@ export default function SuperAdminControlCenter() {
                     onClick={() => setActiveTab('owner_requests')}
                     className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1.5 hover:bg-amber-500/30 transition-all cursor-pointer"
                   >
-                    📋 Review Requests ({ownerRequests.length})
+                    📋 Review Requests ({totalPendingRequests})
                   </button>
                 </div>
               </div>
@@ -924,7 +1074,7 @@ export default function SuperAdminControlCenter() {
           {activeTab === 'owners' && (
             <div className="space-y-4 animate-in fade-in">
               <h3 className="text-base font-bold text-white font-editorial">
-                Verified Property Hosts & Vendors ({propertyOwners.length})
+                Verified Property Hosts & Transport Vendors ({propertyOwners.length})
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -941,13 +1091,17 @@ export default function SuperAdminControlCenter() {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#1a344d] text-xs font-mono">
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[#1a344d] text-xs font-mono">
                       <div className="p-2 rounded-xl bg-[#091724]">
-                        <span className="text-[10px] text-slate-400 block">Properties</span>
-                        <strong className="text-white">{owner.propertiesCount} Stays</strong>
+                        <span className="text-[9px] text-slate-400 block">Stays</span>
+                        <strong className="text-white">{owner.propertiesCount} Listed</strong>
                       </div>
                       <div className="p-2 rounded-xl bg-[#091724]">
-                        <span className="text-[10px] text-slate-400 block">Total Revenue</span>
+                        <span className="text-[9px] text-slate-400 block">Vehicles</span>
+                        <strong className="text-cyan-300">{owner.vehiclesCount} Cabs</strong>
+                      </div>
+                      <div className="p-2 rounded-xl bg-[#091724]">
+                        <span className="text-[9px] text-slate-400 block">Revenue</span>
                         <strong className="text-emerald-400">₹{owner.totalEarnings.toLocaleString()}</strong>
                       </div>
                     </div>
@@ -958,46 +1112,78 @@ export default function SuperAdminControlCenter() {
           )}
 
           {/* ═════════════════════════════════════════════════════ */}
-          {/* 4. 📋 OWNER REQUESTS TAB                              */}
+          {/* 4. 📋 OWNER REQUESTS TAB (STAYS & VEHICLES)           */}
           {/* ═════════════════════════════════════════════════════ */}
           {activeTab === 'owner_requests' && (
             <div className="space-y-4 animate-in fade-in">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-bold text-white font-editorial">
-                    Pending Property Listing Requests ({ownerRequests.length})
+                    Pending Owner Listing Requests ({totalPendingRequests})
                   </h3>
                   <p className="text-xs text-slate-400 font-mono">
                     Host onboarding submissions requiring Super Admin review & publishing approval
                   </p>
                 </div>
+
+                {/* Sub-filters for Requests */}
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#091724] border border-[#1a344d]">
+                  <button
+                    type="button"
+                    onClick={() => setRequestsFilter('all')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer ${
+                      requestsFilter === 'all' ? 'bg-cyan-500 text-black font-extrabold' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    All ({totalPendingRequests})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRequestsFilter('stays')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer ${
+                      requestsFilter === 'stays' ? 'bg-cyan-500 text-black font-extrabold' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🏡 Stays ({pendingProperties.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRequestsFilter('vehicles')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer ${
+                      requestsFilter === 'vehicles' ? 'bg-cyan-500 text-black font-extrabold' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    🚖 Vehicles ({pendingVehicles.length})
+                  </button>
+                </div>
               </div>
 
-              {ownerRequests.length === 0 ? (
+              {totalPendingRequests === 0 ? (
                 <div className="p-12 text-center text-slate-400 rounded-2xl bg-[#0c1e2e] border border-dashed border-[#1a344d] font-mono text-xs">
-                  ✨ No pending owner requests. All submitted properties have been reviewed!
+                  ✨ No pending owner requests. All submitted stays and vehicles have been reviewed!
                 </div>
               ) : (
                 <div className="grid gap-4">
-                  {ownerRequests.map(req => (
+                  {/* Property Requests */}
+                  {(requestsFilter === 'all' || requestsFilter === 'stays') && pendingProperties.map(req => (
                     <div key={req._id || req.id} className="p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold">
-                            ⏳ Pending Approval
+                            🏡 Stay Pending Approval
                           </span>
-                          <span className="text-xs font-mono text-slate-400">{req.type}</span>
+                          <span className="text-xs font-mono text-cyan-300">{req.type || 'Resort'}</span>
                         </div>
                         <h4 className="text-sm font-bold text-white font-editorial mt-1">{req.title}</h4>
                         <p className="text-xs text-slate-400 font-mono">
                           {req.location}, {req.district} · ₹{Number(req.pricePerNight || req.price || 0).toLocaleString()}/night
                         </p>
                         <p className="text-[10px] text-cyan-400 font-mono mt-1">
-                          Submitted by: {req.ownerName || 'Host'} ({req.ownerEmail || 'host@exploretamilnadu.com'})
+                          Host: {req.ownerName || 'Host'} ({req.ownerEmail || 'host@exploretamilnadu.com'})
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
                           type="button"
                           onClick={() => handleUpdatePropertyStatus(req._id || req.id, 'Approved')}
@@ -1015,77 +1201,201 @@ export default function SuperAdminControlCenter() {
                       </div>
                     </div>
                   ))}
+
+                  {/* Vehicle Requests */}
+                  {(requestsFilter === 'all' || requestsFilter === 'vehicles') && pendingVehicles.map(req => (
+                    <div key={req._id || req.id} className="p-5 rounded-2xl bg-[#0c1e2e] border border-[#1a344d] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-mono text-[10px] font-bold">
+                            🚖 Vehicle Pending Approval
+                          </span>
+                          <span className="text-xs font-mono text-cyan-300">{req.type || 'Cab / Fleet'}</span>
+                        </div>
+                        <h4 className="text-sm font-bold text-white font-editorial mt-1">{req.title}</h4>
+                        <p className="text-xs text-slate-400 font-mono">
+                          Reg No: <strong className="text-white">{req.regNo}</strong> · ₹{Number(req.pricePerDay || req.price || 0).toLocaleString()}/day ({req.district || 'Tamil Nadu'})
+                        </p>
+                        <p className="text-[10px] text-cyan-400 font-mono mt-1">
+                          Fleet Provider: {req.providerName || req.ownerName || 'Transport Vendor'} ({req.providerEmail || req.ownerEmail || 'vendor@exploretamilnadu.com'})
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateVehicleStatus(req._id || req.id, 'Approved')}
+                          className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs font-mono flex items-center gap-1 cursor-pointer"
+                        >
+                          <Check size={14} /> Approve & Publish
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateVehicleStatus(req._id || req.id, 'Rejected')}
+                          className="px-3 py-2 rounded-xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 font-bold text-xs font-mono cursor-pointer"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           )}
 
           {/* ═════════════════════════════════════════════════════ */}
-          {/* 5. 🏬 PROPERTIES TAB                                  */}
+          {/* 5. 🏬 PROPERTIES & VEHICLES TAB                       */}
           {/* ═════════════════════════════════════════════════════ */}
           {activeTab === 'properties' && (
             <div className="space-y-4 animate-in fade-in">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-bold text-white font-editorial">
-                    Stays, Resorts & Villas ({propertiesList.length})
+                    Inventory Directory ({propertiesList.length} Stays · {vehiclesList.length} Vehicles)
                   </h3>
-                  <p className="text-xs text-slate-400 font-mono">Manage live property catalog</p>
+                  <p className="text-xs text-slate-400 font-mono">Manage published stays, resorts, and vehicle transport fleets</p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowAddPropertyModal(true)}
-                  className="px-4 py-2 rounded-xl bg-cyan-500 text-black text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-cyan-400 transition-all cursor-pointer shadow-md"
-                >
-                  <Plus size={14} /> Add New Property
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {propertiesList.map(prop => (
-                  <div key={prop._id || prop.id} className="rounded-2xl bg-[#0c1e2e] border border-[#1a344d] overflow-hidden space-y-3 p-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-mono text-[9px] font-bold">
-                          {prop.type || 'Resort'}
-                        </span>
-                        <h4 className="font-bold text-white font-editorial text-sm mt-1">{prop.title}</h4>
-                        <p className="text-xs text-slate-400 font-mono">{prop.location}, {prop.district}</p>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold ${
-                        prop.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
-                      }`}>
-                        {prop.status || 'Active'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-[#1a344d] text-xs font-mono">
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Rate / Night</span>
-                        <strong className="text-emerald-400 font-bold">₹{Number(prop.pricePerNight || prop.price || 0).toLocaleString()}</strong>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleUpdatePropertyStatus(prop._id || prop.id, prop.status === 'Approved' ? 'Disabled' : 'Approved')}
-                          className="px-2.5 py-1 rounded-lg bg-[#132c42] hover:bg-[#1a3b59] text-[11px] text-slate-300 cursor-pointer"
-                        >
-                          {prop.status === 'Approved' ? 'Disable' : 'Activate'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteProperty(prop._id || prop.id)}
-                          className="p-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 cursor-pointer"
-                          title="Delete Property"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
+                <div className="flex items-center gap-2">
+                  {/* Sub-view toggle */}
+                  <div className="flex items-center p-1 rounded-xl bg-[#091724] border border-[#1a344d]">
+                    <button
+                      type="button"
+                      onClick={() => setPropertiesViewTab('stays')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer ${
+                        propertiesViewTab === 'stays' ? 'bg-cyan-500 text-black font-extrabold' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      🏡 Stays ({propertiesList.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPropertiesViewTab('vehicles')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer ${
+                        propertiesViewTab === 'vehicles' ? 'bg-cyan-500 text-black font-extrabold' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      🚖 Vehicles ({vehiclesList.length})
+                    </button>
                   </div>
-                ))}
+
+                  {propertiesViewTab === 'stays' ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddPropertyModal(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-cyan-500 text-black text-xs font-bold flex items-center gap-1.5 hover:bg-cyan-400 transition-all cursor-pointer shadow-md"
+                    >
+                      <Plus size={14} /> Add Stay
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddVehicleModal(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5 hover:bg-blue-500 transition-all cursor-pointer shadow-md"
+                    >
+                      <Plus size={14} /> Add Vehicle
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* View A: Stays & Resorts */}
+              {propertiesViewTab === 'stays' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {propertiesList.map(prop => (
+                    <div key={prop._id || prop.id} className="rounded-2xl bg-[#0c1e2e] border border-[#1a344d] overflow-hidden space-y-3 p-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-mono text-[9px] font-bold">
+                            {prop.type || 'Resort'}
+                          </span>
+                          <h4 className="font-bold text-white font-editorial text-sm mt-1">{prop.title}</h4>
+                          <p className="text-xs text-slate-400 font-mono">{prop.location}, {prop.district}</p>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold ${
+                          prop.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                        }`}>
+                          {prop.status || 'Active'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-[#1a344d] text-xs font-mono">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Rate / Night</span>
+                          <strong className="text-emerald-400 font-bold">₹{Number(prop.pricePerNight || prop.price || 0).toLocaleString()}</strong>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdatePropertyStatus(prop._id || prop.id, prop.status === 'Approved' ? 'Disabled' : 'Approved')}
+                            className="px-2.5 py-1 rounded-lg bg-[#132c42] hover:bg-[#1a3b59] text-[11px] text-slate-300 cursor-pointer"
+                          >
+                            {prop.status === 'Approved' ? 'Disable' : 'Activate'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProperty(prop._id || prop.id)}
+                            className="p-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 cursor-pointer"
+                            title="Delete Property"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* View B: Vehicles & Fleet */}
+              {propertiesViewTab === 'vehicles' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {vehiclesList.map(veh => (
+                    <div key={veh._id || veh.id} className="rounded-2xl bg-[#0c1e2e] border border-[#1a344d] overflow-hidden space-y-3 p-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-mono text-[9px] font-bold">
+                            {veh.type || 'Cab'}
+                          </span>
+                          <h4 className="font-bold text-white font-editorial text-sm mt-1">{veh.title}</h4>
+                          <p className="text-xs text-cyan-300 font-mono font-bold">{veh.regNo}</p>
+                          <p className="text-[10px] text-slate-400 font-mono">{veh.district || 'Tamil Nadu'}</p>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold ${
+                          veh.status === 'Approved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                        }`}>
+                          {veh.status || 'Active'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-[#1a344d] text-xs font-mono">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block">Daily Rate</span>
+                          <strong className="text-emerald-400 font-bold">₹{Number(veh.pricePerDay || veh.price || 0).toLocaleString()}/day</strong>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateVehicleStatus(veh._id || veh.id, veh.status === 'Approved' ? 'Disabled' : 'Approved')}
+                            className="px-2.5 py-1 rounded-lg bg-[#132c42] hover:bg-[#1a3b59] text-[11px] text-slate-300 cursor-pointer"
+                          >
+                            {veh.status === 'Approved' ? 'Disable' : 'Activate'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteVehicle(veh._id || veh.id)}
+                            className="p-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 cursor-pointer"
+                            title="Delete Vehicle"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1412,15 +1722,17 @@ export default function SuperAdminControlCenter() {
         </main>
       </div>
 
-      {/* 🌟 ADD PROPERTY MODAL */}
+      {/* 🌟 ADD STAY / PROPERTY MODAL */}
       {showAddPropertyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[#0c1e2e] rounded-3xl p-6 max-w-lg w-full border border-[#1a344d] shadow-2xl space-y-4">
+          <div className="bg-[#0c1e2e] rounded-3xl p-6 max-w-2xl w-full border border-[#1a344d] shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#1a344d] pb-3">
-              <h3 className="text-base font-bold text-white font-editorial">Add New Stay / Resort</h3>
+              <h3 className="text-base font-bold text-white font-editorial flex items-center gap-2">
+                <span>🏡</span> Add New Stay / Resort (Super Admin Master)
+              </h3>
               <button onClick={() => setShowAddPropertyModal(false)} className="text-slate-400 hover:text-white cursor-pointer"><X size={18} /></button>
             </div>
-            <form onSubmit={handleCreateProperty} className="space-y-3 text-xs font-mono">
+            <form onSubmit={handleCreateProperty} className="space-y-4 text-xs font-mono">
               <div>
                 <label className="block text-slate-300 mb-1">Property Title</label>
                 <input type="text" placeholder="E.g. Ooty Valley Heritage Villa" value={propTitle} onChange={e => setPropTitle(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white" required />
@@ -1429,12 +1741,9 @@ export default function SuperAdminControlCenter() {
                 <div>
                   <label className="block text-slate-300 mb-1">District</label>
                   <select value={propDistrict} onChange={e => setPropDistrict(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white">
-                    <option value="Nilgiris (Ooty)">Nilgiris (Ooty)</option>
-                    <option value="Dindigul (Kodaikanal)">Dindigul (Kodaikanal)</option>
-                    <option value="Chennai">Chennai</option>
-                    <option value="Madurai">Madurai</option>
-                    <option value="Coimbatore">Coimbatore</option>
-                    <option value="Kanyakumari">Kanyakumari</option>
+                    {TAMIL_NADU_DISTRICTS.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -1443,9 +1752,30 @@ export default function SuperAdminControlCenter() {
                     <option value="Resort">Resort</option>
                     <option value="Homestay">Homestay</option>
                     <option value="Villa">Villa</option>
+                    <option value="Lakeview Resort">Lakeview Resort</option>
+                    <option value="Mountain View Resort">Mountain View Resort</option>
+                    <option value="Heritage Cottage">Heritage Cottage</option>
                     <option value="Hotel">Hotel</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Interactive Location Map Pin Picker */}
+              <div className="p-4 rounded-2xl bg-[#091724] border border-[#1a344d] space-y-3">
+                <InteractiveLocationMapPicker
+                  coordinates={propCoordinates}
+                  locationAddress={propLocation}
+                  district={propDistrict}
+                  onChangeCoordinates={setPropCoordinates}
+                  onChangeAddress={setPropLocation}
+                  onChangeDistrict={setPropDistrict}
+                  onNotify={triggerToast}
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 mb-1">Detailed Physical Address / Location</label>
+                <input type="text" placeholder="E.g. Upper Bazaar Road, Near Ooty Botanical Garden" value={propLocation} onChange={e => setPropLocation(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white" />
               </div>
               <div>
                 <label className="block text-slate-300 mb-1">Price per Night (₹)</label>
@@ -1453,7 +1783,61 @@ export default function SuperAdminControlCenter() {
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setShowAddPropertyModal(false)} className="px-4 py-2 rounded-xl bg-[#132c42] text-slate-300 cursor-pointer">Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded-xl bg-cyan-500 text-black font-bold cursor-pointer">Publish Property</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-cyan-500 text-black font-bold cursor-pointer">Publish Stay</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🌟 ADD VEHICLE / CAB MODAL */}
+      {showAddVehicleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-[#0c1e2e] rounded-3xl p-6 max-w-lg w-full border border-[#1a344d] shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#1a344d] pb-3">
+              <h3 className="text-base font-bold text-white font-editorial flex items-center gap-2">
+                <span>🚖</span> Add New Vehicle / Cab
+              </h3>
+              <button onClick={() => setShowAddVehicleModal(false)} className="text-slate-400 hover:text-white cursor-pointer"><X size={18} /></button>
+            </div>
+            <form onSubmit={handleCreateVehicle} className="space-y-3 text-xs font-mono">
+              <div>
+                <label className="block text-slate-300 mb-1">Vehicle Title</label>
+                <input type="text" placeholder="E.g. Innova Crysta Luxury Cab" value={vehTitle} onChange={e => setVehTitle(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white" required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 mb-1">Registration Number</label>
+                  <input type="text" placeholder="TN-43-ET-2026" value={vehRegNo} onChange={e => setVehRegNo(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white font-bold" required />
+                </div>
+                <div>
+                  <label className="block text-slate-300 mb-1">Vehicle Category</label>
+                  <select value={vehType} onChange={e => setVehType(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white">
+                    <option value="Innova Crysta (7 Seater)">Innova Crysta (7 Seater)</option>
+                    <option value="Tempo Traveller (14 Seater)">Tempo Traveller (14 Seater)</option>
+                    <option value="Swift Dzire Sedan (4 Seater)">Swift Dzire Sedan (4 Seater)</option>
+                    <option value="Ertiga (6 Seater)">Ertiga (6 Seater)</option>
+                    <option value="Royal Enfield (Bike Rental)">Royal Enfield (Bike Rental)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 mb-1">District / Circuit</label>
+                  <select value={vehDistrict} onChange={e => setVehDistrict(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white">
+                    {TAMIL_NADU_DISTRICTS.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-300 mb-1">Daily Rate (₹/day)</label>
+                  <input type="number" placeholder="3500" value={vehPrice} onChange={e => setVehPrice(e.target.value)} className="w-full p-2.5 rounded-xl bg-[#091724] border border-[#1a344d] text-white" required />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowAddVehicleModal(false)} className="px-4 py-2 rounded-xl bg-[#132c42] text-slate-300 cursor-pointer">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-cyan-500 text-black font-bold cursor-pointer">Publish Vehicle</button>
               </div>
             </form>
           </div>

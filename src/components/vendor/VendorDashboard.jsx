@@ -46,6 +46,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { BACKEND_API } from '../../config/api';
+import InteractiveLocationMapPicker from '../common/InteractiveLocationMapPicker';
 
 const TAMIL_NADU_LANDMARKS = [
   { name: '🌲 Kodai Lake & Coaker Walk', district: 'Dindigul (Kodaikanal)', address: 'Coaker Walk, Kodaikanal, Dindigul', lat: 10.2381, lng: 77.4892 },
@@ -145,13 +146,16 @@ export default function VendorDashboard() {
   // 📍 Location Confirmation & Search State
   const [isLocationConfirmed, setIsLocationConfirmed] = useState(true);
   const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [googleMapsInput, setGoogleMapsInput] = useState('');
   const [isSearchingMap, setIsSearchingMap] = useState(false);
 
   // Modals for Adding Vehicle
   const [showAddVehModal, setShowAddVehModal] = useState(false);
   const [vehTitle, setVehTitle] = useState('');
+  const [vehType, setVehType] = useState('Innova Crysta (7 Seater)');
   const [vehRegNo, setVehRegNo] = useState('');
-  const [vehPrice, setVehPrice] = useState('');
+  const [vehPrice, setVehPrice] = useState('3500');
+  const [vehDistrict, setVehDistrict] = useState('Nilgiris (Ooty)');
 
   // Payouts Log
   const [payoutsList, setPayoutsList] = useState([]);
@@ -307,12 +311,46 @@ export default function VendorDashboard() {
   };
 
   // Google Maps Location Picker & Confirmation Handlers
+  // Google Maps Location Picker, Link Parser & Confirmation Handlers
   const handleSelectLandmark = (lm) => {
     setPropLocation(lm.address);
     setPropDistrict(lm.district);
     setPropCoordinates({ lat: lm.lat, lng: lm.lng });
     setIsLocationConfirmed(true);
-    triggerSuccess(`📍 Location Selected & Confirmed: ${lm.name}!`);
+    triggerSuccess(`📍 Location Selected: ${lm.name}!`);
+  };
+
+  const handleParseGoogleMapsInput = (input) => {
+    if (!input) return;
+    const str = input.trim();
+
+    // 1. Check if direct coordinates like "10.2381, 77.4892" or "10.2381 77.4892"
+    const coordMatch = str.match(/(-?\d+\.\d+)[\s,]+(-?\d+\.\d+)/);
+    if (coordMatch) {
+      const lat = Number(coordMatch[1]);
+      const lng = Number(coordMatch[2]);
+      setPropCoordinates({ lat, lng });
+      setIsLocationConfirmed(true);
+      triggerSuccess(`📍 GPS Coordinates Applied: ${lat}° N, ${lng}° E`);
+      return;
+    }
+
+    // 2. Check if Google Maps URL like ?q=10.2381,77.4892 or @10.2381,77.4892
+    const urlMatch = str.match(/(@|\?q=)(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (urlMatch) {
+      const lat = Number(urlMatch[2]);
+      const lng = Number(urlMatch[3]);
+      setPropCoordinates({ lat, lng });
+      setIsLocationConfirmed(true);
+      triggerSuccess(`📍 Pinned from Google Maps URL: ${lat}° N, ${lng}° E`);
+      return;
+    }
+
+    // 3. Otherwise treat as address/landmark search
+    setMapSearchQuery(str);
+    setPropLocation(str);
+    setIsLocationConfirmed(true);
+    triggerSuccess(`📍 Location set to "${str}"!`);
   };
 
   const handleSearchAddressOnMap = async (e) => {
@@ -330,7 +368,7 @@ export default function VendorDashboard() {
           setPropCoordinates({ lat, lng });
           setPropLocation(cleanAddr);
           setIsLocationConfirmed(true);
-          triggerSuccess(`📍 Location Found & Confirmed on Map: ${cleanAddr}!`);
+          triggerSuccess(`📍 Location Found: ${cleanAddr}!`);
         } else {
           setPropLocation(mapSearchQuery + ', Tamil Nadu');
           setIsLocationConfirmed(true);
@@ -351,7 +389,7 @@ export default function VendorDashboard() {
       setPropLocation('Coaker Walk, Kodaikanal');
     }
     setIsLocationConfirmed(true);
-    triggerSuccess(`✅ Location Confirmed & Locked for Navigation: ${propCoordinates.lat}° N, ${propCoordinates.lng}° E!`);
+    triggerSuccess(`✅ Location Locked for Stay: ${propCoordinates.lat}° N, ${propCoordinates.lng}° E!`);
   };
 
   const handleDetectGPSLocation = () => {
@@ -368,7 +406,7 @@ export default function VendorDashboard() {
         setPropCoordinates({ lat, lng });
         setPropLocation(`GPS Pin (${lat}, ${lng}), Tamil Nadu`);
         setIsLocationConfirmed(true);
-        triggerSuccess(`📍 GPS Location Captured & Confirmed: ${lat}, ${lng}`);
+        triggerSuccess(`📍 GPS Location Captured: ${lat}, ${lng}`);
       },
       (err) => {
         setIsLocating(false);
@@ -431,7 +469,7 @@ export default function VendorDashboard() {
     triggerSuccess(`Bank account ${newBank.bankName} added successfully!`);
   };
 
-  // Add Property with Minimum 2 Photos and Google Maps Coordinates & Confirmation
+  // Add Property with Minimum 2 Photos and Google Maps Coordinates
   const handleAddPropertySubmit = async (e) => {
     e.preventDefault();
     if (!propTitle || !propPrice) return;
@@ -441,29 +479,26 @@ export default function VendorDashboard() {
       return;
     }
 
-    if (!isLocationConfirmed) {
-      setPropError('⚠️ Please click "Confirm Location on Map" to verify the GPS coordinates before submitting.');
-      return;
-    }
-
     const rulesArray = propRules
       .split('\n')
       .map(r => r.trim())
       .filter(r => r.length > 0);
+
+    const googleMapsUrl = `https://www.google.com/maps?q=${propCoordinates.lat},${propCoordinates.lng}`;
 
     const newProp = {
       id: 'p-' + Date.now(),
       title: propTitle,
       type: propType,
       district: propDistrict,
-      location: propLocation || 'Coaker Walk, Kodaikanal',
+      location: propLocation || `${propDistrict}, Tamil Nadu`,
       price: Number(propPrice),
       pricePerNight: Number(propPrice),
       images: propImages,
       coordinates: propCoordinates,
       googleMapsUrl,
       isLocationConfirmed: true,
-      description: propDesc || `${propType} in ${propLocation}.`,
+      description: propDesc || `${propType} in ${propLocation || propDistrict}.`,
       ownerRules: rulesArray,
       ownerEmail: currentUser?.email || 'vendor@exploretamilnadu.com',
       ownerName: currentUser?.name || 'Property Host',
@@ -476,7 +511,6 @@ export default function VendorDashboard() {
     setPropTitle('');
     setPropPrice('3800');
     setPropDesc('');
-    setPropRules('Check-In from 12:00 PM | Check-Out until 11:00 AM\nValid Government Photo ID required for all adult guests\nStrictly non-smoking inside bedrooms (designated smoking areas provided)\nPets allowed on prior host approval\nQuiet hours after 10:00 PM for peaceful mountain ambiance');
     setPropImages([]);
     setPropError('');
 
@@ -490,27 +524,45 @@ export default function VendorDashboard() {
       console.warn('Backend property add error:', err);
     }
 
-    triggerSuccess(`Property "${propTitle}" with ${propImages.length} photos and confirmed Google Maps location submitted for Super Admin approval!`);
+    triggerSuccess(`Property "${propTitle}" with ${propImages.length} photos and Google Maps location submitted for Super Admin approval!`);
   };
 
-  const handleAddVehicleSubmit = (e) => {
+  // Add Vehicle with Real-Time Backend API Persistence
+  const handleAddVehicleSubmit = async (e) => {
     e.preventDefault();
     if (!vehTitle || !vehRegNo) return;
 
     const newVeh = {
       id: 'v-' + Date.now(),
       title: vehTitle,
-      regNo: vehRegNo.toUpperCase(),
+      type: vehType,
+      regNo: vehRegNo.toUpperCase().trim(),
+      district: vehDistrict,
       price: Number(vehPrice || 3500),
-      status: 'Pending Approval'
+      pricePerDay: Number(vehPrice || 3500),
+      status: 'Pending Approval',
+      providerEmail: currentUser?.email || vendorEmail || 'vendor@exploretamilnadu.com',
+      providerName: currentUser?.name || vendorName || 'Vehicle Host',
+      createdAt: new Date().toISOString()
     };
 
     setMyVehiclesList([newVeh, ...myVehiclesList]);
     setShowAddVehModal(false);
     setVehTitle('');
     setVehRegNo('');
-    setVehPrice('');
-    triggerSuccess(`Vehicle "${vehTitle}" submitted for Super Admin approval!`);
+    setVehPrice('3500');
+
+    try {
+      await apiFetch('/api/vehicles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newVeh)
+      });
+      triggerSuccess(`Vehicle "${vehTitle}" (${newVeh.regNo}) submitted for Super Admin approval!`);
+    } catch (err) {
+      console.warn('Backend vehicle add error:', err);
+      triggerSuccess(`Vehicle "${vehTitle}" submitted for approval!`);
+    }
   };
 
   const handleCreateTicketSubmit = async (e) => {
@@ -811,219 +863,63 @@ export default function VendorDashboard() {
                     )}
                   </div>
 
-                  {/* 🗺️ SECTION 2: GOOGLE MAPS LOCATION PICKER WITH EXPLICIT CONFIRMATION */}
+                  {/* 🗺️ SECTION 2: INTERACTIVE MAP PIN SELECTOR & VERIFICATION */}
                   <div className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <InteractiveLocationMapPicker
+                      coordinates={propCoordinates}
+                      locationAddress={propLocation}
+                      district={propDistrict}
+                      onChangeCoordinates={setPropCoordinates}
+                      onChangeAddress={setPropLocation}
+                      onChangeDistrict={setPropDistrict}
+                      onNotify={triggerSuccess}
+                    />
+
+                    {/* Detailed Physical Address & District Inputs */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <MapPin size={16} className="text-emerald-600" />
-                          <label className="text-xs font-extrabold text-slate-900 uppercase tracking-wide">
-                            Google Maps Location & Verification
-                          </label>
-                        </div>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Pinpoint your exact stay location and click <b>"Confirm Location on Map"</b> for tourist GPS tracking.
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button 
-                          type="button" 
-                          onClick={handleDetectGPSLocation} 
-                          disabled={isLocating}
-                          className="px-3.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold flex items-center gap-1.5 transition-all"
-                        >
-                          <Navigation size={13} /> {isLocating ? 'Detecting GPS...' : '📍 Locate Current GPS'}
-                        </button>
-                        <a 
-                          href={`https://www.google.com/maps?q=${propCoordinates.lat},${propCoordinates.lng}`}
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="px-3.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-1 transition-all"
-                        >
-                          <ExternalLink size={13} /> Open in Google Maps
-                        </a>
-                      </div>
-                    </div>
-
-                    {/* Instant Map Address Search Bar */}
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input 
-                          type="text" 
-                          placeholder="Search landmark or area (e.g. Kodai Lake, Ooty Club, Madurai Meenakshi, Yercaud)..."
-                          value={mapSearchQuery}
-                          onChange={e => setMapSearchQuery(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSearchAddressOnMap(); } }}
-                          className="glass-input text-xs pl-9"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleSearchAddressOnMap}
-                        disabled={isSearchingMap}
-                        className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
-                      >
-                        {isSearchingMap ? 'Searching...' : 'Search & Pin'}
-                      </button>
-                    </div>
-
-                    {/* Location Address & District Fields */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Detailed Physical Address</label>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Detailed Stay Address / Landmark
+                        </label>
                         <input 
                           type="text" 
                           placeholder="E.g. Coaker Walk Road, Near Kodai Lake" 
                           value={propLocation} 
-                          onChange={e => { setPropLocation(e.target.value); setIsLocationConfirmed(false); }} 
-                          className="glass-input text-xs" 
+                          onChange={e => setPropLocation(e.target.value)} 
+                          className="glass-input text-xs font-bold" 
                           required 
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Tourist District</label>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">
+                          Tamil Nadu District
+                        </label>
                         <select 
                           value={propDistrict} 
-                          onChange={e => { setPropDistrict(e.target.value); setIsLocationConfirmed(false); }} 
+                          onChange={e => setPropDistrict(e.target.value)} 
                           className="glass-input text-xs font-bold"
                         >
                           <option value="Dindigul (Kodaikanal)">Dindigul (Kodaikanal)</option>
                           <option value="Nilgiris (Ooty)">Nilgiris (Ooty & Coonoor)</option>
                           <option value="Salem (Yercaud)">Salem (Yercaud)</option>
-                          <option value="Madurai">Madurai</option>
-                          <option value="Ramanathapuram (Rameshwaram)">Ramanathapuram (Rameshwaram)</option>
+                          <option value="Coimbatore (Valparai)">Coimbatore (Valparai & Pollachi)</option>
+                          <option value="Theni (Meghamalai)">Theni (Meghamalai & Suruli)</option>
+                          <option value="Namakkal (Kolli Hills)">Namakkal (Kolli Hills)</option>
+                          <option value="Tirupathur (Yelagiri Hills)">Tirupathur (Yelagiri Hills)</option>
+                          <option value="Ramanathapuram (Rameshwaram)">Ramanathapuram (Rameshwaram & Dhanushkodi)</option>
                           <option value="Kanyakumari">Kanyakumari</option>
-                          <option value="Chengalpattu (Mahabalipuram)">Chengalpattu (Mahabalipuram)</option>
-                          <option value="Coimbatore (Valparai)">Coimbatore (Valparai)</option>
-                          <option value="Thanjavur">Thanjavur</option>
-                          <option value="Dharmapuri (Hogenakkal)">Dharmapuri (Hogenakkal)</option>
-                          <option value="Pondicherry / Chennai Coast">Pondicherry / Chennai ECR</option>
+                          <option value="Madurai">Madurai</option>
+                          <option value="Chengalpattu (Mahabalipuram)">Chengalpattu (Mahabalipuram & ECR)</option>
+                          <option value="Chennai">Chennai</option>
+                          <option value="Thanjavur">Thanjavur & Kumbakonam</option>
+                          <option value="Tirunelveli (Courtallam)">Tirunelveli & Courtallam</option>
+                          <option value="Tiruvannamalai">Tiruvannamalai</option>
+                          <option value="Dharmapuri (Hogenakkal)">Dharmapuri (Hogenakkal Falls)</option>
+                          <option value="Cuddalore (Chidambaram)">Cuddalore (Chidambaram & Pichavaram)</option>
+                          <option value="Sivagangai (Chettinad)">Sivagangai (Chettinad Heritage)</option>
+                          <option value="Kanchipuram">Kanchipuram</option>
+                          <option value="Tiruchirappalli">Tiruchirappalli</option>
                         </select>
-                      </div>
-                    </div>
-
-                    {/* Quick Tamil Nadu Tourist Landmark Presets */}
-                    <div>
-                      <span className="text-[10px] font-mono font-bold text-slate-500 uppercase block mb-1.5">
-                        ⚡ 1-Click Tamil Nadu Destination Landmarks:
-                      </span>
-                      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-2 rounded-xl bg-slate-50 border border-slate-200">
-                        {TAMIL_NADU_LANDMARKS.map((lm, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => handleSelectLandmark(lm)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                              propCoordinates.lat === lm.lat && propCoordinates.lng === lm.lng
-                                ? 'bg-blue-600 text-white border-blue-600 shadow-sm scale-105'
-                                : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300 shadow-sm'
-                            }`}
-                          >
-                            {lm.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Coordinates Readout */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                      <div>
-                        <label className="block text-[11px] font-mono font-bold text-slate-600 mb-1">Latitude</label>
-                        <input 
-                          type="number" 
-                          step="0.0001" 
-                          value={propCoordinates.lat} 
-                          onChange={e => { setPropCoordinates({ ...propCoordinates, lat: Number(e.target.value) }); setIsLocationConfirmed(false); }} 
-                          className="glass-input text-xs font-mono font-bold" 
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-mono font-bold text-slate-600 mb-1">Longitude</label>
-                        <input 
-                          type="number" 
-                          step="0.0001" 
-                          value={propCoordinates.lng} 
-                          onChange={e => { setPropCoordinates({ ...propCoordinates, lng: Number(e.target.value) }); setIsLocationConfirmed(false); }} 
-                          className="glass-input text-xs font-mono font-bold" 
-                        />
-                      </div>
-                      <div className="pt-4 font-mono text-[11px] text-slate-500">
-                        📍 Target Pin: <span className="font-bold text-emerald-700">{propCoordinates.lat}° N, {propCoordinates.lng}° E</span>
-                      </div>
-                    </div>
-
-                    {/* Interactive Embedded Google Map View with Pin Overlay */}
-                    <div className="relative w-full h-56 rounded-2xl overflow-hidden border-2 border-slate-200 shadow-inner group">
-                      <iframe
-                        title="Google Map Location Preview"
-                        width="100%"
-                        height="100%"
-                        frameBorder="0"
-                        scrolling="no"
-                        marginHeight="0"
-                        marginWidth="0"
-                        src={`https://maps.google.com/maps?q=${propCoordinates.lat},${propCoordinates.lng}&hl=en&z=14&output=embed`}
-                        className="w-full h-full pointer-events-auto"
-                      />
-
-                      {/* Map Visual Badge */}
-                      <div className="absolute top-2.5 left-2.5 px-3 py-1 rounded-full bg-black/75 backdrop-blur-md text-white text-[10px] font-mono font-bold flex items-center gap-1.5 shadow-md">
-                        <MapIcon size={12} className="text-amber-400" />
-                        <span>Live Google Maps View • {propCoordinates.lat}, {propCoordinates.lng}</span>
-                      </div>
-                    </div>
-
-                    {/* 📍 EXPLICIT LOCATION CONFIRMATION CARD */}
-                    <div className={`p-4 rounded-2xl border transition-all ${
-                      isLocationConfirmed 
-                        ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950 shadow-sm' 
-                        : 'bg-amber-50/90 border-amber-300 text-amber-950'
-                    }`}>
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm ${
-                            isLocationConfirmed ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white animate-pulse'
-                          }`}>
-                            {isLocationConfirmed ? '✓' : '📍'}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-extrabold text-xs">
-                                {isLocationConfirmed ? 'Location Confirmed & Locked for Navigation' : 'Location Pin Needs Confirmation'}
-                              </span>
-                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
-                                isLocationConfirmed ? 'bg-emerald-200 text-emerald-900 border border-emerald-400' : 'bg-amber-200 text-amber-900 border border-amber-400'
-                              }`}>
-                                {isLocationConfirmed ? '🟢 Verified & Confirmed' : '⚠️ Unconfirmed'}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-700 mt-0.5 font-medium">
-                              {propLocation} • <span className="font-mono font-bold text-slate-900">({propCoordinates.lat}° N, {propCoordinates.lng}° E)</span>
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                          {!isLocationConfirmed ? (
-                            <button
-                              type="button"
-                              onClick={handleConfirmLocation}
-                              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md flex items-center justify-center gap-2 transition-all"
-                            >
-                              <Check size={16} /> Confirm Location on Map
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => { setIsLocationConfirmed(false); triggerSuccess('You can now adjust the coordinates or choose another landmark.'); }}
-                              className="w-full sm:w-auto px-3.5 py-1.5 rounded-xl border border-emerald-400 bg-white hover:bg-emerald-100 text-emerald-900 text-xs font-bold transition-all"
-                            >
-                              Change Location Pin
-                            </button>
-                          )}
-                        </div>
                       </div>
                     </div>
                   </div>

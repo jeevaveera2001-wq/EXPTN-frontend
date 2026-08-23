@@ -3513,19 +3513,19 @@ router.get(
 
       const rawUsers = await User.find({})
         .select(
-          "_id name email phone avatar " +
+          "_id name email phone " +
           "role isVerified createdAt"
         )
         .sort({ _id: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean()
-        .maxTimeMS(5000);
+        .maxTimeMS(4000);
 
       const cleanedUsers = (rawUsers || []).map(u => ({
         ...u,
         id: u._id ? String(u._id) : u.id,
-        avatar: sanitizeImageUrl(u.avatar, DEFAULT_AVATAR_IMG)
+        avatar: DEFAULT_AVATAR_IMG
       }));
 
       return res.status(200).json(cleanedUsers);

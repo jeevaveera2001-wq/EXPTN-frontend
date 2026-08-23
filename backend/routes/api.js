@@ -5159,17 +5159,68 @@ router.delete(
   }
 );
 
+router.delete(
+  "/bookings/:id",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const id = req.params.id;
+      let deleted = null;
+
+      if (mongoose.isValidObjectId(id)) {
+        deleted =
+          await Booking.findByIdAndDelete(
+            id
+          ).maxTimeMS(5000);
+      }
+
+      if (!deleted) {
+        deleted =
+          await Booking.findOneAndDelete({
+            bookingId: id,
+          }).maxTimeMS(5000);
+      }
+
+      if (!deleted) {
+        return res.status(404).json({
+          success: false,
+          message: "Booking not found.",
+        });
+      }
+
+      try {
+        broadcast(req, "booking_deleted", {
+          id,
+        });
+        broadcast(req, "stats_updated", {});
+      } catch (error) {
+        console.warn(
+          "Broadcast failed:",
+          error.message
+        );
+      }
+
       return res.status(200).json({
         success: true,
+        message:
+          "Booking removed successfully.",
       });
     } catch (error) {
       return res.status(500).json({
+        success: false,
         message:
-          "Unable to delete booking.",
+          "Unable to delete booking: " +
+          error.message,
       });
     }
   }
 );
+
+// Truncate all bookings (live clear)
+const clearAllBookingsHandler = async (
+  req,
+  res
+) => { 
 
 // Truncate all bookings (live clear)
 const clearAllBookingsHandler = async (req, res) => {
@@ -5191,7 +5242,7 @@ const clearAllBookingsHandler = async (req, res) => {
       message: "Unable to clear bookings: " + error.message,
     });
   }
-};
+}; }
 
 router.delete("/bookings-clear-all", clearAllBookingsHandler);
 router.post("/bookings-clear-all", clearAllBookingsHandler);

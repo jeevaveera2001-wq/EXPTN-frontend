@@ -114,17 +114,7 @@ export default function SuperAdminControlCenter() {
   // Live Collection States
   const [usersList, setUsersList] = useState([]);
   const [staffList, setStaffList] = useState([]);
-  const getInitialAdminBookings = () => {
-    try {
-      const savedRaw = localStorage.getItem('etn_user_bookings') || localStorage.getItem('etn_saved_bookings');
-      if (savedRaw) {
-        const parsed = JSON.parse(savedRaw);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {}
-    return [];
-  };
-  const [bookingsList, setBookingsList] = useState(getInitialAdminBookings);
+  const [bookingsList, setBookingsList] = useState([]);
   const [propertiesList, setPropertiesList] = useState([]);
   const [vehiclesList, setVehiclesList] = useState([]);
   const [ticketsList, setTicketsList] = useState([]);
@@ -302,21 +292,7 @@ export default function SuperAdminControlCenter() {
         }
         if (bRes && bRes.ok) {
           const b = await bRes.json();
-          let serverBks = Array.isArray(b) ? b : [];
-          let localBks = [];
-          try {
-            const saved = localStorage.getItem('etn_user_bookings') || localStorage.getItem('etn_saved_bookings');
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              if (Array.isArray(parsed)) localBks = parsed;
-            }
-          } catch (e) {}
-          const mergedBks = new Map();
-          [...serverBks, ...localBks].forEach(bk => {
-            const id = bk.bookingId || bk._id || bk.id;
-            if (id && !mergedBks.has(id)) mergedBks.set(id, bk);
-          });
-          setBookingsList(Array.from(mergedBks.values()));
+          if (Array.isArray(b)) setBookingsList(b);
         }
         if (tRes && tRes.ok) {
           const t = await tRes.json();

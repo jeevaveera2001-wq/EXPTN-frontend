@@ -97,27 +97,8 @@ export default function UserDashboard() {
   const [openFaq, setOpenFaq] = useState(null);
 
   // Live Bookings (0ms Instant Load from Cache & LocalStorage)
-  const getInitialBookings = () => {
-    try {
-      const userEm = (currentUser?.email || '').toLowerCase().trim();
-      const userPh = (currentUser?.phone || '').replace(/\D/g, '');
-      const uNm = (currentUser?.name || '').toLowerCase().trim();
-      const savedRaw = localStorage.getItem('etn_user_bookings') || localStorage.getItem('etn_saved_bookings');
-      if (savedRaw) {
-        const parsed = JSON.parse(savedRaw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter(b => {
-            const cEm = (b.userEmail || b.customerEmail || b.email || '').toLowerCase().trim();
-            const cPh = (b.userPhone || b.customerPhone || b.phone || '').replace(/\D/g, '');
-            const cNm = (b.customerName || b.userName || '').toLowerCase().trim();
-            return !userEm || cEm === userEm || (userPh && cPh && cPh === userPh) || (uNm && cNm && cNm === uNm) || (!cEm && !userEm);
-          });
-        }
-      }
-    } catch (e) {}
-    return [];
-  };
-  const [bookingsList, setBookingsList] = useState(getInitialBookings);
+  // Live Bookings (Strictly live from MongoDB Atlas)
+  const [bookingsList, setBookingsList] = useState([]);
 
   // Live Saved Wishlist (Loads from localStorage and syncs with Explore page)
   const getInitialWishlist = () => {
@@ -157,55 +138,24 @@ export default function UserDashboard() {
       const userEm = (currentUser?.email || '').toLowerCase().trim();
       const userPh = (currentUser?.phone || '').replace(/\D/g, '');
 
-      // 1. Fetch from Backend API / MongoDB Atlas
-      let serverBookings = [];
-      try {
-        const res = await apiFetch('/api/bookings');
-        if (res && res.ok) {
-          const all = await res.json();
-          if (Array.isArray(all)) {
-            serverBookings = all.filter(b => {
-              const cEm = (b.userEmail || b.customerEmail || b.email || '').toLowerCase().trim();
-              const cPh = (b.userPhone || b.customerPhone || b.phone || '').replace(/\D/g, '');
-              const cNm = (b.customerName || b.userName || '').toLowerCase().trim();
-              const uNm = (currentUser?.name || '').toLowerCase().trim();
-              return (userEm && cEm === userEm) || 
-                     (userPh && cPh && cPh === userPh) || 
-                     (uNm && cNm && cNm === uNm) ||
-                     (!userEm && !cEm);
-            });
-          }
+      // 1. Fetch live from Backend API / MongoDB Atlas
+      const res = await apiFetch(`/api/bookings${userEm ? `?email=${encodeURIComponent(userEm)}` : ''}`);
+      if (res && res.ok) {
+        const all = await res.json();
+        if (Array.isArray(all)) {
+          const filtered = all.filter(b => {
+            const cEm = (b.userEmail || b.customerEmail || b.email || '').toLowerCase().trim();
+            const cPh = (b.userPhone || b.customerPhone || b.phone || '').replace(/\D/g, '');
+            const cNm = (b.customerName || b.userName || '').toLowerCase().trim();
+            const uNm = (currentUser?.name || '').toLowerCase().trim();
+            return (userEm && cEm === userEm) || 
+                   (userPh && cPh && cPh === userPh) || 
+                   (uNm && cNm && cNm === uNm) ||
+                   (!userEm && !cEm);
+          });
+          setBookingsList(filtered);
         }
-      } catch (e) {}
-
-      // 2. Fetch from Local Storage for 0ms Instant Client-Side Sync
-      let localBookings = [];
-      try {
-        const savedRaw = localStorage.getItem('etn_user_bookings') || localStorage.getItem('etn_saved_bookings');
-        if (savedRaw) {
-          const parsed = JSON.parse(savedRaw);
-          if (Array.isArray(parsed)) {
-            localBookings = parsed.filter(b => {
-              const cEm = (b.userEmail || b.customerEmail || b.email || '').toLowerCase().trim();
-              const cPh = (b.userPhone || b.customerPhone || b.phone || '').replace(/\D/g, '');
-              const cNm = (b.customerName || b.userName || '').toLowerCase().trim();
-              const uNm = (currentUser?.name || '').toLowerCase().trim();
-              return !userEm || cEm === userEm || (userPh && cPh && cPh === userPh) || (uNm && cNm && cNm === uNm);
-            });
-          }
-        }
-      } catch (e) {}
-
-      // Merge and deduplicate by bookingId / id / _id
-      const mergedMap = new Map();
-      [...serverBookings, ...localBookings].forEach(b => {
-        const id = b.bookingId || b._id || b.id;
-        if (id && !mergedMap.has(id)) {
-          mergedMap.set(id, b);
-        }
-      });
-
-      setBookingsList(Array.from(mergedMap.values()));
+      }
 
       // Fetch Support Tickets
       const tckRes = await apiFetch('/api/tickets');

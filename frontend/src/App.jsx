@@ -94,9 +94,22 @@ function AppContent() {
     };
   });
 
-  // Start background warm-up heartbeat once
+  // Start background warm-up heartbeat once & purge legacy stale booking cache
   useEffect(() => {
     startBackendWarmupHeartbeat();
+    try {
+      const isCleaned = localStorage.getItem('etn_bookings_truncated_v2');
+      if (!isCleaned) {
+        localStorage.removeItem('etn_user_bookings');
+        localStorage.removeItem('etn_saved_bookings');
+        Object.keys(localStorage).forEach(k => {
+          if (k.startsWith('etn_user_bookings_')) {
+            localStorage.removeItem(k);
+          }
+        });
+        localStorage.setItem('etn_bookings_truncated_v2', 'true');
+      }
+    } catch (e) {}
   }, []);
 
   // Real-time socket sync for maintenance mode

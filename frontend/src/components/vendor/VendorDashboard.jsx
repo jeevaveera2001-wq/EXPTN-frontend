@@ -198,18 +198,8 @@ export default function VendorDashboard() {
   // Payouts Log
   const [payoutsList, setPayoutsList] = useState([]);
 
-  // Bookings List (0ms Instant Load)
-  const getInitialVendorBookings = () => {
-    try {
-      const savedRaw = localStorage.getItem('etn_user_bookings') || localStorage.getItem('etn_saved_bookings');
-      if (savedRaw) {
-        const parsed = JSON.parse(savedRaw);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {}
-    return [];
-  };
-  const [vendorBookings, setVendorBookings] = useState(getInitialVendorBookings);
+  // Bookings List (Strictly live from MongoDB Atlas)
+  const [vendorBookings, setVendorBookings] = useState([]);
 
   // Support Tickets
   const [vendorTickets, setVendorTickets] = useState([]);
@@ -267,32 +257,14 @@ export default function VendorDashboard() {
         }
       }
 
-      // Fetch Bookings from Server & Local Storage
-      let serverBks = [];
+      // Fetch Bookings from Server
       const bksRes = await apiFetch('/api/bookings');
       if (bksRes && bksRes.ok) {
         const allBks = await bksRes.json();
         if (Array.isArray(allBks)) {
-          serverBks = allBks;
+          setVendorBookings(allBks);
         }
       }
-      let localBks = [];
-      try {
-        const savedRaw = localStorage.getItem('etn_user_bookings') || localStorage.getItem('etn_saved_bookings');
-        if (savedRaw) {
-          const parsed = JSON.parse(savedRaw);
-          if (Array.isArray(parsed)) localBks = parsed;
-        }
-      } catch (e) {}
-
-      const mergedBksMap = new Map();
-      [...serverBks, ...localBks].forEach(b => {
-        const id = b.bookingId || b._id || b.id;
-        if (id && !mergedBksMap.has(id)) {
-          mergedBksMap.set(id, b);
-        }
-      });
-      setVendorBookings(Array.from(mergedBksMap.values()));
 
       const tckRes = await apiFetch('/api/tickets');
       if (tckRes && tckRes.ok) {

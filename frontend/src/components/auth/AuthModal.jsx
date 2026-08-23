@@ -236,18 +236,29 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
 
     let targetEmail = (mode === 'register' ? registerEmail : loginIdentifier).trim();
     if (!targetEmail || !targetEmail.includes('@')) {
-      const userEntered = window.prompt('Please enter your Google Email address to continue with Google:');
-      if (userEntered && userEntered.includes('@')) {
-        targetEmail = userEntered.trim();
+      const savedGoogleEmail = localStorage.getItem('etn_last_google_email');
+      if (savedGoogleEmail && savedGoogleEmail.includes('@')) {
+        targetEmail = savedGoogleEmail;
         if (mode === 'register') setRegisterEmail(targetEmail);
         else setLoginIdentifier(targetEmail);
       } else {
-        setErrorMsg('Please enter your Google Email address in the field above to continue with Google.');
-        const inputEl = document.querySelector(mode === 'register' ? 'input[type="email"]' : 'input[type="text"]');
-        if (inputEl) inputEl.focus();
-        return;
+        const userEntered = window.prompt('Please enter your Google Email address to continue with Google:');
+        if (userEntered && userEntered.includes('@')) {
+          targetEmail = userEntered.trim();
+          if (mode === 'register') setRegisterEmail(targetEmail);
+          else setLoginIdentifier(targetEmail);
+        } else {
+          setErrorMsg('Please enter your Google Email address in the field above to continue with Google.');
+          const inputEl = document.querySelector(mode === 'register' ? 'input[type="email"]' : 'input[type="text"]');
+          if (inputEl) inputEl.focus();
+          return;
+        }
       }
     }
+
+    try {
+      localStorage.setItem('etn_last_google_email', targetEmail);
+    } catch (e) {}
 
     // Super Admin instant Google login
     if (targetEmail.toLowerCase() === 'exploretamizhagam@gmail.com') {
@@ -260,7 +271,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
       };
       setGoogleLoading(false);
       setSuccessMsg('Signed in with Google successfully!');
-      setTimeout(() => handleSuccessfulAuth(superAdminObj), 150);
+      handleSuccessfulAuth(superAdminObj);
       return;
     }
 
@@ -288,7 +299,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
 
       if (res.ok) {
         setSuccessMsg('Signed in with Google successfully!');
-        setTimeout(() => handleSuccessfulAuth(data), 200);
+        handleSuccessfulAuth(data);
       } else {
         setErrorMsg(data.message || 'Google authentication failed.');
       }

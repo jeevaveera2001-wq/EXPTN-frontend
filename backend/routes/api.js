@@ -5215,10 +5215,6 @@ router.delete(
 const clearAllBookingsHandler = async (
   req,
   res
-) => { 
-const clearAllBookingsHandler = async (
-  req,
-  res
 ) => {
   try {
     const result =
@@ -5258,7 +5254,7 @@ const clearAllBookingsHandler = async (
         error.message,
     });
   }
-}; // This ending is important
+};
 
 router.delete(
   "/bookings",
@@ -5290,7 +5286,5 @@ router.use(
       });
   }
 );
-
-}
 
 export default router;

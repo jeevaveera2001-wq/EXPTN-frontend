@@ -112,6 +112,8 @@ export default function Cabs({ onOpenAuth }) {
     } catch (e) {}
   }, []);
 
+  const [fetchError, setFetchError] = useState(null);
+
   const apiFetch = async (endpoint, options = {}) => {
     const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
     const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
@@ -134,12 +136,14 @@ export default function Cabs({ onOpenAuth }) {
   const fetchApprovedVehicles = useCallback(async () => {
     try {
       setLoading(true);
+      setFetchError(null);
       const res = await apiFetch('/api/vehicles');
       if (res && res.ok) {
         const raw = await res.json();
-        if (Array.isArray(raw)) {
+        const list = Array.isArray(raw) ? raw : (raw?.data || []);
+        if (Array.isArray(list)) {
           // Strictly filter only Admin-Approved / Accepted vehicles (Exclude any demo entries)
-          const approved = raw.filter(v => {
+          const approved = list.filter(v => {
             const st = String(v.status || '').toLowerCase().trim();
             const isApproved = st === 'approved' || st === 'accepted';
             const isDemo = String(v._id || v.id || '').startsWith('veh-') || String(v._id || v.id || '').startsWith('demo-');
@@ -167,6 +171,7 @@ export default function Cabs({ onOpenAuth }) {
       }
     } catch (err) {
       console.warn('Vehicle live fetch notice:', err.message);
+      setFetchError(err.message || 'Failed to load cabs.');
       setVehiclesList([]);
     } finally {
       setLoading(false);
@@ -493,6 +498,18 @@ export default function Cabs({ onOpenAuth }) {
                 Register as Vehicle Owner / Host
               </button>
             )}
+          </div>
+        ) : fetchError && !loading && vehiclesList.length === 0 ? (
+          <div className="p-12 text-center rounded-3xl bg-rose-50 border border-rose-200 space-y-3 max-w-lg mx-auto my-6">
+            <h4 className="font-bold text-rose-800 text-sm">⚠️ Failed to Load Cabs</h4>
+            <p className="text-xs text-rose-600 font-mono">{fetchError}</p>
+            <button
+              type="button"
+              onClick={fetchApprovedVehicles}
+              className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold font-mono transition-all shadow-sm cursor-pointer"
+            >
+              🔄 Try Again
+            </button>
           </div>
         ) : filteredCabs.length === 0 ? (
           <div className="p-16 text-center rounded-3xl bg-white border border-dashed border-slate-300 space-y-3">

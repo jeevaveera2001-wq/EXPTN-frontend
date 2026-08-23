@@ -237,9 +237,10 @@ export default function VendorDashboard() {
       const userEmail = (currentUser?.email || vendorEmail || '').toLowerCase().trim();
       const userName = (currentUser?.name || vendorName || '').toLowerCase().trim();
 
-      const propsRes = await apiFetch('/api/properties');
+      const propsRes = await apiFetch('/api/properties?limit=50');
       if (propsRes.ok) {
-        const allProps = await propsRes.json();
+        const rawProps = await propsRes.json();
+        const allProps = Array.isArray(rawProps) ? rawProps : (rawProps?.data || []);
         if (Array.isArray(allProps)) {
           setMyPropertiesList(allProps.filter(p => {
             const pEmail = (p.ownerEmail || '').toLowerCase().trim();
@@ -253,7 +254,8 @@ export default function VendorDashboard() {
 
       const vehsRes = await apiFetch('/api/vehicles');
       if (vehsRes.ok) {
-        const allVehs = await vehsRes.json();
+        const rawVehs = await vehsRes.json();
+        const allVehs = Array.isArray(rawVehs) ? rawVehs : (rawVehs?.data || []);
         if (Array.isArray(allVehs)) {
           setMyVehiclesList(allVehs.filter(v => {
             const vEmail = (v.providerEmail || v.ownerEmail || '').toLowerCase().trim();
@@ -335,7 +337,7 @@ export default function VendorDashboard() {
       });
     }
 
-    const interval = setInterval(fetchVendorData, 4000);
+    const interval = setInterval(fetchVendorData, 45000);
 
     return () => {
       window.removeEventListener('etn_booking_created', handleBookingCreated);
@@ -357,7 +359,7 @@ export default function VendorDashboard() {
     setTimeout(() => setActionSuccess(''), 3500);
   };
 
-  // Fast client-side image compression helper
+  // Fast client-side image compression helper (max 800px dimension & lightweight output)
   const compressImage = (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -367,7 +369,7 @@ export default function VendorDashboard() {
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          const maxDim = 1200;
+          const maxDim = 800;
           if (width > height && width > maxDim) {
             height = Math.round((height * maxDim) / width);
             width = maxDim;
@@ -379,7 +381,7 @@ export default function VendorDashboard() {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.8));
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
         };
         img.src = event.target.result;
       };

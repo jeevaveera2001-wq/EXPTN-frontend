@@ -72,6 +72,7 @@ export default function Explore({ onOpenAuth }) {
   const [searchQuery, setSearchQuery] = useState(searchParam);
   const [liveProperties, setLiveProperties] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
 
   // Sync URL query params if they change
   useEffect(() => {
@@ -329,31 +330,36 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
   // Fetch approved properties from MongoDB Atlas with SWR 0ms caching
   const fetchProperties = useCallback(async () => {
     try {
+      setFetchError(null);
       const data = await getWithSWR('properties_catalog', async () => {
-        const res = await apiFetch('/api/properties');
+        const res = await apiFetch('/api/properties?limit=50');
         if (res && res.ok) {
           const raw = await res.json();
-          return Array.isArray(raw) ? raw : [];
+          if (Array.isArray(raw)) return raw;
+          if (raw && Array.isArray(raw.data)) return raw.data;
         }
         return [];
       }, {
-        ttlMs: 60000,
+        ttlMs: 30000,
         onUpdate: (freshData) => {
-          if (Array.isArray(freshData)) {
-            const approved = freshData.filter(p => p.status === 'Approved' || !p.status);
+          const list = Array.isArray(freshData) ? freshData : (freshData?.data || []);
+          if (Array.isArray(list)) {
+            const approved = list.filter(p => p.status === 'Approved' || !p.status);
             setLiveProperties(approved);
           }
         }
       });
 
-      if (Array.isArray(data)) {
-        const approved = data.filter(p => p.status === 'Approved' || !p.status);
+      const list = Array.isArray(data) ? data : (data?.data || []);
+      if (Array.isArray(list) && list.length > 0) {
+        const approved = list.filter(p => p.status === 'Approved' || !p.status);
         setLiveProperties(approved);
       } else {
         setLiveProperties(DEFAULT_FEATURED_STAYS);
       }
     } catch (err) {
       console.warn('Properties fetch notice:', err.message);
+      setFetchError(err.message || 'Unable to load stays at this moment.');
       setLiveProperties(DEFAULT_FEATURED_STAYS);
     } finally {
       setLoading(false);
@@ -762,6 +768,25 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
             </button>
           )}
         </div>
+
+        {/* Error State Banner with Retry */}
+        {fetchError && !loading && liveProperties.length === 0 && (
+          <div className="p-8 my-6 rounded-3xl bg-rose-50 border border-rose-200 text-center max-w-xl mx-auto shadow-sm space-y-3">
+            <div className="text-rose-700 font-editorial font-bold text-lg">
+              ⚠️ Unable to Load Properties
+            </div>
+            <p className="text-xs text-rose-600 font-mono">
+              {fetchError}
+            </p>
+            <button
+              type="button"
+              onClick={() => { setLoading(true); fetchProperties(); }}
+              className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-editorial text-xs font-bold transition-all shadow-sm cursor-pointer"
+            >
+              🔄 Try Again
+            </button>
+          </div>
+        )}
 
         {/* Loading Skeletons */}
         {loading && liveProperties.length === 0 ? (

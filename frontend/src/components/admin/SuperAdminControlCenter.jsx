@@ -339,7 +339,7 @@ export default function SuperAdminControlCenter() {
 
   useEffect(() => {
     fetchLiveData();
-    const interval = setInterval(() => fetchLiveData({ background: true }), 8000);
+    const interval = setInterval(() => fetchLiveData({ background: true }), 45000);
     return () => clearInterval(interval);
   }, [fetchLiveData]);
 

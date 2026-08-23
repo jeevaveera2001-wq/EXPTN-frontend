@@ -244,7 +244,7 @@ export default function UserDashboard() {
       });
     }
 
-    const interval = setInterval(fetchUserData, 4000);
+    const interval = setInterval(fetchUserData, 45000);
 
     return () => {
       window.removeEventListener('etn_booking_created', handleBookingCreated);

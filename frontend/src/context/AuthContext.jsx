@@ -127,18 +127,12 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {}
   }, [currentUser?.email]);
 
-  // Periodic and window-focus live profile refresh
+  // Initial profile sync on startup or login session hydration (NO periodic polling loop)
   useEffect(() => {
     if (currentUser?.email) {
       refreshUserProfile();
-      const interval = setInterval(refreshUserProfile, 5000);
-      window.addEventListener('focus', refreshUserProfile);
-      return () => {
-        clearInterval(interval);
-        window.removeEventListener('focus', refreshUserProfile);
-      };
     }
-  }, [currentUser?.email, refreshUserProfile]);
+  }, [currentUser?.email]); // Runs once when user email changes / initial mount
 
   return (
     <AuthContext.Provider value={{ currentUser, login, logout, updateUserRole, updateUserProfile, refreshUserProfile }}>

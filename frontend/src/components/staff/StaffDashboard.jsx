@@ -113,7 +113,7 @@ export default function StaffDashboard({ overrideRole }) {
       socket.on('ticket_updated', fetchSupportTickets);
       socket.on('stats_updated', fetchSupportTickets);
     }
-    const timer = setInterval(fetchSupportTickets, 5000);
+    const timer = setInterval(fetchSupportTickets, 60000);
     return () => {
       clearInterval(timer);
       if (socket) {

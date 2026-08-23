@@ -2396,7 +2396,7 @@ const saveGoogleUser = async ({
       "",
   };
 
-  if (phone && (!existing?.phone || existing.phone === "+91 78717 79134")) {
+  if (phone) {
     update.phone = phone;
   }
 
@@ -2410,7 +2410,6 @@ const saveGoogleUser = async ({
 
         $setOnInsert: {
           email: normalizedEmail,
-          phone: phone || "+91 78717 79134",
         },
       },
       {

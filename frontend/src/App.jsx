@@ -118,9 +118,17 @@ function AppContent() {
   }, [socket]);
 
   const handleOpenAuth = (mode) => {
+    if (currentUser) return;
     setAuthMode(mode);
     setAuthModalOpen(true);
   };
+
+  // Automatically close auth modal when logged in
+  useEffect(() => {
+    if (currentUser && authModalOpen) {
+      setAuthModalOpen(false);
+    }
+  }, [currentUser, authModalOpen]);
 
   const isInternal = currentUser && INTERNAL_ROLES.includes(currentUser.role);
   const isSuperAdmin = currentUser && ['super_admin', 'admin'].includes(currentUser.role);
@@ -150,12 +158,12 @@ function AppContent() {
           <main>
             <Suspense fallback={<PageLoader fullScreen text="Loading Explore Tamil Nadu..." />}>
               <Routes>
-                {/* Public Routes: Reserved for Guests & Tourists */}
-                <Route path="/" element={<PublicGuestOnlyRoute><Home onOpenAuth={handleOpenAuth} /></PublicGuestOnlyRoute>} />
-                <Route path="/explore" element={<PublicGuestOnlyRoute><Explore onOpenAuth={handleOpenAuth} /></PublicGuestOnlyRoute>} />
-                <Route path="/hotels" element={<PublicGuestOnlyRoute><Explore onOpenAuth={handleOpenAuth} /></PublicGuestOnlyRoute>} />
-                <Route path="/packages" element={<PublicGuestOnlyRoute><Packages onOpenAuth={handleOpenAuth} /></PublicGuestOnlyRoute>} />
-                <Route path="/cabs" element={<PublicGuestOnlyRoute><Cabs onOpenAuth={handleOpenAuth} /></PublicGuestOnlyRoute>} />
+                {/* Public Routes: Accessible to Everyone */}
+                <Route path="/" element={<Home onOpenAuth={handleOpenAuth} />} />
+                <Route path="/explore" element={<Explore onOpenAuth={handleOpenAuth} />} />
+                <Route path="/hotels" element={<Explore onOpenAuth={handleOpenAuth} />} />
+                <Route path="/packages" element={<Packages onOpenAuth={handleOpenAuth} />} />
+                <Route path="/cabs" element={<Cabs onOpenAuth={handleOpenAuth} />} />
 
                 {/* Public Legal & Policy Pages */}
                 <Route path="/privacy-policy" element={<PrivacyPolicy />} />
@@ -163,8 +171,8 @@ function AppContent() {
                 <Route path="/cancellation-refund" element={<CancellationRefundPolicy />} />
 
                 {/* Direct Auth Action Routes */}
-                <Route path="/login" element={<PublicGuestOnlyRoute><Home onOpenAuth={() => handleOpenAuth('login')} /></PublicGuestOnlyRoute>} />
-                <Route path="/register" element={<PublicGuestOnlyRoute><Home onOpenAuth={() => handleOpenAuth('register')} /></PublicGuestOnlyRoute>} />
+                <Route path="/login" element={currentUser ? <Navigate to="/dashboard" replace /> : <Home onOpenAuth={() => handleOpenAuth('login')} />} />
+                <Route path="/register" element={currentUser ? <Navigate to="/dashboard" replace /> : <Home onOpenAuth={() => handleOpenAuth('register')} />} />
 
                 {/* Main Dynamic Protected Dashboard Route */}
                 <Route 

@@ -5143,21 +5143,6 @@ router.put(
     }
   }
 );
-
-router.delete(
-  "/bookings/:id",
-  requireDatabase,
-  async (req, res) => {
-    try {
-      const id = req.params.id;
-      let deleted = null;
-      if (mongoose.isValidObjectId(id)) {
-        deleted = await Booking.findByIdAndDelete(id).maxTimeMS(5000);
-      }
-      if (!deleted) {
-        deleted = await Booking.findOneAndDelete({ bookingId: id }).maxTimeMS(5000);
-      }
-
 router.delete(
   "/bookings/:id",
   requireDatabase,
@@ -5226,7 +5211,6 @@ router.delete(
     }
   }
 );
-
 // Truncate all bookings (live clear)
 const clearAllBookingsHandler = async (
   req,

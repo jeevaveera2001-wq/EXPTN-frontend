@@ -17,12 +17,15 @@ const JWT_SECRET = process.env.JWT_SECRET || 'explore_tamilnadu_secret_key_2026'
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
-// Middleware to ensure DB connection before executing queries
-router.use(async (req, res, next) => {
-  try {
-    await connectDB();
-  } catch (e) {}
-  next();
+// Fast Health Check Endpoint on router
+router.get('/health', (req, res) => {
+  const dbReady = mongoose.connection.readyState === 1;
+  res.status(dbReady ? 200 : 503).json({
+    status: dbReady ? 'healthy' : 'degraded',
+    database: dbReady ? 'connected' : 'disconnected',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Token Generator

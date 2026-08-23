@@ -54,8 +54,8 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-// Fast Health Check Endpoint (Response time < 50ms)
-app.get('/api/health', (req, res) => {
+// Fast Health Check Endpoints (Response time < 50ms)
+const healthHandler = (req, res) => {
   const dbReady = isDBConnected();
   res.status(dbReady ? 200 : 503).json({
     status: dbReady ? 'healthy' : 'degraded',
@@ -63,7 +63,10 @@ app.get('/api/health', (req, res) => {
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString()
   });
-});
+};
+
+app.get('/api/health', healthHandler);
+app.get('/health', healthHandler);
 
 // Root Ping
 app.get('/', (req, res) => {

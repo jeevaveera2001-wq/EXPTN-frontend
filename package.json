@@ -1,0 +1,13 @@
+{
+  "name": "explore-tamilnadu-monorepo",
+  "version": "1.0.0",
+  "description": "Explore Tamil Nadu Tourism Platform Monorepo",
+  "main": "backend/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "cd backend && npm install && node server.js",
+    "backend:start": "cd backend && node server.js",
+    "frontend:build": "cd frontend && npm install && npm run build",
+    "frontend:dev": "cd frontend && npm run dev"
+  }
+}

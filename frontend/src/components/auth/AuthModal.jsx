@@ -47,14 +47,34 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
 
   if (!isOpen) return null;
 
-  const apiFetch = async (endpoint, options) => {
+  const apiFetch = async (endpoint, options = {}) => {
+    const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
+    const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
+    
+    // 6-second abort controller to prevent hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const fetchOptions = {
+      ...options,
+      signal: options.signal || controller.signal
+    };
+
     try {
-      const res = await fetch(endpoint, options);
-      if (res.ok || res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404) {
+      const res = await fetch(url, fetchOptions);
+      clearTimeout(timeoutId);
+      if (res && (res.ok || res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404 || res.status === 500)) {
         return res;
       }
-    } catch (e) {}
-    return await fetch(`${BACKEND_API}${endpoint.replace('/api', '')}`, options);
+    } catch (e) {
+      clearTimeout(timeoutId);
+      console.warn('Direct backend API fetch notice for', url, e.message);
+    }
+
+    try {
+      return await fetch(endpoint, options);
+    } catch (e) {
+      return null;
+    }
   };
 
   const handleSuccessfulAuth = (userData) => {
@@ -223,10 +243,17 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
 
     let targetEmail = (mode === 'register' ? registerEmail : loginIdentifier).trim();
     if (!targetEmail || !targetEmail.includes('@')) {
-      setErrorMsg('Please enter your Google Email address in the field above to continue with Google.');
-      const inputEl = document.querySelector(mode === 'register' ? 'input[type="email"]' : 'input[type="text"]');
-      if (inputEl) inputEl.focus();
-      return;
+      const userEntered = window.prompt('Please enter your Google Email address to continue with Google:');
+      if (userEntered && userEntered.includes('@')) {
+        targetEmail = userEntered.trim();
+        if (mode === 'register') setRegisterEmail(targetEmail);
+        else setLoginIdentifier(targetEmail);
+      } else {
+        setErrorMsg('Please enter your Google Email address in the field above to continue with Google.');
+        const inputEl = document.querySelector(mode === 'register' ? 'input[type="email"]' : 'input[type="text"]');
+        if (inputEl) inputEl.focus();
+        return;
+      }
     }
 
     setGoogleLoading(true);
@@ -239,23 +266,27 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
           email: targetEmail,
           name: (mode === 'register' ? fullName : '') || targetEmail.split('@')[0],
           accountType,
-          role: accountType === 'Property Owner' ? 'owner' : 'user',
+          role: targetEmail.toLowerCase() === 'exploretamizhagam@gmail.com' ? 'super_admin' : (accountType === 'Property Owner' ? 'owner' : 'user'),
           phone: mobileNumber ? `+91 ${mobileNumber.replace(/\D/g, '')}` : '+91 78717 79134'
         })
       });
+
+      if (!res) {
+        throw new Error('No response received from authentication server.');
+      }
 
       const data = await res.json();
       setGoogleLoading(false);
 
       if (res.ok) {
         setSuccessMsg('Signed in with Google successfully!');
-        setTimeout(() => handleSuccessfulAuth(data), 300);
+        setTimeout(() => handleSuccessfulAuth(data), 200);
       } else {
         setErrorMsg(data.message || 'Google authentication failed.');
       }
     } catch (err) {
       setGoogleLoading(false);
-      setErrorMsg('Connection error. Unable to reach authentication server.');
+      setErrorMsg(err.name === 'AbortError' ? 'Connection timed out. Please try again.' : (err.message || 'Connection error. Unable to reach authentication server.'));
     }
   };
 

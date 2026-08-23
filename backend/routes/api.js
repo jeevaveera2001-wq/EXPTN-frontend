@@ -4936,27 +4936,37 @@ router.post(
         body.bookingId ||
         `ETN-${Date.now()}`;
 
+      const bookingType =
+        body.bookingType ||
+        body.type ||
+        (body.vehicleTitle || body.vehicleId ? 'cab' : 'property');
+
       const booking =
         await Booking.create({
           ...body,
           bookingId,
-
+          bookingType,
+          customerName: body.customerName || body.userName || 'Traveler',
           customerEmail:
             normalizeEmail(
               body.customerEmail ||
               body.userEmail ||
               body.email
             ),
-
+          customerPhone: body.customerPhone || body.userPhone || '+91 78717 79134',
+          checkIn: body.checkIn || body.checkInDate || body.pickupDate || new Date().toISOString().split('T')[0],
+          checkOut: body.checkOut || body.checkOutDate || body.pickupDate || new Date().toISOString().split('T')[0],
+          propertyTitle: body.propertyTitle || body.itemTitle || (bookingType === 'cab' ? (body.vehicleTitle || 'Cab Transport') : 'Tamil Nadu Stay'),
+          destination: body.destination || body.pickupLocation || body.location || 'Tamil Nadu',
           totalAmount: Number(
             body.totalAmount ||
             body.amount ||
             0
           ),
-
           status:
             body.status ||
-            "Pending Approval",
+            "Confirmed",
+          paymentStatus: body.paymentStatus || "Paid"
         });
 
       const saved =

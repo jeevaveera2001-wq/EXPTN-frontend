@@ -270,11 +270,11 @@ export default function SuperAdminControlCenter() {
       } else {
         // Fallback parallel requests
         const [uRes, pRes, vRes, bRes, tRes, sRes] = await Promise.all([
-          apiFetch('/api/users').catch(() => null),
-          apiFetch('/api/properties').catch(() => null),
-          apiFetch('/api/vehicles').catch(() => null),
-          apiFetch('/api/bookings').catch(() => null),
-          apiFetch('/api/tickets').catch(() => null),
+          apiFetch('/api/users?limit=200').catch(() => null),
+          apiFetch('/api/properties?status=all&limit=200').catch(() => null),
+          apiFetch('/api/vehicles?status=all&limit=200').catch(() => null),
+          apiFetch('/api/bookings?limit=200').catch(() => null),
+          apiFetch('/api/tickets?limit=100').catch(() => null),
           apiFetch('/api/admin/staff').catch(() => null)
         ]);
 

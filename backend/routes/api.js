@@ -3264,32 +3264,49 @@ router.get(
         Property.countDocuments({}).maxTimeMS(3000).catch(() => 0),
         Vehicle.countDocuments({}).maxTimeMS(3000).catch(() => 0),
         Ticket.countDocuments({}).maxTimeMS(3000).catch(() => 0),
-        User.find({}).select("_id name email phone role isVerified createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(3000).catch(() => []),
-        Booking.find({}).select("_id bookingId propertyTitle itemTitle vehicleTitle customerName userEmail totalAmount amount status checkIn checkOut pickupDate createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(3000).catch(() => []),
-        Property.find({}).select("_id title district location type price pricePerNight status ownerName ownerEmail createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(3000).catch(() => []),
-        Vehicle.find({}).select("_id title type registrationNumber regNo numberPlate providerName providerPhone ownerEmail ownerName location district price pricePerDay status createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(3000).catch(() => []),
-        User.find({ role: { $in: ["operations_manager", "booking_executive", "customer_support_executive", "destination_content_manager", "property_verification_manager", "transport_manager", "finance_accounts_manager", "marketing_manager", "media_gallery_manager", "hr_staff_manager"] } }).select("_id name email phone role createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(3000).catch(() => []),
-        Ticket.find({}).select("_id ticketId senderName senderEmail senderRole subject category priority status message createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(3000).catch(() => [])
+        User.find({}).select("_id name email phone role isVerified createdAt").sort({ _id: -1 }).limit(100).lean().maxTimeMS(4000).catch(() => []),
+        Booking.find({}).sort({ _id: -1 }).limit(200).lean().maxTimeMS(4000).catch(() => []),
+        Property.find({}).sort({ _id: -1 }).limit(200).lean().maxTimeMS(4000).catch(() => []),
+        Vehicle.find({}).sort({ _id: -1 }).limit(200).lean().maxTimeMS(4000).catch(() => []),
+        User.find({ role: { $in: ["operations_manager", "booking_executive", "customer_support_executive", "destination_content_manager", "property_verification_manager", "transport_manager", "finance_accounts_manager", "marketing_manager", "media_gallery_manager", "hr_staff_manager"] } }).select("_id name email phone role createdAt").sort({ _id: -1 }).limit(50).lean().maxTimeMS(3000).catch(() => []),
+        Ticket.find({}).select("_id ticketId senderName senderEmail senderRole subject category priority status message createdAt").sort({ _id: -1 }).limit(100).lean().maxTimeMS(3000).catch(() => [])
       ]);
 
-      const cleanedProperties = (recentProperties || []).map(p => ({
-        ...p,
-        id: p._id ? String(p._id) : p.id,
-        price: Number(p.price || p.pricePerNight || 3800),
-        pricePerNight: Number(p.pricePerNight || p.price || 3800),
-        images: getPropertyImages(p)
-      }));
+      const cleanedProperties = (recentProperties || []).map(p => {
+        let propImages = [];
+        if (Array.isArray(p.images) && p.images.length > 0) {
+          propImages = p.images.map(img => typeof img === 'string' ? img : img?.url).filter(Boolean);
+        } else if (p.image) {
+          propImages = [p.image];
+        }
+        const finalImages = propImages.length > 0 ? propImages : getPropertyImages(p);
+
+        return {
+          ...p,
+          id: p._id ? String(p._id) : p.id,
+          price: Number(p.price || p.pricePerNight || 3800),
+          pricePerNight: Number(p.pricePerNight || p.price || 3800),
+          images: finalImages
+        };
+      });
 
       const cleanedVehicles = (recentVehicles || []).map(v => {
-        const vImgs = getVehicleImages(v);
+        let vendorImages = [];
+        if (Array.isArray(v.images) && v.images.length > 0) {
+          vendorImages = v.images.map(img => typeof img === 'string' ? img : img?.url).filter(Boolean);
+        } else if (v.exteriorImage || v.interiorImage || v.image) {
+          vendorImages = [v.exteriorImage, v.interiorImage, v.image].filter(Boolean);
+        }
+        const finalImages = vendorImages.length > 0 ? vendorImages : getVehicleImages(v);
+
         return {
           ...v,
           id: v._id ? String(v._id) : v.id,
           price: Number(v.price || v.pricePerDay || 2500),
           pricePerDay: Number(v.pricePerDay || v.price || 2500),
-          images: vImgs,
-          exteriorImage: vImgs[0],
-          interiorImage: vImgs[1] || vImgs[0]
+          images: finalImages,
+          exteriorImage: v.exteriorImage || finalImages[0],
+          interiorImage: v.interiorImage || finalImages[1] || finalImages[0]
         };
       });
 
@@ -3731,17 +3748,17 @@ router.get(
         Number.parseInt(
           req.query.limit,
           10
-        ) || 30,
+        ) || 100,
         1
       ),
-      60
+      300
     );
 
     const filter = {};
 
-    if (req.query.status && req.query.status !== 'all') {
+    if (req.query.status && req.query.status.toLowerCase() !== 'all') {
       filter.status = String(req.query.status);
-    } else if (!req.query.status && !req.query.ownerEmail) {
+    } else if (!req.query.status && !req.query.ownerEmail && req.query.admin !== 'true') {
       filter.status = { $in: ['Approved', 'Accepted', 'approved', 'accepted'] };
     }
 
@@ -4095,16 +4112,16 @@ router.get(
           Number.parseInt(
             req.query.limit,
             10
-          ) || 50,
+          ) || 100,
           1
         ),
-        100
+        300
       );
 
       const filter = {};
-      if (req.query.status && req.query.status !== 'all') {
+      if (req.query.status && req.query.status.toLowerCase() !== 'all') {
         filter.status = String(req.query.status);
-      } else if (!req.query.status && !req.query.ownerEmail) {
+      } else if (!req.query.status && !req.query.ownerEmail && req.query.admin !== 'true') {
         filter.status = { $in: ['Approved', 'Accepted', 'approved', 'accepted'] };
       }
 
@@ -5141,24 +5158,6 @@ router.delete(
         deleted = await Booking.findOneAndDelete({ bookingId: id }).maxTimeMS(5000);
       }
 
-      try {
-        broadcast(req, "booking_deleted", { id });
-        broadcast(req, "stats_updated", {});
-      } catch (e) {}
-
-      return res.status(200).json({
-        success: true,
-        message: "Booking removed successfully."
-      });
-    } catch (error) {
-      return res.status(500).json({
-        message:
-          "Unable to delete booking: " + error.message,
-      });
-    }
-  }
-);
-
 router.delete(
   "/bookings/:id",
   requireDatabase,
@@ -5189,14 +5188,21 @@ router.delete(
       }
 
       try {
-        broadcast(req, "booking_deleted", {
-          id,
-        });
-        broadcast(req, "stats_updated", {});
-      } catch (error) {
+        broadcast(
+          req,
+          "booking_deleted",
+          { id }
+        );
+
+        broadcast(
+          req,
+          "stats_updated",
+          {}
+        );
+      } catch (broadcastError) {
         console.warn(
           "Broadcast failed:",
-          error.message
+          broadcastError.message
         );
       }
 
@@ -5206,6 +5212,11 @@ router.delete(
           "Booking removed successfully.",
       });
     } catch (error) {
+      console.error(
+        "Delete booking error:",
+        error
+      );
+
       return res.status(500).json({
         success: false,
         message:

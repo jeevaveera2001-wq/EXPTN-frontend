@@ -3295,12 +3295,12 @@ router.get(
         Property.countDocuments({}).maxTimeMS(4000).catch(() => 0),
         Vehicle.countDocuments({}).maxTimeMS(4000).catch(() => 0),
         Ticket.countDocuments({}).maxTimeMS(4000).catch(() => 0),
-        User.find({}).select("_id name email phone role isVerified createdAt").sort({ createdAt: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
-        Booking.find({}).select("_id bookingId propertyTitle itemTitle vehicleTitle customerName userEmail totalAmount amount status checkIn checkOut pickupDate createdAt").sort({ createdAt: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
-        Property.find({}).select("_id title district location type price pricePerNight images image status ownerName ownerEmail createdAt").sort({ createdAt: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
-        Vehicle.find({}).select("_id title type registrationNumber regNo numberPlate images providerName providerPhone ownerEmail ownerName location district price pricePerDay status createdAt").sort({ createdAt: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
-        User.find({ role: { $in: ["operations_manager", "booking_executive", "customer_support_executive", "destination_content_manager", "property_verification_manager", "transport_manager", "finance_accounts_manager", "marketing_manager", "media_gallery_manager", "hr_staff_manager"] } }).select("_id name email phone role createdAt").sort({ createdAt: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
-        Ticket.find({}).select("_id ticketId senderName senderEmail senderRole subject category priority status message createdAt").sort({ createdAt: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => [])
+        User.find({}).select("_id name email phone role isVerified createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
+        Booking.find({}).select("_id bookingId propertyTitle itemTitle vehicleTitle customerName userEmail totalAmount amount status checkIn checkOut pickupDate createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
+        Property.find({}).select("_id title district location type price pricePerNight images image status ownerName ownerEmail createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
+        Vehicle.find({}).select("_id title type registrationNumber regNo numberPlate images providerName providerPhone ownerEmail ownerName location district price pricePerDay status createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
+        User.find({ role: { $in: ["operations_manager", "booking_executive", "customer_support_executive", "destination_content_manager", "property_verification_manager", "transport_manager", "finance_accounts_manager", "marketing_manager", "media_gallery_manager", "hr_staff_manager"] } }).select("_id name email phone role createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
+        Ticket.find({}).select("_id ticketId senderName senderEmail senderRole subject category priority status message createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => [])
       ]);
 
       const cleanedProperties = (recentProperties || []).map(p => ({
@@ -3448,7 +3448,7 @@ router.get(
           "_id name email phone avatar " +
           "role isVerified createdAt"
         )
-        .sort({ createdAt: -1 })
+        .sort({ _id: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean()
@@ -3795,7 +3795,7 @@ router.get(
     try {
       const rawProperties = await Property.find(filter)
         .select("_id title district location type price pricePerNight rating reviewsCount images image amenities coordinates status ownerName ownerEmail createdAt")
-        .sort({ createdAt: -1 })
+        .sort({ _id: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean()
@@ -4104,7 +4104,7 @@ router.get(
 
       const rawVehicles = await Vehicle.find({})
         .select("_id title type registrationNumber regNo numberPlate images exteriorImage interiorImage providerName providerPhone providerEmail ownerEmail ownerName location district seatingCapacity fuelType acType price pricePerDay perKmRate status createdAt")
-        .sort({ createdAt: -1 })
+        .sort({ _id: -1 })
         .limit(limit)
         .lean()
         .maxTimeMS(6000);

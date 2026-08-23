@@ -37,6 +37,7 @@ const propertySchema = new mongoose.Schema({
 }, { strict: false });
 
 // Query optimization indexes
+propertySchema.index({ createdAt: -1 });
 propertySchema.index({ status: 1, createdAt: -1 });
 propertySchema.index({ district: 1, type: 1 });
 propertySchema.index({ ownerEmail: 1 });

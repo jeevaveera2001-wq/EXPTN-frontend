@@ -64,7 +64,8 @@ userSchema.methods.matchPassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Query optimization index
+// Query optimization indexes
 userSchema.index({ role: 1 });
+userSchema.index({ createdAt: -1 });
 
 export const User = mongoose.models.User || mongoose.model('User', userSchema);

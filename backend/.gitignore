@@ -1,5 +1,8 @@
-node_modules/ 
-.env 
-.env.* 
-dist/ 
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
 .vercel
+*.log
+

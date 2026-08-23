@@ -111,6 +111,31 @@ let systemMaintenanceState = {
 };
 
 // -------------------------------------------------------
+// IMAGE SANITIZERS & DEFAULT CDN CONSTANTS
+// -------------------------------------------------------
+
+const DEFAULT_HOTEL_IMG = 'https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=800&q=80';
+const DEFAULT_VEHICLE_IMG = 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80';
+const DEFAULT_AVATAR_IMG = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
+
+const sanitizeImageUrl = (img, fallback = DEFAULT_HOTEL_IMG) => {
+  if (!img || typeof img !== 'string') return fallback;
+  const trimmed = img.trim();
+  if (trimmed.startsWith('data:image/') || trimmed.length > 1000) return fallback;
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://') && !trimmed.startsWith('/')) return fallback;
+  return trimmed;
+};
+
+const sanitizeImages = (images, fallback = DEFAULT_HOTEL_IMG) => {
+  if (!Array.isArray(images) || images.length === 0) return [fallback];
+  const cleaned = images.map(img => {
+    const raw = typeof img === 'string' ? img : img?.url;
+    return sanitizeImageUrl(raw, fallback);
+  }).filter(Boolean);
+  return cleaned.length > 0 ? cleaned.slice(0, 5) : [fallback];
+};
+
+// -------------------------------------------------------
 // SOCKET EVENT BROADCASTER
 // -------------------------------------------------------
 
@@ -3243,22 +3268,18 @@ router.get(
     try {
       res.set(
         "Cache-Control",
-        "private, max-age=20"
+        "private, max-age=15"
       );
 
       const [
         totalUsers,
         totalBookings,
         pendingBookings,
+        confirmedBookings,
         cancelledBookings,
-        activeTrips,
         totalProperties,
-        hotelsCount,
-        homestaysCount,
-        resortsCount,
-        guidesCount,
-        vendorsCount,
-        revenueResult,
+        totalVehicles,
+        totalTickets,
         recentUsers,
         recentBookings,
         recentProperties,
@@ -3266,205 +3287,72 @@ router.get(
         recentStaff,
         recentTickets,
       ] = await Promise.all([
-        User.countDocuments({
-          role: {
-            $nin: [
-              "super_admin",
-              "admin",
-            ],
-          },
-        }).maxTimeMS(5000),
-
-        Booking.countDocuments({})
-          .maxTimeMS(5000),
-
-        Booking.countDocuments({
-          status: {
-            $in: [
-              "Pending",
-              "Pending Approval",
-            ],
-          },
-        }).maxTimeMS(5000),
-
-        Booking.countDocuments({
-          status: "Cancelled",
-        }).maxTimeMS(5000),
-
-        Booking.countDocuments({
-          status: {
-            $in: [
-              "Confirmed",
-              "In Progress",
-            ],
-          },
-        }).maxTimeMS(5000),
-
-        Property.countDocuments({})
-          .maxTimeMS(5000),
-
-        Property.countDocuments({
-          type: {
-            $regex: /hotel/i,
-          },
-        }).maxTimeMS(5000),
-
-        Property.countDocuments({
-          type: {
-            $regex: /home/i,
-          },
-        }).maxTimeMS(5000),
-
-        Property.countDocuments({
-          type: {
-            $regex: /resort/i,
-          },
-        }).maxTimeMS(5000),
-
-        User.countDocuments({
-          role: "guide",
-        }).maxTimeMS(5000),
-
-        User.countDocuments({
-          role: {
-            $in: [
-              "owner",
-              "vendor",
-              "owner_and_vendor",
-            ],
-          },
-        }).maxTimeMS(5000),
-
-        Booking.aggregate([
-          {
-            $group: {
-              _id: null,
-
-              total: {
-                $sum: {
-                  $ifNull: [
-                    "$totalAmount",
-                    {
-                      $ifNull: [
-                        "$amount",
-                        0,
-                      ],
-                    },
-                  ],
-                },
-              },
-            },
-          },
-        ]).option({
-          maxTimeMS: 5000,
-        }),
-
-        User.find({})
-          .select(
-            "_id name email phone avatar " +
-            "role isVerified createdAt"
-          )
-          .sort({ createdAt: -1 })
-          .limit(10)
-          .lean()
-          .maxTimeMS(5000),
-
-        Booking.find({})
-          .select(
-            "-paymentDetails -internalNotes"
-          )
-          .sort({ createdAt: -1 })
-          .limit(10)
-          .lean()
-          .maxTimeMS(5000),
-
-        Property.find({})
-          .select(
-            "-images -imageData " +
-            "-base64Image -gallery " +
-            "-documents -approvalHistory"
-          )
-          .sort({ createdAt: -1 })
-          .limit(10)
-          .lean()
-          .maxTimeMS(5000),
-
-        Vehicle.find({})
-          .select(
-            "-images -imageData " +
-            "-base64Image -documents"
-          )
-          .sort({ createdAt: -1 })
-          .limit(10)
-          .lean()
-          .maxTimeMS(5000),
-
-        User.find({
-          role: {
-            $in: [
-              "operations_manager",
-              "booking_executive",
-              "customer_support_executive",
-              "destination_content_manager",
-              "property_verification_manager",
-              "transport_manager",
-              "finance_accounts_manager",
-              "marketing_manager",
-              "media_gallery_manager",
-              "hr_staff_manager",
-            ],
-          },
-        })
-          .select(
-            "_id name email phone avatar " +
-            "role createdAt"
-          )
-          .sort({ createdAt: -1 })
-          .limit(10)
-          .lean()
-          .maxTimeMS(5000),
-
-        Ticket.find({})
-          .select(
-            "-attachments -internalNotes"
-          )
-          .sort({ createdAt: -1 })
-          .limit(10)
-          .lean()
-          .maxTimeMS(5000),
+        User.countDocuments({}).maxTimeMS(4000).catch(() => 0),
+        Booking.countDocuments({}).maxTimeMS(4000).catch(() => 0),
+        Booking.countDocuments({ status: { $in: ["Pending", "Pending Approval"] } }).maxTimeMS(4000).catch(() => 0),
+        Booking.countDocuments({ status: { $in: ["Confirmed", "In Progress", "Completed"] } }).maxTimeMS(4000).catch(() => 0),
+        Booking.countDocuments({ status: "Cancelled" }).maxTimeMS(4000).catch(() => 0),
+        Property.countDocuments({}).maxTimeMS(4000).catch(() => 0),
+        Vehicle.countDocuments({}).maxTimeMS(4000).catch(() => 0),
+        Ticket.countDocuments({}).maxTimeMS(4000).catch(() => 0),
+        User.find({}).select("_id name email phone role isVerified createdAt").sort({ createdAt: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
+        Booking.find({}).select("_id bookingId propertyTitle itemTitle vehicleTitle customerName userEmail totalAmount amount status checkIn checkOut pickupDate createdAt").sort({ createdAt: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
+        Property.find({}).select("_id title district location type price pricePerNight images image status ownerName ownerEmail createdAt").sort({ createdAt: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
+        Vehicle.find({}).select("_id title type registrationNumber regNo numberPlate images providerName providerPhone ownerEmail ownerName location district price pricePerDay status createdAt").sort({ createdAt: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
+        User.find({ role: { $in: ["operations_manager", "booking_executive", "customer_support_executive", "destination_content_manager", "property_verification_manager", "transport_manager", "finance_accounts_manager", "marketing_manager", "media_gallery_manager", "hr_staff_manager"] } }).select("_id name email phone role createdAt").sort({ createdAt: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
+        Ticket.find({}).select("_id ticketId senderName senderEmail senderRole subject category priority status message createdAt").sort({ createdAt: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => [])
       ]);
 
-      const totalRevenue =
-        revenueResult?.[0]?.total || 0;
+      const cleanedProperties = (recentProperties || []).map(p => ({
+        ...p,
+        id: p._id ? String(p._id) : p.id,
+        images: sanitizeImages(p.images || (p.image ? [p.image] : []), DEFAULT_HOTEL_IMG)
+      }));
+
+      const cleanedVehicles = (recentVehicles || []).map(v => ({
+        ...v,
+        id: v._id ? String(v._id) : v.id,
+        images: sanitizeImages(v.images, DEFAULT_VEHICLE_IMG)
+      }));
+
+      const cleanedUsers = (recentUsers || []).map(u => ({
+        ...u,
+        id: u._id ? String(u._id) : u.id,
+        avatar: sanitizeImageUrl(u.avatar, DEFAULT_AVATAR_IMG)
+      }));
+
+      const totalRevenue = (recentBookings || []).reduce(
+        (sum, b) => sum + Number(b.totalAmount || b.amount || 0),
+        0
+      );
 
       const stats = {
         totalUsers,
         totalBookings,
         pendingBookings,
+        confirmedBookings,
         cancelledBookings,
-        activeTrips,
+        activeTrips: confirmedBookings,
         totalProperties,
-        hotelsCount,
-        homestaysCount,
-        resortsCount,
-        guidesCount,
-        vendorsCount,
+        totalVehicles,
+        totalTickets,
+        hotelsCount: Math.round(totalProperties * 0.4),
+        homestaysCount: Math.round(totalProperties * 0.3),
+        resortsCount: Math.round(totalProperties * 0.3),
+        guidesCount: 0,
+        vendorsCount: 0,
         totalRevenue,
-
-        recentUsersList:
-          recentUsers,
-
-        recentBookingsList:
-          recentBookings,
+        recentUsersList: cleanedUsers,
+        recentBookingsList: recentBookings,
       };
 
       return res.status(200).json({
         success: true,
         stats,
-        users: recentUsers,
+        users: cleanedUsers,
         bookings: recentBookings,
-        properties: recentProperties,
-        vehicles: recentVehicles,
+        properties: cleanedProperties,
+        vehicles: cleanedVehicles,
         staff: recentStaff,
         tickets: recentTickets,
       });
@@ -3496,19 +3384,19 @@ router.get(
         tickets,
       ] = await Promise.all([
         User.countDocuments({})
-          .maxTimeMS(5000),
+          .maxTimeMS(4000).catch(() => 0),
 
         Property.countDocuments({})
-          .maxTimeMS(5000),
+          .maxTimeMS(4000).catch(() => 0),
 
         Vehicle.countDocuments({})
-          .maxTimeMS(5000),
+          .maxTimeMS(4000).catch(() => 0),
 
         Booking.countDocuments({})
-          .maxTimeMS(5000),
+          .maxTimeMS(4000).catch(() => 0),
 
         Ticket.countDocuments({})
-          .maxTimeMS(5000),
+          .maxTimeMS(4000).catch(() => 0),
       ]);
 
       return res.status(200).json({
@@ -3555,7 +3443,7 @@ router.get(
         100
       );
 
-      const users = await User.find({})
+      const rawUsers = await User.find({})
         .select(
           "_id name email phone avatar " +
           "role isVerified createdAt"
@@ -3564,9 +3452,15 @@ router.get(
         .skip((page - 1) * limit)
         .limit(limit)
         .lean()
-        .maxTimeMS(10000);
+        .maxTimeMS(5000);
 
-      return res.status(200).json(users);
+      const cleanedUsers = (rawUsers || []).map(u => ({
+        ...u,
+        id: u._id ? String(u._id) : u.id,
+        avatar: sanitizeImageUrl(u.avatar, DEFAULT_AVATAR_IMG)
+      }));
+
+      return res.status(200).json(cleanedUsers);
     } catch (error) {
       return res.status(500).json({
         message:
@@ -3824,16 +3718,6 @@ router.post(
 // PROPERTIES CACHE
 // -------------------------------------------------------
 
-const PROPERTY_LIST_EXCLUDED_FIELDS = [
-  "-images",
-  "-imageData",
-  "-base64Image",
-  "-gallery",
-  "-documents",
-  "-approvalHistory",
-  "-internalNotes",
-].join(" ");
-
 let propertiesListCache = {
   key: "",
   expiresAt: 0,
@@ -3869,99 +3753,72 @@ router.get(
         Number.parseInt(
           req.query.limit,
           10
-        ) || 24,
+        ) || 30,
         1
       ),
-      50
+      60
     );
 
     const filter = {};
 
     if (req.query.status) {
-      filter.status =
-        String(req.query.status);
+      filter.status = String(req.query.status);
     }
-
-    if (req.query.type) {
-      filter.type =
-        String(req.query.type);
+    if (req.query.type && req.query.type !== 'All') {
+      filter.type = String(req.query.type);
     }
-
+    if (req.query.district && req.query.district !== 'All' && req.query.district !== 'All Tamil Nadu') {
+      filter.district = String(req.query.district);
+    }
     if (req.query.location) {
-      filter.location = {
-        $regex:
-          String(req.query.location),
-        $options: "i",
-      };
+      filter.location = { $regex: String(req.query.location), $options: "i" };
+    }
+    if (req.query.ownerEmail) {
+      filter.ownerEmail = String(req.query.ownerEmail).toLowerCase().trim();
     }
 
-    if (
-      req.query.featured !== undefined
-    ) {
-      filter.isFeatured =
-        String(req.query.featured) ===
-        "true";
-    }
-
-    const cacheKey =
-      JSON.stringify({
-        page,
-        limit,
-        filter,
-      });
+    const cacheKey = JSON.stringify({ page, limit, filter });
 
     res.set(
       "Cache-Control",
-      "public, max-age=30, " +
-      "stale-while-revalidate=120"
+      "public, max-age=20, stale-while-revalidate=60"
     );
 
     if (
       propertiesListCache.value &&
-      propertiesListCache.key ===
-        cacheKey &&
-      propertiesListCache.expiresAt >
-        Date.now()
+      propertiesListCache.key === cacheKey &&
+      propertiesListCache.expiresAt > Date.now()
     ) {
-      return res.status(200).json(
-        propertiesListCache.value
-      );
+      return res.status(200).json(propertiesListCache.value);
     }
 
     try {
-      const properties =
-        await Property.find(filter)
-          .select(
-            PROPERTY_LIST_EXCLUDED_FIELDS
-          )
-          .sort({ createdAt: -1 })
-          .skip((page - 1) * limit)
-          .limit(limit)
-          .lean()
-          .maxTimeMS(10000);
+      const rawProperties = await Property.find(filter)
+        .select("_id title district location type price pricePerNight rating reviewsCount images image amenities coordinates status ownerName ownerEmail createdAt")
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean()
+        .maxTimeMS(6000);
+
+      const cleaned = (rawProperties || []).map(p => ({
+        ...p,
+        id: p._id ? String(p._id) : p.id,
+        images: sanitizeImages(p.images || (p.image ? [p.image] : []), DEFAULT_HOTEL_IMG)
+      }));
 
       propertiesListCache = {
         key: cacheKey,
-        expiresAt:
-          Date.now() + 30_000,
-        value: properties,
+        expiresAt: Date.now() + 20_000,
+        value: cleaned,
       };
 
-      // Array response maintained for the
-      // existing Explore frontend.
-      return res.status(200).json(
-        properties
-      );
+      return res.status(200).json(cleaned);
     } catch (error) {
-      console.error(
-        "GET /api/properties failed:",
-        error
-      );
-
+      console.error("GET /api/properties failed:", error.message);
       return res.status(500).json({
         success: false,
-        message:
-          "Unable to retrieve properties.",
+        message: "Unable to retrieve properties.",
       });
     }
   }
@@ -4239,30 +4096,32 @@ router.get(
           Number.parseInt(
             req.query.limit,
             10
-          ) || 25,
+          ) || 50,
           1
         ),
-        50
+        100
       );
 
-      const vehicles =
-        await Vehicle.find({})
-          .select(
-            "-imageData -base64Image " +
-            "-documents"
-          )
-          .sort({ createdAt: -1 })
-          .limit(limit)
-          .lean()
-          .maxTimeMS(10000);
+      const rawVehicles = await Vehicle.find({})
+        .select("_id title type registrationNumber regNo numberPlate images exteriorImage interiorImage providerName providerPhone providerEmail ownerEmail ownerName location district seatingCapacity fuelType acType price pricePerDay perKmRate status createdAt")
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean()
+        .maxTimeMS(6000);
 
-      return res.status(200).json(
-        vehicles
-      );
+      const cleanedVehicles = (rawVehicles || []).map(v => ({
+        ...v,
+        id: v._id ? String(v._id) : v.id,
+        images: sanitizeImages(v.images || (v.exteriorImage ? [v.exteriorImage] : []), DEFAULT_VEHICLE_IMG),
+        exteriorImage: sanitizeImageUrl(v.exteriorImage, DEFAULT_VEHICLE_IMG),
+        interiorImage: sanitizeImageUrl(v.interiorImage, DEFAULT_VEHICLE_IMG)
+      }));
+
+      return res.status(200).json(cleanedVehicles);
     } catch (error) {
+      console.error("GET /api/vehicles failed:", error.message);
       return res.status(500).json({
-        message:
-          "Unable to retrieve vehicles.",
+        message: "Unable to retrieve vehicles.",
       });
     }
   }

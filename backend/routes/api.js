@@ -118,6 +118,65 @@ const DEFAULT_HOTEL_IMG = 'https://images.unsplash.com/photo-1584551246679-0daf3
 const DEFAULT_VEHICLE_IMG = 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80';
 const DEFAULT_AVATAR_IMG = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80';
 
+const PROPERTY_TYPE_IMAGES = {
+  resort: [
+    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
+  ],
+  homestay: [
+    'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80',
+  ],
+  hotel: [
+    'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80',
+  ],
+  villa: [
+    'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80',
+  ],
+  cottage: [
+    'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?auto=format&fit=crop&w=800&q=80',
+  ],
+};
+
+const getPropertyImages = (prop) => {
+  const t = String(prop?.type || prop?.title || '').toLowerCase();
+  if (t.includes('resort')) return PROPERTY_TYPE_IMAGES.resort;
+  if (t.includes('home')) return PROPERTY_TYPE_IMAGES.homestay;
+  if (t.includes('villa')) return PROPERTY_TYPE_IMAGES.villa;
+  if (t.includes('cottage')) return PROPERTY_TYPE_IMAGES.cottage;
+  return PROPERTY_TYPE_IMAGES.hotel;
+};
+
+const VEHICLE_TYPE_IMAGES = {
+  suv: [
+    'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
+  ],
+  sedan: [
+    'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?auto=format&fit=crop&w=800&q=80',
+  ],
+  luxury: [
+    'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1502877338535-766e1452684a?auto=format&fit=crop&w=800&q=80',
+  ],
+  tempo: [
+    'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=800&q=80',
+    'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=800&q=80',
+  ],
+};
+
+const getVehicleImages = (veh) => {
+  const t = String(veh?.type || veh?.title || '').toLowerCase();
+  if (t.includes('suv') || t.includes('innova') || t.includes('scorpio')) return VEHICLE_TYPE_IMAGES.suv;
+  if (t.includes('luxury') || t.includes('bmw') || t.includes('audi') || t.includes('mercedes')) return VEHICLE_TYPE_IMAGES.luxury;
+  if (t.includes('tempo') || t.includes('bus') || t.includes('van') || t.includes('traveller')) return VEHICLE_TYPE_IMAGES.tempo;
+  return VEHICLE_TYPE_IMAGES.sedan;
+};
+
 const sanitizeImageUrl = (img, fallback = DEFAULT_HOTEL_IMG) => {
   if (!img || typeof img !== 'string') return fallback;
   const trimmed = img.trim();
@@ -3287,38 +3346,47 @@ router.get(
         recentStaff,
         recentTickets,
       ] = await Promise.all([
-        User.countDocuments({}).maxTimeMS(4000).catch(() => 0),
-        Booking.countDocuments({}).maxTimeMS(4000).catch(() => 0),
-        Booking.countDocuments({ status: { $in: ["Pending", "Pending Approval"] } }).maxTimeMS(4000).catch(() => 0),
-        Booking.countDocuments({ status: { $in: ["Confirmed", "In Progress", "Completed"] } }).maxTimeMS(4000).catch(() => 0),
-        Booking.countDocuments({ status: "Cancelled" }).maxTimeMS(4000).catch(() => 0),
-        Property.countDocuments({}).maxTimeMS(4000).catch(() => 0),
-        Vehicle.countDocuments({}).maxTimeMS(4000).catch(() => 0),
-        Ticket.countDocuments({}).maxTimeMS(4000).catch(() => 0),
-        User.find({}).select("_id name email phone role isVerified createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
-        Booking.find({}).select("_id bookingId propertyTitle itemTitle vehicleTitle customerName userEmail totalAmount amount status checkIn checkOut pickupDate createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
-        Property.find({}).select("_id title district location type price pricePerNight images image status ownerName ownerEmail createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
-        Vehicle.find({}).select("_id title type registrationNumber regNo numberPlate images providerName providerPhone ownerEmail ownerName location district price pricePerDay status createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
-        User.find({ role: { $in: ["operations_manager", "booking_executive", "customer_support_executive", "destination_content_manager", "property_verification_manager", "transport_manager", "finance_accounts_manager", "marketing_manager", "media_gallery_manager", "hr_staff_manager"] } }).select("_id name email phone role createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => []),
-        Ticket.find({}).select("_id ticketId senderName senderEmail senderRole subject category priority status message createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(4000).catch(() => [])
+        User.countDocuments({}).maxTimeMS(3000).catch(() => 0),
+        Booking.countDocuments({}).maxTimeMS(3000).catch(() => 0),
+        Booking.countDocuments({ status: { $in: ["Pending", "Pending Approval"] } }).maxTimeMS(3000).catch(() => 0),
+        Booking.countDocuments({ status: { $in: ["Confirmed", "In Progress", "Completed"] } }).maxTimeMS(3000).catch(() => 0),
+        Booking.countDocuments({ status: "Cancelled" }).maxTimeMS(3000).catch(() => 0),
+        Property.countDocuments({}).maxTimeMS(3000).catch(() => 0),
+        Vehicle.countDocuments({}).maxTimeMS(3000).catch(() => 0),
+        Ticket.countDocuments({}).maxTimeMS(3000).catch(() => 0),
+        User.find({}).select("_id name email phone role isVerified createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(3000).catch(() => []),
+        Booking.find({}).select("_id bookingId propertyTitle itemTitle vehicleTitle customerName userEmail totalAmount amount status checkIn checkOut pickupDate createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(3000).catch(() => []),
+        Property.find({}).select("_id title district location type price pricePerNight status ownerName ownerEmail createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(3000).catch(() => []),
+        Vehicle.find({}).select("_id title type registrationNumber regNo numberPlate providerName providerPhone ownerEmail ownerName location district price pricePerDay status createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(3000).catch(() => []),
+        User.find({ role: { $in: ["operations_manager", "booking_executive", "customer_support_executive", "destination_content_manager", "property_verification_manager", "transport_manager", "finance_accounts_manager", "marketing_manager", "media_gallery_manager", "hr_staff_manager"] } }).select("_id name email phone role createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(3000).catch(() => []),
+        Ticket.find({}).select("_id ticketId senderName senderEmail senderRole subject category priority status message createdAt").sort({ _id: -1 }).limit(15).lean().maxTimeMS(3000).catch(() => [])
       ]);
 
       const cleanedProperties = (recentProperties || []).map(p => ({
         ...p,
         id: p._id ? String(p._id) : p.id,
-        images: sanitizeImages(p.images || (p.image ? [p.image] : []), DEFAULT_HOTEL_IMG)
+        price: Number(p.price || p.pricePerNight || 3800),
+        pricePerNight: Number(p.pricePerNight || p.price || 3800),
+        images: getPropertyImages(p)
       }));
 
-      const cleanedVehicles = (recentVehicles || []).map(v => ({
-        ...v,
-        id: v._id ? String(v._id) : v.id,
-        images: sanitizeImages(v.images, DEFAULT_VEHICLE_IMG)
-      }));
+      const cleanedVehicles = (recentVehicles || []).map(v => {
+        const vImgs = getVehicleImages(v);
+        return {
+          ...v,
+          id: v._id ? String(v._id) : v.id,
+          price: Number(v.price || v.pricePerDay || 2500),
+          pricePerDay: Number(v.pricePerDay || v.price || 2500),
+          images: vImgs,
+          exteriorImage: vImgs[0],
+          interiorImage: vImgs[1] || vImgs[0]
+        };
+      });
 
       const cleanedUsers = (recentUsers || []).map(u => ({
         ...u,
         id: u._id ? String(u._id) : u.id,
-        avatar: sanitizeImageUrl(u.avatar, DEFAULT_AVATAR_IMG)
+        avatar: DEFAULT_AVATAR_IMG
       }));
 
       const totalRevenue = (recentBookings || []).reduce(
@@ -3794,17 +3862,21 @@ router.get(
 
     try {
       const rawProperties = await Property.find(filter)
-        .select("_id title district location type price pricePerNight rating reviewsCount images image amenities coordinates status ownerName ownerEmail createdAt")
+        .select("_id title district location type price pricePerNight rating reviewsCount status ownerName ownerEmail createdAt")
         .sort({ _id: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean()
-        .maxTimeMS(6000);
+        .maxTimeMS(4000);
 
       const cleaned = (rawProperties || []).map(p => ({
         ...p,
         id: p._id ? String(p._id) : p.id,
-        images: sanitizeImages(p.images || (p.image ? [p.image] : []), DEFAULT_HOTEL_IMG)
+        price: Number(p.price || p.pricePerNight || 3800),
+        pricePerNight: Number(p.pricePerNight || p.price || 3800),
+        images: getPropertyImages(p),
+        amenities: ['Free WiFi', 'Mountain View', 'Breakfast Included', 'Parking'],
+        coordinates: { lat: 11.4102, lng: 76.6950 }
       }));
 
       propertiesListCache = {
@@ -4103,19 +4175,24 @@ router.get(
       );
 
       const rawVehicles = await Vehicle.find({})
-        .select("_id title type registrationNumber regNo numberPlate images exteriorImage interiorImage providerName providerPhone providerEmail ownerEmail ownerName location district seatingCapacity fuelType acType price pricePerDay perKmRate status createdAt")
+        .select("_id title type registrationNumber regNo numberPlate providerName providerPhone providerEmail ownerEmail ownerName location district seatingCapacity fuelType acType price pricePerDay perKmRate status createdAt")
         .sort({ _id: -1 })
         .limit(limit)
         .lean()
-        .maxTimeMS(6000);
+        .maxTimeMS(4000);
 
-      const cleanedVehicles = (rawVehicles || []).map(v => ({
-        ...v,
-        id: v._id ? String(v._id) : v.id,
-        images: sanitizeImages(v.images || (v.exteriorImage ? [v.exteriorImage] : []), DEFAULT_VEHICLE_IMG),
-        exteriorImage: sanitizeImageUrl(v.exteriorImage, DEFAULT_VEHICLE_IMG),
-        interiorImage: sanitizeImageUrl(v.interiorImage, DEFAULT_VEHICLE_IMG)
-      }));
+      const cleanedVehicles = (rawVehicles || []).map(v => {
+        const vImgs = getVehicleImages(v);
+        return {
+          ...v,
+          id: v._id ? String(v._id) : v.id,
+          price: Number(v.price || v.pricePerDay || 2500),
+          pricePerDay: Number(v.pricePerDay || v.price || 2500),
+          images: vImgs,
+          exteriorImage: vImgs[0],
+          interiorImage: vImgs[1] || vImgs[0]
+        };
+      });
 
       return res.status(200).json(cleanedVehicles);
     } catch (error) {

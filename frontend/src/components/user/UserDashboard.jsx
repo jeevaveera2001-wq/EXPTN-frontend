@@ -30,7 +30,8 @@ import {
   MessageCircle,
   Smartphone,
   CheckCircle2,
-  ExternalLink
+  ExternalLink,
+  Trash2
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -169,7 +170,30 @@ export default function UserDashboard() {
     } catch (e) {}
   };
 
+  const handleDeleteBooking = async (bkId) => {
+    if (!window.confirm('Are you sure you want to remove this booking?')) return;
+    setBookingsList(prev => prev.filter(b => (b.bookingId || b.id || b._id) !== bkId));
+    try {
+      localStorage.removeItem('etn_user_bookings');
+      localStorage.removeItem('etn_saved_bookings');
+      Object.keys(localStorage).forEach(k => {
+        if (k.toLowerCase().includes('booking')) localStorage.removeItem(k);
+      });
+    } catch (e) {}
+    try {
+      await apiFetch(`/api/bookings/${bkId}`, { method: 'DELETE' });
+    } catch (e) {}
+    triggerSuccess('Booking removed successfully!');
+  };
+
   useEffect(() => {
+    try {
+      localStorage.removeItem('etn_user_bookings');
+      localStorage.removeItem('etn_saved_bookings');
+      Object.keys(localStorage).forEach(k => {
+        if (k.toLowerCase().includes('booking')) localStorage.removeItem(k);
+      });
+    } catch (e) {}
     fetchUserData();
 
     const handleBookingCreated = (e) => {
@@ -655,13 +679,21 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
                             <div className="text-[10px] text-slate-400 font-mono">Incl. 18% GST + 5% Fee</div>
                           )}
                         </div>
-                        <div className="flex items-center w-full sm:w-auto">
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
                           <button 
                             type="button"
                             onClick={() => setShareModalBooking(bk)}
-                            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                            className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
                           >
                             <Share2 size={14} /> {isCab ? 'Share Transport Pass' : 'Share Stay Pass'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteBooking(bk.bookingId || bk.id || bk._id)}
+                            className="px-3 py-2.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                            title="Remove this booking"
+                          >
+                            <Trash2 size={13} /> Remove
                           </button>
                         </div>
                       </div>

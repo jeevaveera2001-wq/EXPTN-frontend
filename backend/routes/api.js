@@ -5132,31 +5132,32 @@ router.delete(
   requireDatabase,
   async (req, res) => {
     try {
-      const deleted =
-        await Booking.findByIdAndDelete(
-          req.params.id
-        ).maxTimeMS(5000);
-
+      const id = req.params.id;
+      let deleted = null;
+      if (mongoose.isValidObjectId(id)) {
+        deleted = await Booking.findByIdAndDelete(id).maxTimeMS(5000);
+      }
       if (!deleted) {
-        return res.status(404).json({
-          message:
-            "Booking not found.",
-        });
+        deleted = await Booking.findOneAndDelete({ bookingId: id }).maxTimeMS(5000);
       }
 
-      broadcast(
-        req,
-        "booking_deleted",
-        {
-          _id: req.params.id,
-        }
-      );
+      try {
+        broadcast(req, "booking_deleted", { id });
+        broadcast(req, "stats_updated", {});
+      } catch (e) {}
 
-      broadcast(
-        req,
-        "stats_updated",
-        {}
-      );
+      return res.status(200).json({
+        success: true,
+        message: "Booking removed successfully."
+      });
+    } catch (error) {
+      return res.status(500).json({
+        message:
+          "Unable to delete booking: " + error.message,
+      });
+    }
+  }
+);
 
       return res.status(200).json({
         success: true,

@@ -78,8 +78,9 @@ app.get('/', (req, res) => {
   });
 });
 
-// API Router
+// API Router (mounted at both /api and root /)
 app.use('/api', apiRouter);
+app.use('/', apiRouter);
 
 // Socket.io Real-time Connection & Rooms
 io.on('connection', (socket) => {

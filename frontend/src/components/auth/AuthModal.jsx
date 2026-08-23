@@ -51,9 +51,9 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
     const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
     const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
     
-    // 6-second abort controller to prevent hanging
+    // 8-second abort controller to prevent hanging
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     const fetchOptions = {
       ...options,
       signal: options.signal || controller.signal
@@ -62,18 +62,11 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
     try {
       const res = await fetch(url, fetchOptions);
       clearTimeout(timeoutId);
-      if (res && (res.ok || res.status === 400 || res.status === 401 || res.status === 403 || res.status === 404 || res.status === 500)) {
-        return res;
-      }
+      return res;
     } catch (e) {
       clearTimeout(timeoutId);
-      console.warn('Direct backend API fetch notice for', url, e.message);
-    }
-
-    try {
-      return await fetch(endpoint, options);
-    } catch (e) {
-      return null;
+      console.warn('Direct backend API fetch error for', url, e.message);
+      throw e;
     }
   };
 

@@ -527,6 +527,23 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
           </nav>
         </div>
 
+        {/* Sidebar Footer with Sign Out */}
+        <div className="pt-4 border-t border-[#0d2a58] space-y-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm('Are you sure you want to sign out?')) {
+                logout();
+                window.location.href = '/';
+              }
+            }}
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-xs font-bold text-rose-300 hover:bg-rose-950/40 hover:text-rose-200 transition-all cursor-pointer"
+          >
+            <LogOut size={16} />
+            <span>Sign Out</span>
+          </button>
+        </div>
+
       </aside>
 
       {/* 💻 MAIN CONTENT AREA (100% Full Width on Mobile with zero sidebars) */}
@@ -540,6 +557,21 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">Manage your travel bookings, saved stays, profile & security.</p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm('Are you sure you want to sign out?')) {
+                logout();
+                window.location.href = '/';
+              }
+            }}
+            className="px-3.5 py-2 rounded-2xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold text-xs font-mono flex items-center gap-1.5 shadow-xs transition-transform active:scale-95 cursor-pointer"
+            title="Sign Out Account"
+          >
+            <LogOut size={15} />
+            <span>Sign Out</span>
+          </button>
         </div>
 
         {/* Notification Toast */}

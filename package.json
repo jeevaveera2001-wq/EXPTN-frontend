@@ -5,6 +5,7 @@
   "main": "backend/server.js",
   "type": "module",
   "scripts": {
+    "build": "cd frontend && npm install && npm run build",
     "start": "cd backend && npm install && node server.js",
     "backend:start": "cd backend && node server.js",
     "frontend:build": "cd frontend && npm install && npm run build",

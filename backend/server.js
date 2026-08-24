@@ -17,6 +17,7 @@ const server = http.createServer(app);
 // Allowed origins
 const allowedOrigins = [
   'https://frontend-blond-iota-kzel6q4tzd.vercel.app',
+  'https://www.frontend-blond-iota-kzel6q4tzd.vercel.app',
   process.env.FRONTEND_URL,
   process.env.CLIENT_URL,
   'http://localhost:5173',
@@ -24,20 +25,40 @@ const allowedOrigins = [
   'http://localhost:5000'
 ].filter(Boolean);
 
+const isOriginAllowed = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  if (origin.endsWith('.vercel.app')) return true;
+  if (origin.includes('localhost') || origin.includes('127.0.0.1')) return true;
+  return false;
+};
+
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app') || origin.includes('localhost')) {
+    if (isOriginAllowed(origin)) {
       callback(null, true);
     } else {
-      callback(null, true);
+      callback(null, true); // Allow client connection without blocking CORS
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-email', 'x-requested-with']
 };
 
 const io = new Server(server, {
-  cors: corsOptions,
+  cors: {
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, true);
+      }
+    },
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  transports: ['websocket', 'polling'],
   pingTimeout: 20000,
   pingInterval: 25000
 });

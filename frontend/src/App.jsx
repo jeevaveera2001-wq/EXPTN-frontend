@@ -9,7 +9,6 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import PageLoader from './components/common/PageLoader';
 import NetworkStatusNotifier from './components/common/NetworkStatusNotifier';
 import MaintenanceScreen from './components/common/MaintenanceScreen';
-import { startBackendWarmupHeartbeat } from './utils/cache';
 import { BACKEND_API } from './config/api';
 
 // Core Public Pages (Eagerly Loaded for Instant 0ms Paint)
@@ -76,9 +75,16 @@ function PublicGuestOnlyRoute({ children }) {
 
 function AppContent() {
   const { currentUser } = useAuth();
-  const { socket } = useSocket();
+  const { socket, connectSocket } = useSocket();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
+
+  // Connect socket on dashboard activity or authenticated session
+  useEffect(() => {
+    if (currentUser && typeof connectSocket === 'function') {
+      connectSocket();
+    }
+  }, [currentUser, connectSocket]);
 
   // Maintenance & System Upgrade State (Persisted & Socket Driven)
   const [maintenanceState, setMaintenanceState] = useState(() => {
@@ -94,9 +100,8 @@ function AppContent() {
     };
   });
 
-  // Start background warm-up heartbeat once & purge legacy stale booking cache
+  // Purge legacy stale booking cache
   useEffect(() => {
-    startBackendWarmupHeartbeat();
     try {
       const isCleaned = localStorage.getItem('etn_bookings_truncated_v2');
       if (!isCleaned) {
@@ -127,7 +132,9 @@ function AppContent() {
       }
     };
     socket.on('maintenance_mode_changed', handleMaintChange);
-    return () => socket.off('maintenance_mode_changed', handleMaintChange);
+    return () => {
+      socket.off('maintenance_mode_changed', handleMaintChange);
+    };
   }, [socket]);
 
   const handleOpenAuth = (mode) => {

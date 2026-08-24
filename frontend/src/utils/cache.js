@@ -95,26 +95,3 @@ export function invalidateCache(key) {
     } catch (e) {}
   }
 }
-
-/**
- * Automatic Backend Keep-Alive Heartbeat
- * Keeps the server instance active and prevents cold-start lag.
- */
-let heartbeatTimer = null;
-export function startBackendWarmupHeartbeat() {
-  if (heartbeatTimer) return;
-  
-  const ping = async () => {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      await fetch(`${BACKEND_API}/properties`, { signal: controller.signal });
-      clearTimeout(timeoutId);
-    } catch (e) {}
-  };
-
-  // Ping in background without blocking initial paint
-  setTimeout(ping, 3000);
-  // Ping every 3.5 minutes
-  heartbeatTimer = setInterval(ping, 3.5 * 60 * 1000);
-}

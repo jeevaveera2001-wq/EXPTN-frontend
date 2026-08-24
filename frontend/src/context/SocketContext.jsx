@@ -1,46 +1,44 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { io } from 'socket.io-client';
+import { socket as sharedSocket, getSocket, connectSocket, disconnectSocket } from '../services/socket';
 
-import { BACKEND_URL, SOCKET_URL } from '../config/api';
-
-const SocketContext = createContext({ socket: null, isConnected: false });
+const SocketContext = createContext({
+  socket: sharedSocket,
+  isConnected: false,
+  connectSocket,
+  disconnectSocket
+});
 
 export function SocketProvider({ children }) {
-  const [socket, setSocket] = useState(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(sharedSocket.connected);
 
   useEffect(() => {
-    let s = null;
-    try {
-      s = io(SOCKET_URL, {
-        transports: ['websocket'],
-        reconnectionAttempts: 5,
-        reconnectionDelay: 2000,
-        timeout: 5000,
-        autoConnect: true
-      });
+    const s = getSocket();
 
-      s.on('connect', () => {
-        console.log('⚡ [SOCKET CONNECTED] Real-time live dashboard sync active:', s.id);
-        setIsConnected(true);
-      });
+    const handleConnect = () => {
+      setIsConnected(true);
+    };
 
-      s.on('disconnect', () => {
-        setIsConnected(false);
-      });
+    const handleDisconnect = () => {
+      setIsConnected(false);
+    };
 
-      setSocket(s);
-    } catch (err) {
-      console.warn('Socket connection note:', err.message);
+    s.on('connect', handleConnect);
+    s.on('disconnect', handleDisconnect);
+
+    // Initial state sync
+    if (s.connected !== isConnected) {
+      setIsConnected(s.connected);
     }
 
     return () => {
-      if (s) s.disconnect();
+      s.off('connect', handleConnect);
+      s.off('disconnect', handleDisconnect);
+      // Note: Do NOT disconnect the shared singleton during React component unmount/re-render
     };
   }, []);
 
   return (
-    <SocketContext.Provider value={{ socket, isConnected }}>
+    <SocketContext.Provider value={{ socket: sharedSocket, isConnected, connectSocket, disconnectSocket }}>
       {children}
     </SocketContext.Provider>
   );

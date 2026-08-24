@@ -315,18 +315,27 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
   ];
 
   const apiFetch = useCallback(async (endpoint, options = {}) => {
+    const token = localStorage.getItem('token') || currentUser?.token || '';
+    const headers = new Headers(options.headers || {});
+    if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
     const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
     const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
     try {
-      const res = await fetch(url, options);
+      const res = await fetch(url, { ...options, headers });
       if (res.ok || res.status === 400 || res.status === 401 || res.status === 403) {
         return res;
       }
     } catch (e) {
       console.warn('Direct backend API fetch error:', e.message);
     }
-    return await fetch(endpoint, options);
-  }, []);
+    return await fetch(endpoint, { ...options, headers });
+  }, [currentUser?.token]);
 
   // Filter strictly admitted properties (no demo entries, only approved/accepted)
   const filterAdmittedProperties = (list) => {
@@ -510,12 +519,13 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(bookingPayload)
         });
-        const saved = (res && res.ok) ? await res.json() : bookingPayload;
+        const data = (res && res.ok) ? await res.json() : null;
+        const saved = data?.booking || data || bookingPayload;
         
         try {
           const savedRaw = localStorage.getItem('etn_user_bookings');
           const list = savedRaw ? JSON.parse(savedRaw) : [];
-          const updatedList = [saved, ...list.filter(b => (b.bookingId || b.id) !== bookingId)];
+          const updatedList = [saved, ...list.filter(b => (b.bookingId || b.id || b._id) !== (saved.bookingId || bookingId))];
           localStorage.setItem('etn_user_bookings', JSON.stringify(updatedList));
           localStorage.setItem('etn_saved_bookings', JSON.stringify(updatedList));
           window.dispatchEvent(new CustomEvent('etn_booking_created', { detail: saved }));

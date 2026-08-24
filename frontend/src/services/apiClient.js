@@ -59,8 +59,18 @@ export async function request(endpoint, options = {}) {
     'Accept': 'application/json'
   };
 
-  const token = localStorage.getItem('token') || '';
-  if (token && token.length > 15) {
+  let token = localStorage.getItem('token') || '';
+  if (!token) {
+    try {
+      const savedUser = localStorage.getItem('ETN_USER');
+      if (savedUser) {
+        const u = JSON.parse(savedUser);
+        if (u?.token) token = u.token;
+      }
+    } catch (e) {}
+  }
+
+  if (token && token.length > 10) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
 

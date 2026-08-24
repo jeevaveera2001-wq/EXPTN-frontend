@@ -44,3 +44,4 @@ propertySchema.index({ ownerEmail: 1 });
 propertySchema.index({ pricePerNight: 1 });
 
 export const Property = mongoose.models.Property || mongoose.model('Property', propertySchema);
+export default Property;

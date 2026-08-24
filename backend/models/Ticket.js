@@ -48,3 +48,4 @@ ticketSchema.index({ status: 1, createdAt: -1 });
 ticketSchema.index({ senderEmail: 1 });
 
 export const Ticket = mongoose.models.Ticket || mongoose.model('Ticket', ticketSchema);
+export default Ticket;

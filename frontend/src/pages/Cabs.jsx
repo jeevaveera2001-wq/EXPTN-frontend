@@ -115,10 +115,19 @@ export default function Cabs({ onOpenAuth }) {
   const [fetchError, setFetchError] = useState(null);
 
   const apiFetch = async (endpoint, options = {}) => {
+    const token = localStorage.getItem('token') || currentUser?.token || '';
+    const headers = new Headers(options.headers || {});
+    if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
     const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
     const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
     try {
-      const res = await fetch(url, options);
+      const res = await fetch(url, { ...options, headers });
       if (res && (res.ok || res.status === 400 || res.status === 401 || res.status === 403)) {
         return res;
       }
@@ -126,7 +135,7 @@ export default function Cabs({ onOpenAuth }) {
       console.warn('Vehicle API fetch notice for', url, e.message);
     }
     try {
-      return await fetch(endpoint, options);
+      return await fetch(endpoint, { ...options, headers });
     } catch (e) {
       return null;
     }
@@ -337,18 +346,19 @@ export default function Cabs({ onOpenAuth }) {
 
     try {
       // 1. Save to MongoDB Atlas via Backend API
-      const res = await fetch(`${BACKEND_API}/bookings`, {
+      const res = await apiFetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bookingPayload)
       });
-      const saved = res.ok ? await res.json() : bookingPayload;
+      const data = (res && res.ok) ? await res.json() : null;
+      const saved = data?.booking || data || bookingPayload;
 
       // 2. Persist to Local Storage for 0ms Instant User & Vendor Dashboard Sync
       try {
         const savedRaw = localStorage.getItem('etn_user_bookings');
         const list = savedRaw ? JSON.parse(savedRaw) : [];
-        const updatedList = [saved, ...list.filter(b => (b.bookingId || b.id) !== bookingId)];
+        const updatedList = [saved, ...list.filter(b => (b.bookingId || b.id || b._id) !== (saved.bookingId || bookingId))];
         localStorage.setItem('etn_user_bookings', JSON.stringify(updatedList));
         if (targetEmail) {
           localStorage.setItem(`etn_user_bookings_${targetEmail}`, JSON.stringify(updatedList));

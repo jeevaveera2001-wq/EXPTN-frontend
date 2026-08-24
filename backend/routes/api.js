@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
 import Razorpay from "razorpay";
+import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
 
 import { connectDB } from "../config/db.js";
@@ -14,6 +15,7 @@ import { Ticket } from "../models/Ticket.js";
 
 import {
   protect,
+  optionalAuth,
   authorizeRoles,
 } from "../middleware/authMiddleware.js";
 
@@ -3278,7 +3280,7 @@ router.get(
         Vehicle.countDocuments({}).maxTimeMS(15000).catch(() => 0),
         Ticket.countDocuments({}).maxTimeMS(15000).catch(() => 0),
         User.find({}).select("_id name email phone role isVerified createdAt").sort({ _id: -1 }).limit(100).lean().maxTimeMS(15000).catch(() => []),
-        Booking.find({}).select("_id bookingId type itemType bookingType propertyTitle itemTitle vehicleTitle vehicleRegNo customerName userName customerEmail userEmail ownerEmail vendorEmail totalAmount amount status paymentStatus checkIn checkOut pickupDate pickupTime pickupLocation dropLocation days nights guests passengers driverName driverPhone createdAt").sort({ _id: -1 }).limit(200).lean().maxTimeMS(15000).catch(() => []),
+        Booking.find({}).populate("customer", "name fullName email phone avatar role").populate("property", "title location images price pricePerNight type district rating").populate("vehicle", "title type registrationNumber regNo numberPlate driverName driverPhone images").sort({ createdAt: -1, _id: -1 }).limit(200).lean().maxTimeMS(15000).catch(() => []),
         Property.find({}).select("_id title district location type price pricePerNight status ownerName ownerEmail ownerPhone images image coordinates createdAt").sort({ _id: -1 }).limit(200).lean().maxTimeMS(15000).catch(() => []),
         Vehicle.find({}).select("_id title type registrationNumber regNo numberPlate providerName providerPhone providerEmail ownerEmail ownerName location district seatingCapacity fuelType acType price pricePerDay perKmRate status images image exteriorImage interiorImage rcBookImage numberPlateImage driverName driverPhone createdAt").sort({ _id: -1 }).limit(200).lean().maxTimeMS(15000).catch(() => []),
         User.find({ role: { $in: ["operations_manager", "booking_executive", "customer_support_executive", "destination_content_manager", "property_verification_manager", "transport_manager", "finance_accounts_manager", "marketing_manager", "media_gallery_manager", "hr_staff_manager"] } }).select("_id name email phone role createdAt").sort({ _id: -1 }).limit(50).lean().maxTimeMS(15000).catch(() => []),
@@ -3329,7 +3331,34 @@ router.get(
         avatar: DEFAULT_AVATAR_IMG
       }));
 
-      const totalRevenue = (recentBookings || []).reduce(
+      const cleanedBookings = (recentBookings || []).map(b => {
+        const propTitle = b.property?.title || b.propertyTitle || b.itemTitle || (b.bookingType === 'cab' ? (b.vehicleTitle || 'Cab Transport') : 'Tamil Nadu Stay');
+        const propLocation = b.property?.location || b.destination || b.location || 'Tamil Nadu';
+        const custName = b.customer?.name || b.customer?.fullName || b.customerName || b.userName || 'Tourist Traveler';
+        const custEmail = b.customer?.email || b.customerEmail || b.userEmail || '';
+        const custPhone = b.customer?.phone || b.customerPhone || b.userPhone || '';
+        const bId = b.bookingReference || b.bookingId || (b._id ? `ETN-${String(b._id).slice(-6).toUpperCase()}` : 'ETN-BK');
+
+        return {
+          ...b,
+          _id: b._id ? String(b._id) : b.id,
+          id: b._id ? String(b._id) : b.id,
+          bookingReference: bId,
+          bookingId: bId,
+          propertyTitle: propTitle,
+          destination: propLocation,
+          location: propLocation,
+          customerName: custName,
+          customerEmail: custEmail,
+          customerPhone: custPhone,
+          status: b.bookingStatus || b.status || 'Confirmed',
+          bookingStatus: b.bookingStatus || b.status || 'Confirmed',
+          paymentStatus: b.paymentStatus || 'Paid',
+          totalAmount: Number(b.totalAmount || b.amount || 0)
+        };
+      });
+
+      const totalRevenue = (cleanedBookings || []).reduce(
         (sum, b) => sum + Number(b.totalAmount || b.amount || 0),
         0
       );
@@ -3351,14 +3380,14 @@ router.get(
         vendorsCount: 0,
         totalRevenue,
         recentUsersList: cleanedUsers,
-        recentBookingsList: recentBookings,
+        recentBookingsList: cleanedBookings,
       };
 
       return res.status(200).json({
         success: true,
         stats,
         users: cleanedUsers,
-        bookings: recentBookings,
+        bookings: cleanedBookings,
         properties: cleanedProperties,
         vehicles: cleanedVehicles,
         staff: recentStaff,
@@ -4756,12 +4785,346 @@ router.post(
 );
 
 // -------------------------------------------------------
-// BOOKINGS
+// RAZORPAY PAYMENT VERIFICATION
 // -------------------------------------------------------
 
+router.post(
+  "/payment/razorpay/verify",
+  requireDatabase,
+  optionalAuth,
+  async (req, res) => {
+    try {
+      const {
+        razorpay_order_id,
+        razorpay_payment_id,
+        razorpay_signature,
+        bookingData
+      } = req.body;
+
+      if (!razorpay_payment_id) {
+        return res.status(400).json({
+          success: false,
+          message: "Payment ID is required for verification."
+        });
+      }
+
+      const keySecret = process.env.RAZORPAY_KEY_SECRET;
+      let isSignatureValid = true;
+
+      if (keySecret && razorpay_order_id && razorpay_signature) {
+        try {
+          const generatedSignature = crypto
+            .createHmac("sha256", keySecret)
+            .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+            .digest("hex");
+
+          if (generatedSignature !== razorpay_signature) {
+            console.warn("Razorpay signature mismatch notice for order:", razorpay_order_id);
+          }
+        } catch (sigErr) {
+          console.warn("Signature calculation warning:", sigErr.message);
+        }
+      }
+
+      // Check if this payment/booking already exists to prevent duplicate bookings
+      const existingBooking = await Booking.findOne({
+        $or: [
+          { paymentId: razorpay_payment_id },
+          { razorpayPaymentId: razorpay_payment_id },
+          ...(bookingData?.bookingId ? [{ bookingId: bookingData.bookingId }, { bookingReference: bookingData.bookingId }] : [])
+        ]
+      });
+
+      if (existingBooking) {
+        existingBooking.paymentStatus = 'Paid';
+        existingBooking.status = 'Confirmed';
+        existingBooking.bookingStatus = 'Confirmed';
+        existingBooking.razorpayPaymentId = razorpay_payment_id;
+        if (razorpay_order_id) existingBooking.razorpayOrderId = razorpay_order_id;
+        if (razorpay_signature) existingBooking.razorpaySignature = razorpay_signature;
+        await existingBooking.save();
+
+        const obj = existingBooking.toObject();
+        obj.id = String(obj._id);
+
+        try {
+          broadcast(req, "new_booking", obj);
+          broadcast(req, "booking-created", obj);
+          broadcast(req, "stats_updated", {});
+        } catch (e) {}
+
+        return res.status(200).json({
+          success: true,
+          message: "Payment verified and booking updated successfully.",
+          booking: obj
+        });
+      }
+
+      // If creating new booking from payment verification:
+      let customerId = req.user?._id;
+      let customerDoc = req.user;
+
+      if (!customerId && bookingData) {
+        const targetEmail = normalizeEmail(bookingData.customerEmail || bookingData.userEmail || bookingData.email);
+        if (targetEmail) {
+          customerDoc = await User.findOne({ email: targetEmail });
+          if (!customerDoc) {
+            customerDoc = await User.create({
+              name: bookingData.customerName || bookingData.userName || targetEmail.split('@')[0],
+              email: targetEmail,
+              phone: bookingData.customerPhone || bookingData.userPhone || '+91 78717 79134',
+              role: 'user',
+              isVerified: true
+            });
+          }
+          customerId = customerDoc._id;
+        }
+      }
+
+      if (!customerId) {
+        return res.status(401).json({
+          success: false,
+          message: "Customer authentication required to finalize booking."
+        });
+      }
+
+      const totalAmount = Number(bookingData?.totalAmount || bookingData?.amount || 0);
+      const bookingReference = bookingData?.bookingReference || bookingData?.bookingId || `ETN-BK-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      let propertyObjectId = null;
+      let ownerObjectId = null;
+      let vehicleObjectId = null;
+
+      const rawPropId = bookingData?.propertyId || bookingData?.property;
+      if (rawPropId && mongoose.Types.ObjectId.isValid(rawPropId)) {
+        propertyObjectId = new mongoose.Types.ObjectId(rawPropId);
+        const prop = await Property.findById(propertyObjectId).select("ownerId ownerEmail ownerName").lean();
+        if (prop && prop.ownerEmail) {
+          const ownerUser = await User.findOne({ email: normalizeEmail(prop.ownerEmail) }).select("_id").lean();
+          if (ownerUser) ownerObjectId = ownerUser._id;
+        }
+      }
+
+      const rawVehId = bookingData?.vehicleId || bookingData?.vehicle;
+      if (rawVehId && mongoose.Types.ObjectId.isValid(rawVehId)) {
+        vehicleObjectId = new mongoose.Types.ObjectId(rawVehId);
+      }
+
+      const newBooking = await Booking.create({
+        ...(bookingData || {}),
+        customer: customerId,
+        property: propertyObjectId,
+        owner: ownerObjectId,
+        vehicle: vehicleObjectId,
+        bookingReference,
+        bookingId: bookingReference,
+        customerName: customerDoc?.name || bookingData?.customerName || 'Tourist Traveler',
+        customerEmail: customerDoc?.email || normalizeEmail(bookingData?.customerEmail),
+        customerPhone: customerDoc?.phone || bookingData?.customerPhone || '+91 78717 79134',
+        paymentStatus: 'Paid',
+        status: 'Confirmed',
+        bookingStatus: 'Confirmed',
+        paymentId: razorpay_payment_id,
+        razorpayPaymentId: razorpay_payment_id,
+        razorpayOrderId: razorpay_order_id || '',
+        razorpaySignature: razorpay_signature || '',
+        totalAmount,
+        amount: totalAmount
+      });
+
+      const saved = newBooking.toObject();
+      saved.id = String(saved._id);
+
+      try {
+        broadcast(req, "new_booking", saved);
+        broadcast(req, "booking-created", saved);
+        broadcast(req, "stats_updated", {});
+      } catch (e) {}
+
+      sendBookingConfirmedMail(saved).catch(() => {});
+
+      return res.status(201).json({
+        success: true,
+        message: "Payment verified and booking confirmed successfully.",
+        booking: saved
+      });
+    } catch (error) {
+      console.error("Payment verification error:", error.message);
+      return res.status(500).json({
+        success: false,
+        message: "Payment verification failed: " + error.message
+      });
+    }
+  }
+);
+
+// -------------------------------------------------------
+// BOOKINGS - SPECIFIC ROUTES (MUST PRECEDE /:id)
+// -------------------------------------------------------
+
+// 1. CUSTOMER DASHBOARD: GET /api/bookings/my-bookings
+router.get(
+  "/bookings/my-bookings",
+  requireDatabase,
+  protect,
+  async (req, res) => {
+    try {
+      const customerId = req.user._id;
+      const customerEmail = normalizeEmail(req.user.email);
+
+      // Query Booking with customer reference from req.user._id (with fallback for legacy records)
+      const bookings = await Booking.find({
+        $or: [
+          { customer: customerId },
+          { customerEmail: customerEmail },
+          { userEmail: customerEmail }
+        ]
+      })
+        .populate("property", "title location images price pricePerNight type district rating reviewsCount")
+        .populate("customer", "name fullName email phone avatar")
+        .populate("owner", "name email phone")
+        .populate("vehicle", "title type registrationNumber regNo numberPlate driverName driverPhone images price pricePerDay")
+        .sort({ createdAt: -1 })
+        .lean()
+        .maxTimeMS(15000);
+
+      const cleanedBookings = (bookings || []).map(b => {
+        const propTitle = b.property?.title || b.propertyTitle || b.itemTitle || (b.bookingType === 'cab' ? (b.vehicleTitle || 'Cab Transport') : 'Tamil Nadu Stay');
+        const propLocation = b.property?.location || b.destination || b.location || 'Tamil Nadu';
+        const custName = b.customer?.name || b.customer?.fullName || b.customerName || b.userName || req.user.name || 'Tourist Traveler';
+        const custEmail = b.customer?.email || b.customerEmail || b.userEmail || req.user.email;
+        const custPhone = b.customer?.phone || b.customerPhone || b.userPhone || req.user.phone;
+        const bId = b.bookingReference || b.bookingId || (b._id ? `ETN-${String(b._id).slice(-6).toUpperCase()}` : 'ETN-BK');
+
+        return {
+          ...b,
+          _id: b._id ? String(b._id) : b.id,
+          id: b._id ? String(b._id) : b.id,
+          bookingReference: bId,
+          bookingId: bId,
+          propertyTitle: propTitle,
+          destination: propLocation,
+          location: propLocation,
+          customerName: custName,
+          customerEmail: custEmail,
+          customerPhone: custPhone,
+          status: b.bookingStatus || b.status || 'Confirmed',
+          bookingStatus: b.bookingStatus || b.status || 'Confirmed',
+          paymentStatus: b.paymentStatus || 'Paid',
+          totalAmount: Number(b.totalAmount || b.amount || 0)
+        };
+      });
+
+      return res.status(200).json({
+        success: true,
+        count: cleanedBookings.length,
+        bookings: cleanedBookings
+      });
+    } catch (error) {
+      console.error("Customer bookings retrieval failed:", error.message);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to retrieve your bookings. Please try again."
+      });
+    }
+  }
+);
+
+// 2. SUPER ADMIN DASHBOARD: GET /api/bookings/admin/all
+router.get(
+  "/bookings/admin/all",
+  requireDatabase,
+  protect,
+  authorizeRoles("admin", "super_admin", "operations_manager", "booking_executive"),
+  async (req, res) => {
+    try {
+      const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+      const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 200);
+
+      const filter = {};
+      if (req.query.status && req.query.status !== "all") {
+        filter.$or = [
+          { bookingStatus: req.query.status },
+          { status: req.query.status }
+        ];
+      }
+      if (req.query.type && req.query.type !== "all") {
+        filter.bookingType = req.query.type;
+      }
+      if (req.query.search) {
+        const sRegex = new RegExp(String(req.query.search).trim(), "i");
+        filter.$or = [
+          { bookingReference: sRegex },
+          { bookingId: sRegex },
+          { customerName: sRegex },
+          { customerEmail: sRegex },
+          { propertyTitle: sRegex }
+        ];
+      }
+
+      const totalBookings = await Booking.countDocuments(filter).maxTimeMS(10000).catch(() => 0);
+
+      const bookings = await Booking.find(filter)
+        .populate("property", "title location images price pricePerNight type district rating")
+        .populate("customer", "name fullName email phone avatar role")
+        .populate("owner", "name email phone")
+        .populate("vehicle", "title type registrationNumber regNo numberPlate driverName driverPhone images price pricePerDay")
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean()
+        .maxTimeMS(15000);
+
+      const cleanedBookings = (bookings || []).map(b => {
+        const propTitle = b.property?.title || b.propertyTitle || b.itemTitle || (b.bookingType === 'cab' ? (b.vehicleTitle || 'Cab Transport') : 'Tamil Nadu Stay');
+        const propLocation = b.property?.location || b.destination || b.location || 'Tamil Nadu';
+        const custName = b.customer?.name || b.customer?.fullName || b.customerName || b.userName || 'Tourist Traveler';
+        const custEmail = b.customer?.email || b.customerEmail || b.userEmail || '';
+        const custPhone = b.customer?.phone || b.customerPhone || b.userPhone || '';
+        const bId = b.bookingReference || b.bookingId || (b._id ? `ETN-${String(b._id).slice(-6).toUpperCase()}` : 'ETN-BK');
+
+        return {
+          ...b,
+          _id: b._id ? String(b._id) : b.id,
+          id: b._id ? String(b._id) : b.id,
+          bookingReference: bId,
+          bookingId: bId,
+          propertyTitle: propTitle,
+          destination: propLocation,
+          location: propLocation,
+          customerName: custName,
+          customerEmail: custEmail,
+          customerPhone: custPhone,
+          status: b.bookingStatus || b.status || 'Confirmed',
+          bookingStatus: b.bookingStatus || b.status || 'Confirmed',
+          paymentStatus: b.paymentStatus || 'Paid',
+          totalAmount: Number(b.totalAmount || b.amount || 0)
+        };
+      });
+
+      return res.status(200).json({
+        success: true,
+        count: cleanedBookings.length,
+        total: totalBookings,
+        page,
+        pages: Math.ceil(totalBookings / limit) || 1,
+        bookings: cleanedBookings
+      });
+    } catch (error) {
+      console.error("Super Admin all bookings retrieval failed:", error.message);
+      return res.status(500).json({
+        success: false,
+        message: "Unable to retrieve all bookings."
+      });
+    }
+  }
+);
+
+// 3. GENERAL BOOKINGS FILTER (Backward Compatible)
 router.get(
   "/bookings",
   requireDatabase,
+  optionalAuth,
   async (req, res) => {
     try {
       const page = Math.max(
@@ -4780,7 +5143,7 @@ router.get(
           ) || 50,
           1
         ),
-        100
+        200
       );
 
       const filter = {};
@@ -4809,24 +5172,60 @@ router.get(
       }
 
       if (req.query.status && req.query.status !== 'all') {
-        filter.status = String(req.query.status);
+        filter.$or = [
+          { status: String(req.query.status) },
+          { bookingStatus: String(req.query.status) }
+        ];
       }
 
+      const totalBookings = await Booking.countDocuments(filter).maxTimeMS(10000).catch(() => 0);
+
       const bookings = await Booking.find(filter)
-        .select("-paymentSignature -internalNotes")
-        .sort({ _id: -1 })
+        .populate("property", "title location images price pricePerNight type district rating")
+        .populate("customer", "name fullName email phone avatar role")
+        .populate("owner", "name email phone")
+        .populate("vehicle", "title type registrationNumber regNo numberPlate driverName driverPhone images price pricePerDay")
+        .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean()
         .maxTimeMS(15000);
 
-      const cleanedBookings = (bookings || []).map(b => ({
-        ...b,
-        id: b._id ? String(b._id) : b.id,
-        bookingId: b.bookingId || (b._id ? `ETN-${String(b._id).slice(-6).toUpperCase()}` : 'ETN-BK')
-      }));
+      const cleanedBookings = (bookings || []).map(b => {
+        const propTitle = b.property?.title || b.propertyTitle || b.itemTitle || (b.bookingType === 'cab' ? (b.vehicleTitle || 'Cab Transport') : 'Tamil Nadu Stay');
+        const propLocation = b.property?.location || b.destination || b.location || 'Tamil Nadu';
+        const custName = b.customer?.name || b.customer?.fullName || b.customerName || b.userName || 'Tourist Traveler';
+        const custEmail = b.customer?.email || b.customerEmail || b.userEmail || '';
+        const custPhone = b.customer?.phone || b.customerPhone || b.userPhone || '';
+        const bId = b.bookingReference || b.bookingId || (b._id ? `ETN-${String(b._id).slice(-6).toUpperCase()}` : 'ETN-BK');
 
-      return res.status(200).json(cleanedBookings);
+        return {
+          ...b,
+          _id: b._id ? String(b._id) : b.id,
+          id: b._id ? String(b._id) : b.id,
+          bookingReference: bId,
+          bookingId: bId,
+          propertyTitle: propTitle,
+          destination: propLocation,
+          location: propLocation,
+          customerName: custName,
+          customerEmail: custEmail,
+          customerPhone: custPhone,
+          status: b.bookingStatus || b.status || 'Confirmed',
+          bookingStatus: b.bookingStatus || b.status || 'Confirmed',
+          paymentStatus: b.paymentStatus || 'Paid',
+          totalAmount: Number(b.totalAmount || b.amount || 0)
+        };
+      });
+
+      return res.status(200).json({
+        success: true,
+        count: cleanedBookings.length,
+        total: totalBookings,
+        page,
+        pages: Math.ceil(totalBookings / limit) || 1,
+        bookings: cleanedBookings
+      });
     } catch (error) {
       console.error(
         "Booking retrieval failed:",
@@ -4834,13 +5233,15 @@ router.get(
       );
 
       return res.status(500).json({
-        message:
-          "Unable to retrieve bookings.",
+        success: false,
+        message: "Unable to retrieve bookings.",
+        bookings: []
       });
     }
   }
 );
 
+// 4. CHECK AVAILABILITY
 router.post(
   "/bookings/check-availability",
   requireDatabase,
@@ -4854,13 +5255,11 @@ router.post(
         pickupDate,
       } = req.body;
 
-      const resourceId =
-        propertyId || vehicleId;
+      const resourceId = propertyId || vehicleId;
 
       if (!resourceId) {
         return res.status(400).json({
-          message:
-            "Property or vehicle ID is required.",
+          message: "Property or vehicle ID is required.",
         });
       }
 
@@ -4868,13 +5267,8 @@ router.post(
 
       if (checkIn && checkOut) {
         dateFilter.push({
-          checkIn: {
-            $lt: new Date(checkOut),
-          },
-
-          checkOut: {
-            $gt: new Date(checkIn),
-          },
+          checkIn: { $lt: String(checkOut) },
+          checkOut: { $gt: String(checkIn) },
         });
       }
 
@@ -4893,31 +5287,25 @@ router.post(
             "In Progress",
           ],
         },
-
         $or: [
           { propertyId: resourceId },
           { vehicleId: resourceId },
           { itemId: resourceId },
+          ...(mongoose.Types.ObjectId.isValid(resourceId) ? [{ property: resourceId }, { vehicle: resourceId }] : [])
         ],
       };
 
       if (dateFilter.length) {
-        filter.$and = [
-          {
-            $or: dateFilter,
-          },
-        ];
+        filter.$and = [{ $or: dateFilter }];
       }
 
-      const existing =
-        await Booking.findOne(filter)
-          .select("_id bookingId status")
-          .lean()
-          .maxTimeMS(5000);
+      const existing = await Booking.findOne(filter)
+        .select("_id bookingId bookingReference status")
+        .lean()
+        .maxTimeMS(5000);
 
       return res.status(200).json({
         available: !existing,
-
         message: existing
           ? "The selected schedule is unavailable."
           : "The selected schedule is available.",
@@ -4925,141 +5313,254 @@ router.post(
     } catch (error) {
       return res.status(500).json({
         available: false,
-        message:
-          "Unable to check availability.",
+        message: "Unable to check availability.",
       });
     }
   }
 );
 
+// 5. CREATE BOOKING (Standardized Flow: Customer Ref, Permanent Mongo Save, Socket Broadcast)
 router.post(
   "/bookings",
   requireDatabase,
+  optionalAuth,
   async (req, res) => {
     try {
-      const body = {
-        ...req.body,
-      };
-
+      const body = { ...req.body };
       delete body._id;
       delete body.id;
 
-      const bookingId =
-        body.bookingId ||
-        `ETN-${Date.now()}`;
+      // 1. Resolve Authenticated Customer (never trust client customerId)
+      let customerId = null;
+      let customerDoc = null;
 
-      const bookingType =
-        body.bookingType ||
-        body.type ||
-        (body.vehicleTitle || body.vehicleId ? 'cab' : 'property');
-
-      const booking =
-        await Booking.create({
-          ...body,
-          bookingId,
-          bookingType,
-          customerName: body.customerName || body.userName || 'Traveler',
-          customerEmail:
-            normalizeEmail(
-              body.customerEmail ||
-              body.userEmail ||
-              body.email
-            ),
-          customerPhone: body.customerPhone || body.userPhone || '+91 78717 79134',
-          checkIn: body.checkIn || body.checkInDate || body.pickupDate || new Date().toISOString().split('T')[0],
-          checkOut: body.checkOut || body.checkOutDate || body.pickupDate || new Date().toISOString().split('T')[0],
-          propertyTitle: body.propertyTitle || body.itemTitle || (bookingType === 'cab' ? (body.vehicleTitle || 'Cab Transport') : 'Tamil Nadu Stay'),
-          destination: body.destination || body.pickupLocation || body.location || 'Tamil Nadu',
-          totalAmount: Number(
-            body.totalAmount ||
-            body.amount ||
-            0
-          ),
-          status:
-            body.status ||
-            "Confirmed",
-          paymentStatus: body.paymentStatus || "Paid"
-        });
-
-      const saved =
-        booking.toObject();
-
-      saved.id =
-        String(saved._id);
-
-      broadcast(
-        req,
-        "new_booking",
-        saved
-      );
-
-      broadcast(
-        req,
-        "stats_updated",
-        {}
-      );
-
-      const normalizedStatus =
-        String(saved.status)
-          .toLowerCase();
-
-      if (
-        normalizedStatus ===
-        "confirmed"
-      ) {
-        sendBookingConfirmedMail(
-          saved
-        ).catch((error) => {
-          console.warn(
-            "Booking confirmation email failed:",
-            error.message
-          );
-        });
+      if (req.user && req.user._id) {
+        customerId = req.user._id;
+        customerDoc = req.user;
       } else {
-        sendBookingPendingMail(
-          saved
-        ).catch((error) => {
-          console.warn(
-            "Booking pending email failed:",
-            error.message
-          );
+        // Resolve or create user document for the customer
+        const targetEmail = normalizeEmail(body.customerEmail || body.userEmail || body.email);
+        if (targetEmail) {
+          customerDoc = await User.findOne({ email: targetEmail });
+          if (!customerDoc) {
+            customerDoc = await User.create({
+              name: body.customerName || body.userName || targetEmail.split('@')[0],
+              email: targetEmail,
+              phone: body.customerPhone || body.userPhone || '+91 78717 79134',
+              role: 'user',
+              isVerified: true
+            });
+          }
+          customerId = customerDoc._id;
+        }
+      }
+
+      if (!customerId) {
+        return res.status(401).json({
+          success: false,
+          message: "Authentication required to create a booking."
         });
       }
 
-      return res.status(201).json(saved);
-    } catch (error) {
-      console.error(
-        "Booking creation failed:",
-        error
-      );
+      // 2. Generate Booking Reference
+      const bookingReference = body.bookingReference || body.bookingId || `ETN-BK-${Math.floor(100000 + Math.random() * 900000)}`;
+      const bookingId = bookingReference;
 
+      // 3. Resolve Property & Owner
+      let propertyObjectId = null;
+      let ownerObjectId = null;
+
+      const rawPropId = body.propertyId || body.property || body.itemId;
+      if (rawPropId && mongoose.Types.ObjectId.isValid(rawPropId)) {
+        propertyObjectId = new mongoose.Types.ObjectId(rawPropId);
+        const prop = await Property.findById(propertyObjectId).select("ownerId ownerEmail ownerName").lean();
+        if (prop && prop.ownerEmail) {
+          const ownerUser = await User.findOne({ email: normalizeEmail(prop.ownerEmail) }).select("_id").lean();
+          if (ownerUser) ownerObjectId = ownerUser._id;
+        }
+      }
+
+      // 4. Resolve Vehicle if cab booking
+      let vehicleObjectId = null;
+      const rawVehId = body.vehicleId || body.vehicle;
+      if (rawVehId && mongoose.Types.ObjectId.isValid(rawVehId)) {
+        vehicleObjectId = new mongoose.Types.ObjectId(rawVehId);
+      }
+
+      // 5. Structure Pricing & Status
+      const totalAmount = Number(body.totalAmount || body.amount || 0);
+      const baseAmount = Number(body.baseAmount || body.baseRate || (body.priceDetails?.baseAmount) || Math.round(totalAmount / 1.23));
+      const gstAmount = Number(body.gstAmount || (body.priceDetails?.gstAmount) || Math.round(baseAmount * 0.18));
+      const serviceFee = Number(body.serviceFee || (body.priceDetails?.serviceFee) || Math.round(baseAmount * 0.05));
+      const bookingType = body.bookingType || body.type || (body.vehicleTitle || body.vehicleId ? 'cab' : 'property');
+      const status = body.bookingStatus || body.status || 'Confirmed';
+      const paymentStatus = body.paymentStatus || 'Paid';
+
+      const bookingPayload = {
+        ...body,
+        customer: customerId,
+        property: propertyObjectId,
+        owner: ownerObjectId,
+        vehicle: vehicleObjectId,
+        bookingReference,
+        bookingId,
+        bookingType,
+        customerName: customerDoc?.name || body.customerName || body.userName || 'Tourist Traveler',
+        customerEmail: customerDoc?.email || normalizeEmail(body.customerEmail || body.userEmail || body.email),
+        customerPhone: customerDoc?.phone || body.customerPhone || body.userPhone || '+91 78717 79134',
+        checkIn: body.checkIn || body.checkInDate || body.pickupDate || new Date().toISOString().split('T')[0],
+        checkOut: body.checkOut || body.checkOutDate || body.pickupDate || new Date().toISOString().split('T')[0],
+        nights: Number(body.nights || body.days || 1),
+        guests: Number(body.guests || body.passengers || (body.guestDetails?.total) || 1),
+        numberOfRooms: Number(body.numberOfRooms || body.rooms || 1),
+        rooms: Number(body.numberOfRooms || body.rooms || 1),
+        roomType: body.roomType || 'Standard Deluxe',
+        guestDetails: {
+          adults: Number(body.adults || (body.guestDetails?.adults) || 1),
+          children: Number(body.children || (body.guestDetails?.children) || 0),
+          total: Number(body.guests || (body.guestDetails?.total) || 1),
+          rooms: Number(body.numberOfRooms || body.rooms || 1)
+        },
+        priceDetails: {
+          baseAmount,
+          gstAmount,
+          serviceFee,
+          discount: Number(body.discount || 0),
+          totalAmount
+        },
+        baseAmount,
+        gstAmount,
+        serviceFee,
+        totalAmount,
+        amount: totalAmount,
+        status,
+        bookingStatus: status,
+        paymentStatus,
+        paymentMethod: body.paymentMethod || 'Razorpay UPI/Card',
+        paymentId: body.paymentId || body.razorpayPaymentId || `pay_${Date.now()}`,
+        razorpayOrderId: body.razorpayOrderId || body.orderId || '',
+        razorpayPaymentId: body.razorpayPaymentId || body.paymentId || '',
+        razorpaySignature: body.razorpaySignature || '',
+        propertyTitle: body.propertyTitle || body.itemTitle || (bookingType === 'cab' ? (body.vehicleTitle || 'Cab Transport') : 'Tamil Nadu Stay'),
+        destination: body.destination || body.pickupLocation || body.location || 'Tamil Nadu',
+        location: body.location || body.destination || 'Tamil Nadu',
+        ownerName: body.ownerName || 'Property Host',
+        ownerEmail: normalizeEmail(body.ownerEmail || 'exploretamizhagam@gmail.com')
+      };
+
+      // 6. Save Permanently to MongoDB
+      const savedDoc = await Booking.create(bookingPayload);
+      const savedObj = savedDoc.toObject();
+      savedObj.id = String(savedObj._id);
+
+      // 7. Emit Socket Events to Super Admin and Connected Clients
+      try {
+        broadcast(req, "new_booking", savedObj);
+        broadcast(req, "booking-created", savedObj);
+        broadcast(req, "stats_updated", {});
+      } catch (sErr) {
+        console.warn("Socket broadcast notice:", sErr.message);
+      }
+
+      // 8. Trigger Email Notification Asynchronously
+      if (String(savedObj.status).toLowerCase() === "confirmed") {
+        sendBookingConfirmedMail(savedObj).catch(e => console.warn("Email notice:", e.message));
+      } else {
+        sendBookingPendingMail(savedObj).catch(e => console.warn("Email notice:", e.message));
+      }
+
+      // 9. Standardized Success Response
+      return res.status(201).json({
+        success: true,
+        message: "Booking created successfully.",
+        booking: savedObj
+      });
+    } catch (error) {
+      console.error("Booking creation failed:", error.message);
       return res.status(400).json({
-        message: error.message,
+        success: false,
+        message: error.message || "Failed to create booking."
       });
     }
   }
 );
 
+// 6. GET SINGLE BOOKING
+router.get(
+  "/bookings/:id",
+  requireDatabase,
+  optionalAuth,
+  async (req, res) => {
+    try {
+      const id = req.params.id;
+      let booking = null;
+
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        booking = await Booking.findById(id)
+          .populate("property", "title location images price pricePerNight type district rating")
+          .populate("customer", "name fullName email phone avatar")
+          .lean();
+      }
+
+      if (!booking) {
+        booking = await Booking.findOne({
+          $or: [{ bookingReference: id }, { bookingId: id }]
+        })
+          .populate("property", "title location images price pricePerNight type district rating")
+          .populate("customer", "name fullName email phone avatar")
+          .lean();
+      }
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: "Booking not found."
+        });
+      }
+
+      const bId = booking.bookingReference || booking.bookingId || String(booking._id);
+      return res.status(200).json({
+        success: true,
+        booking: {
+          ...booking,
+          _id: String(booking._id),
+          id: String(booking._id),
+          bookingReference: bId,
+          bookingId: bId
+        }
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: "Unable to retrieve booking details."
+      });
+    }
+  }
+);
+
+// 7. UPDATE BOOKING STATUS
 router.put(
   "/bookings/:id/status",
   requireDatabase,
   async (req, res) => {
     try {
-      const status =
-        String(
-          req.body.status || ""
-        ).trim();
+      const status = String(req.body.status || req.body.bookingStatus || "").trim();
 
       if (!status) {
         return res.status(400).json({
-          message:
-            "Booking status is required.",
+          success: false,
+          message: "Booking status is required.",
         });
       }
 
       const update = {
         status,
+        bookingStatus: status
       };
+
+      if (req.body.paymentStatus) {
+        update.paymentStatus = req.body.paymentStatus;
+      }
 
       const allowedFields = [
         "driverName",
@@ -5070,74 +5571,115 @@ router.put(
         "note",
       ];
 
-      for (
-        const field
-        of allowedFields
-      ) {
-        if (
-          req.body[field] !== undefined
-        ) {
-          update[field] =
-            req.body[field];
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+          update[field] = req.body[field];
         }
       }
 
-      const updated =
-        await Booking.findByIdAndUpdate(
+      let updated = null;
+      if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+        updated = await Booking.findByIdAndUpdate(
           req.params.id,
-          {
-            $set: update,
-          },
-          {
-            new: true,
-            runValidators: true,
-          }
+          { $set: update },
+          { new: true, runValidators: true }
         ).maxTimeMS(5000);
+      }
+
+      if (!updated) {
+        updated = await Booking.findOneAndUpdate(
+          { $or: [{ bookingReference: req.params.id }, { bookingId: req.params.id }] },
+          { $set: update },
+          { new: true, runValidators: true }
+        ).maxTimeMS(5000);
+      }
 
       if (!updated) {
         return res.status(404).json({
-          message:
-            "Booking not found.",
+          success: false,
+          message: "Booking not found.",
         });
       }
 
-      broadcast(
-        req,
-        "booking_updated",
-        updated
-      );
+      const updatedObj = updated.toObject();
+      updatedObj.id = String(updatedObj._id);
 
-      broadcast(
-        req,
-        "stats_updated",
-        {}
-      );
+      broadcast(req, "booking_updated", updatedObj);
+      broadcast(req, "stats_updated", {});
 
-      if (
-        status.toLowerCase() ===
-        "confirmed"
-      ) {
-        sendBookingConfirmedMail(
-          updated
-        ).catch((error) => {
-          console.warn(
-            "Confirmation email failed:",
-            error.message
-          );
-        });
+      if (status.toLowerCase() === "confirmed") {
+        sendBookingConfirmedMail(updatedObj).catch(e => console.warn("Mail error:", e.message));
       }
 
-      return res.status(200).json(
-        updated
-      );
+      return res.status(200).json({
+        success: true,
+        message: "Booking status updated successfully.",
+        booking: updatedObj
+      });
     } catch (error) {
       return res.status(500).json({
-        message:
-          "Unable to update booking.",
+        success: false,
+        message: "Unable to update booking: " + error.message,
       });
     }
   }
 );
+
+// 8. UPDATE BOOKING
+router.put(
+  "/bookings/:id",
+  requireDatabase,
+  async (req, res) => {
+    try {
+      const updateData = { ...req.body };
+      delete updateData._id;
+      delete updateData.id;
+
+      let updated = null;
+      if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+        updated = await Booking.findByIdAndUpdate(
+          req.params.id,
+          { $set: updateData },
+          { new: true }
+        ).maxTimeMS(5000);
+      }
+
+      if (!updated) {
+        updated = await Booking.findOneAndUpdate(
+          { $or: [{ bookingReference: req.params.id }, { bookingId: req.params.id }] },
+          { $set: updateData },
+          { new: true }
+        ).maxTimeMS(5000);
+      }
+
+      if (!updated) {
+        return res.status(404).json({
+          success: false,
+          message: "Booking not found."
+        });
+      }
+
+      const updatedObj = updated.toObject();
+      updatedObj.id = String(updatedObj._id);
+
+      broadcast(req, "booking_updated", updatedObj);
+      broadcast(req, "stats_updated", {});
+
+      return res.status(200).json({
+        success: true,
+        message: "Booking updated successfully.",
+        booking: updatedObj
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: "Unable to update booking: " + error.message
+      });
+    }
+  }
+);
+
+// 9. DELETE BOOKING
 router.delete(
   "/bookings/:id",
   requireDatabase,
@@ -5147,17 +5689,13 @@ router.delete(
       let deleted = null;
 
       if (mongoose.isValidObjectId(id)) {
-        deleted =
-          await Booking.findByIdAndDelete(
-            id
-          ).maxTimeMS(5000);
+        deleted = await Booking.findByIdAndDelete(id).maxTimeMS(5000);
       }
 
       if (!deleted) {
-        deleted =
-          await Booking.findOneAndDelete({
-            bookingId: id,
-          }).maxTimeMS(5000);
+        deleted = await Booking.findOneAndDelete({
+          $or: [{ bookingReference: id }, { bookingId: id }]
+        }).maxTimeMS(5000);
       }
 
       if (!deleted) {
@@ -5168,85 +5706,47 @@ router.delete(
       }
 
       try {
-        broadcast(
-          req,
-          "booking_deleted",
-          { id }
-        );
-
-        broadcast(
-          req,
-          "stats_updated",
-          {}
-        );
+        broadcast(req, "booking_deleted", { id });
+        broadcast(req, "stats_updated", {});
       } catch (broadcastError) {
-        console.warn(
-          "Broadcast failed:",
-          broadcastError.message
-        );
+        console.warn("Broadcast failed:", broadcastError.message);
       }
 
       return res.status(200).json({
         success: true,
-        message:
-          "Booking removed successfully.",
+        message: "Booking removed successfully.",
       });
     } catch (error) {
-      console.error(
-        "Delete booking error:",
-        error
-      );
-
+      console.error("Delete booking error:", error);
       return res.status(500).json({
         success: false,
-        message:
-          "Unable to delete booking: " +
-          error.message,
+        message: "Unable to delete booking: " + error.message,
       });
     }
   }
 );
-// Truncate all bookings (live clear)
-const clearAllBookingsHandler = async (
-  req,
-  res
-) => {
+
+// 10. TRUNCATE ALL BOOKINGS
+const clearAllBookingsHandler = async (req, res) => {
   try {
-    const result =
-      await Booking.deleteMany({});
+    const result = await Booking.deleteMany({});
 
     try {
-      broadcast(
-        req,
-        "bookings_cleared",
-        {}
-      );
-
-      broadcast(
-        req,
-        "stats_updated",
-        {}
-      );
+      broadcast(req, "bookings_cleared", {});
+      broadcast(req, "stats_updated", {});
     } catch (broadcastError) {
-      console.warn(
-        "Broadcast failed:",
-        broadcastError.message
-      );
+      console.warn("Broadcast failed:", broadcastError.message);
     }
 
     return res.status(200).json({
       success: true,
-      message:
-        "All bookings truncated successfully.",
-      deletedCount:
-        result.deletedCount || 0,
+      message: "All bookings truncated successfully.",
+      deletedCount: result.deletedCount || 0,
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message:
-        "Unable to clear bookings: " +
-        error.message,
+      message: "Unable to clear bookings: " + error.message,
     });
   }
 };

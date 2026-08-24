@@ -85,15 +85,22 @@ export default function StaffDashboard({ overrideRole }) {
   };
 
   const apiFetch = async (endpoint, options = {}) => {
+    const token = localStorage.getItem('token') || currentUser?.token || '';
+    const headers = new Headers(options.headers || {});
+    if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+
     const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
     const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
     try {
-      const res = await fetch(url, options);
+      const res = await fetch(url, { ...options, headers });
       if (res.ok || res.status === 400 || res.status === 401 || res.status === 403) {
         return res;
       }
     } catch (e) {}
-    return await fetch(endpoint, options);
+    return await fetch(endpoint, { ...options, headers });
   };
 
   // Live Bookings State (Starts strictly at 0 / empty)
@@ -104,7 +111,8 @@ export default function StaffDashboard({ overrideRole }) {
       const res = await apiFetch('/api/bookings');
       if (res && res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) setLiveBookings(data);
+        const bList = data.bookings || (Array.isArray(data) ? data : []);
+        setLiveBookings(bList);
       }
     } catch (e) {}
   };

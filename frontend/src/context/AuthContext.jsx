@@ -9,6 +9,9 @@ export const AuthProvider = ({ children }) => {
       const saved = localStorage.getItem('ETN_USER');
       if (!saved) return null;
       const user = JSON.parse(saved);
+      if (user?.token) {
+        localStorage.setItem('token', user.token);
+      }
       if (user?.email) {
         const savedAvatar = localStorage.getItem(`etn_user_avatar_${user.email.toLowerCase()}`);
         if (savedAvatar) {
@@ -22,6 +25,12 @@ export const AuthProvider = ({ children }) => {
   });
 
   const login = (userObj) => {
+    if (userObj?.token) {
+      try {
+        localStorage.setItem('token', userObj.token);
+      } catch (e) {}
+    }
+
     if (userObj?.email) {
       const savedAvatar = localStorage.getItem(`etn_user_avatar_${userObj.email.toLowerCase()}`);
       if (savedAvatar && !userObj.avatar) {
@@ -62,6 +71,7 @@ export const AuthProvider = ({ children }) => {
     setCurrentUser(null);
     try {
       localStorage.removeItem('ETN_USER');
+      localStorage.removeItem('token');
     } catch (e) {}
   };
 
@@ -71,6 +81,9 @@ export const AuthProvider = ({ children }) => {
       const merged = { ...prev, ...updatedFields };
       try {
         localStorage.setItem('ETN_USER', JSON.stringify(merged));
+        if (merged.token) {
+          localStorage.setItem('token', merged.token);
+        }
         if (merged.email && merged.avatar) {
           localStorage.setItem(`etn_user_avatar_${merged.email.toLowerCase()}`, merged.avatar);
         }
@@ -94,12 +107,16 @@ export const AuthProvider = ({ children }) => {
   const refreshUserProfile = useCallback(async () => {
     if (!currentUser?.email) return;
     try {
+      const token = localStorage.getItem('token') || currentUser?.token || '';
+      const headers = { 'Accept': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       let res;
       try {
-        res = await fetch(`${BACKEND_API}/auth/me?email=${encodeURIComponent(currentUser.email)}`);
+        res = await fetch(`${BACKEND_API}/auth/me?email=${encodeURIComponent(currentUser.email)}`, { headers });
         if (!res.ok) throw new Error();
       } catch (e) {
-        res = await fetch(`/api/auth/me?email=${encodeURIComponent(currentUser.email)}`);
+        res = await fetch(`/api/auth/me?email=${encodeURIComponent(currentUser.email)}`, { headers });
       }
 
       if (res && res.ok) {
@@ -112,10 +129,12 @@ export const AuthProvider = ({ children }) => {
             
             // Retain local uploaded avatar if backend avatar is empty or default
             const finalAvatar = freshUser.avatar || localSavedAvatar || prev.avatar || '';
-            const merged = { ...prev, ...freshUser, avatar: finalAvatar };
+            const finalToken = freshUser.token || prev.token || token;
+            const merged = { ...prev, ...freshUser, avatar: finalAvatar, token: finalToken };
 
             try {
               localStorage.setItem('ETN_USER', JSON.stringify(merged));
+              if (finalToken) localStorage.setItem('token', finalToken);
               if (emailKey && finalAvatar) {
                 localStorage.setItem(`etn_user_avatar_${emailKey}`, finalAvatar);
               }
@@ -125,7 +144,7 @@ export const AuthProvider = ({ children }) => {
         }
       }
     } catch (err) {}
-  }, [currentUser?.email]);
+  }, [currentUser?.email, currentUser?.token]);
 
   // Initial profile sync on startup or login session hydration (NO periodic polling loop)
   useEffect(() => {

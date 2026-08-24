@@ -232,12 +232,12 @@ export default function SuperAdminControlCenter() {
   };
 
   const apiFetch = useCallback(async (endpoint, options = {}) => {
-    const token = localStorage.getItem('token') || '';
+    const token = localStorage.getItem('token') || currentUser?.token || '';
     const headers = new Headers(options.headers || {});
     if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
-    if (token && token.length > 20) headers.set('Authorization', `Bearer ${token}`);
+    if (token) headers.set('Authorization', `Bearer ${token}`);
 
     const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
     const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
@@ -250,7 +250,7 @@ export default function SuperAdminControlCenter() {
       console.warn('API fetch notice for', url, e.message);
     }
     return null;
-  }, []);
+  }, [currentUser?.token]);
 
   // Fetch all live collections from database in parallel
   const fetchLiveData = useCallback(async ({ background = false } = {}) => {
@@ -258,16 +258,32 @@ export default function SuperAdminControlCenter() {
     else setLoading(true);
 
     try {
-      const res = await apiFetch('/api/admin/dashboard-data');
-      if (res && res.ok) {
-        const data = await res.json();
+      // 1. Fetch dashboard stats and dedicated admin bookings in parallel
+      const [dashRes, adminBookingsRes] = await Promise.all([
+        apiFetch('/api/admin/dashboard-data').catch(() => null),
+        apiFetch('/api/bookings/admin/all?limit=200').catch(() => null)
+      ]);
+
+      if (dashRes && dashRes.ok) {
+        const data = await dashRes.json();
         if (Array.isArray(data.users)) setUsersList(data.users);
         if (Array.isArray(data.properties)) setPropertiesList(data.properties);
         if (Array.isArray(data.vehicles)) setVehiclesList(data.vehicles);
         if (Array.isArray(data.bookings)) setBookingsList(data.bookings);
         if (Array.isArray(data.staff)) setStaffList(data.staff);
         if (Array.isArray(data.tickets)) setTicketsList(data.tickets);
-      } else {
+      }
+
+      // Prioritize /bookings/admin/all for rich customer and property populated data
+      if (adminBookingsRes && adminBookingsRes.ok) {
+        const bData = await adminBookingsRes.json();
+        const bList = bData.bookings || (Array.isArray(bData) ? bData : []);
+        if (bList.length > 0 || !dashRes?.ok) {
+          setBookingsList(bList);
+        }
+      }
+
+      if (!dashRes?.ok && !adminBookingsRes?.ok) {
         // Fallback parallel requests
         const [uRes, pRes, vRes, bRes, tRes, sRes] = await Promise.all([
           apiFetch('/api/users?limit=200').catch(() => null),
@@ -292,7 +308,8 @@ export default function SuperAdminControlCenter() {
         }
         if (bRes && bRes.ok) {
           const b = await bRes.json();
-          if (Array.isArray(b)) setBookingsList(b);
+          const bList = b.bookings || (Array.isArray(b) ? b : []);
+          setBookingsList(bList);
         }
         if (tRes && tRes.ok) {
           const t = await tRes.json();
@@ -333,7 +350,9 @@ export default function SuperAdminControlCenter() {
     socket.on('vehicle_updated', handleUpdate);
     socket.on('vehicle_deleted', handleUpdate);
     socket.on('new_booking', handleUpdate);
+    socket.on('booking-created', handleUpdate);
     socket.on('booking_updated', handleUpdate);
+    socket.on('booking_deleted', handleUpdate);
     socket.on('new_ticket', handleUpdate);
     socket.on('ticket_updated', handleUpdate);
     socket.on('staff_added', handleUpdate);
@@ -360,7 +379,9 @@ export default function SuperAdminControlCenter() {
       socket.off('vehicle_updated', handleUpdate);
       socket.off('vehicle_deleted', handleUpdate);
       socket.off('new_booking', handleUpdate);
+      socket.off('booking-created', handleUpdate);
       socket.off('booking_updated', handleUpdate);
+      socket.off('booking_deleted', handleUpdate);
       socket.off('new_ticket', handleUpdate);
       socket.off('ticket_updated', handleUpdate);
       socket.off('staff_added', handleUpdate);

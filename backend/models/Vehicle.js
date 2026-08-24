@@ -47,3 +47,4 @@ vehicleSchema.index({ district: 1, type: 1 });
 vehicleSchema.index({ ownerEmail: 1 });
 
 export const Vehicle = mongoose.models.Vehicle || mongoose.model('Vehicle', vehicleSchema);
+export default Vehicle;

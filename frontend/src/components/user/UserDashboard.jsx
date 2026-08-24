@@ -97,9 +97,10 @@ export default function UserDashboard() {
   // Help Accordion State
   const [openFaq, setOpenFaq] = useState(null);
 
-  // Live Bookings (0ms Instant Load from Cache & LocalStorage)
   // Live Bookings (Strictly live from MongoDB Atlas)
   const [bookingsList, setBookingsList] = useState([]);
+  const [isLoadingBookings, setIsLoadingBookings] = useState(true);
+  const [bookingsError, setBookingsError] = useState('');
 
   // Live Saved Wishlist (Loads from localStorage and syncs with Explore page)
   const getInitialWishlist = () => {
@@ -121,41 +122,47 @@ export default function UserDashboard() {
   const [copyFeedback, setCopyFeedback] = useState(false);
 
   const apiFetch = async (endpoint, options = {}) => {
+    const token = localStorage.getItem('token') || currentUser?.token || '';
+    const headers = new Headers(options.headers || {});
+    if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
     const cleanPath = endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint;
     const url = endpoint.startsWith('http') ? endpoint : `${BACKEND_API}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
     try {
-      const res = await fetch(url, options);
+      const res = await fetch(url, { ...options, headers });
       if (res.ok || res.status === 400 || res.status === 401 || res.status === 403) {
         return res;
       }
     } catch (e) {
       console.warn('Direct backend API fetch error:', e.message);
     }
-    return await fetch(endpoint, options);
+    return await fetch(endpoint, { ...options, headers });
   };
 
   const fetchUserData = async () => {
     try {
+      setIsLoadingBookings(true);
+      setBookingsError('');
       const userEm = (currentUser?.email || '').toLowerCase().trim();
-      const userPh = (currentUser?.phone || '').replace(/\D/g, '');
 
-      // 1. Fetch live from Backend API / MongoDB Atlas
-      const res = await apiFetch(`/api/bookings${userEm ? `?email=${encodeURIComponent(userEm)}` : ''}`);
+      // 1. Fetch live from Dedicated Customer Endpoint (GET /api/bookings/my-bookings)
+      let res = await apiFetch('/api/bookings/my-bookings');
+      if (!res || !res.ok) {
+        // Fallback for legacy query
+        res = await apiFetch(`/api/bookings${userEm ? `?email=${encodeURIComponent(userEm)}` : ''}`);
+      }
+
       if (res && res.ok) {
-        const all = await res.json();
-        if (Array.isArray(all)) {
-          const filtered = all.filter(b => {
-            const cEm = (b.userEmail || b.customerEmail || b.email || '').toLowerCase().trim();
-            const cPh = (b.userPhone || b.customerPhone || b.phone || '').replace(/\D/g, '');
-            const cNm = (b.customerName || b.userName || '').toLowerCase().trim();
-            const uNm = (currentUser?.name || '').toLowerCase().trim();
-            return (userEm && cEm === userEm) || 
-                   (userPh && cPh && cPh === userPh) || 
-                   (uNm && cNm && cNm === uNm) ||
-                   (!userEm && !cEm);
-          });
-          setBookingsList(filtered);
-        }
+        const data = await res.json();
+        const list = data.bookings || (Array.isArray(data) ? data : []);
+        setBookingsList(list);
+      } else {
+        setBookingsError('Unable to load bookings from server.');
       }
 
       // Fetch Support Tickets
@@ -167,7 +174,12 @@ export default function UserDashboard() {
           setTicketsList(myTickets);
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error('fetchUserData error:', e);
+      setBookingsError('Network connection issue.');
+    } finally {
+      setIsLoadingBookings(false);
+    }
   };
 
   const handleDeleteBooking = async (bkId) => {
@@ -209,6 +221,9 @@ export default function UserDashboard() {
 
     if (socket) {
       socket.on('new_booking', fetchUserData);
+      socket.on('booking-created', fetchUserData);
+      socket.on('booking_updated', fetchUserData);
+      socket.on('booking_deleted', fetchUserData);
       socket.on('stats_updated', fetchUserData);
       socket.on('new_ticket', fetchUserData);
       socket.on('ticket_updated', fetchUserData);
@@ -224,14 +239,17 @@ export default function UserDashboard() {
       window.removeEventListener('etn_booking_created', handleBookingCreated);
       clearInterval(interval);
       if (socket) {
-        socket.off('new_booking');
-        socket.off('stats_updated');
-        socket.off('new_ticket');
-        socket.off('ticket_updated');
+        socket.off('new_booking', fetchUserData);
+        socket.off('booking-created', fetchUserData);
+        socket.off('booking_updated', fetchUserData);
+        socket.off('booking_deleted', fetchUserData);
+        socket.off('stats_updated', fetchUserData);
+        socket.off('new_ticket', fetchUserData);
+        socket.off('ticket_updated', fetchUserData);
         socket.off('database_reset_zero');
       }
     };
-  }, [socket, currentUser]);
+  }, [socket, currentUser?.email]);
 
   useEffect(() => {
     const handleWishlistUpdate = (e) => {
@@ -590,7 +608,23 @@ https://frontend-blond-iota-kzel6q4tzd.vercel.app/explore
             </div>
 
             <div className="space-y-4">
-              {bookingsList.length === 0 ? (
+              {isLoadingBookings ? (
+                <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 text-slate-500 space-y-3">
+                  <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  <p className="text-xs font-mono font-bold text-slate-600">Loading your verified bookings from MongoDB Atlas...</p>
+                </div>
+              ) : bookingsError ? (
+                <div className="p-8 text-center bg-rose-50 rounded-3xl border border-rose-200 text-rose-700 space-y-2">
+                  <p className="text-sm font-bold">{bookingsError}</p>
+                  <button 
+                    type="button" 
+                    onClick={fetchUserData}
+                    className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl cursor-pointer"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : bookingsList.length === 0 ? (
                 <div className="p-8 text-center bg-white rounded-3xl border border-slate-200 text-slate-500">
                   <Calendar size={36} className="mx-auto text-slate-400 mb-2" />
                   <p className="text-sm font-bold text-slate-700">No Reservations Found</p>

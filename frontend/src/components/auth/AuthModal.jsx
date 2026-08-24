@@ -71,6 +71,9 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
 
   const handleSuccessfulAuth = (userData) => {
     try {
+      if (userData?.token) {
+        localStorage.setItem('token', userData.token);
+      }
       localStorage.setItem(`etn_verified_${userData.email?.toLowerCase().trim()}`, 'true');
     } catch (e) {}
 
@@ -121,20 +124,6 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
     setAcceptLoginTerms(true);
     setLoading(true);
 
-    // Super Admin Quick Access
-    if (identifier.toLowerCase() === 'exploretamizhagam@gmail.com' && (loginPassword === 'Lokiuniverse' || loginPassword === 'admin123')) {
-      const superAdminObj = {
-        id: 'super-admin-jeeva',
-        name: 'Jeeva Veeramani',
-        email: 'exploretamizhagam@gmail.com',
-        phone: '+91 78717 79134',
-        role: 'super_admin'
-      };
-      setLoading(false);
-      handleSuccessfulAuth(superAdminObj);
-      return;
-    }
-
     try {
       const res = await apiFetch('/api/auth/login', {
         method: 'POST',
@@ -152,10 +141,34 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }) {
         setSuccessMsg('Signed in successfully! Redirecting...');
         setTimeout(() => handleSuccessfulAuth(data), 300);
       } else {
+        // Fallback for offline super admin
+        if (identifier.toLowerCase() === 'exploretamizhagam@gmail.com' && (loginPassword === 'Lokiuniverse' || loginPassword === 'admin123')) {
+          const superAdminObj = {
+            id: 'super-admin-jeeva',
+            name: 'Jeeva Veeramani',
+            email: 'exploretamizhagam@gmail.com',
+            phone: '+91 78717 79134',
+            role: 'super_admin'
+          };
+          handleSuccessfulAuth(superAdminObj);
+          return;
+        }
         setErrorMsg(data.message || 'Invalid email or password.');
       }
     } catch (err) {
       setLoading(false);
+      // Offline fallback for super admin
+      if (identifier.toLowerCase() === 'exploretamizhagam@gmail.com' && (loginPassword === 'Lokiuniverse' || loginPassword === 'admin123')) {
+        const superAdminObj = {
+          id: 'super-admin-jeeva',
+          name: 'Jeeva Veeramani',
+          email: 'exploretamizhagam@gmail.com',
+          phone: '+91 78717 79134',
+          role: 'super_admin'
+        };
+        handleSuccessfulAuth(superAdminObj);
+        return;
+      }
       setErrorMsg('Connection error. Unable to reach server.');
     }
   };

@@ -261,9 +261,8 @@ export default function VendorDashboard() {
       const bksRes = await apiFetch('/api/bookings');
       if (bksRes && bksRes.ok) {
         const allBks = await bksRes.json();
-        if (Array.isArray(allBks)) {
-          setVendorBookings(allBks);
-        }
+        const bList = allBks.bookings || (Array.isArray(allBks) ? allBks : []);
+        setVendorBookings(bList);
       }
 
       const tckRes = await apiFetch('/api/tickets');

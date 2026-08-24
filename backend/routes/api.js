@@ -2286,13 +2286,16 @@ const createPublicUser = (
     `usr-${Date.now()}`
   );
 
+  const userAvatar = String(user?.avatar || '');
+  const cleanAvatar = userAvatar.startsWith('data:image/') || userAvatar.length > 600 ? DEFAULT_AVATAR_IMG : (userAvatar || DEFAULT_AVATAR_IMG);
+
   const result = {
     _id: userId,
     id: userId,
     name: user?.name || "Member",
     email: user?.email || "",
     phone: user?.phone || "",
-    avatar: user?.avatar || "",
+    avatar: cleanAvatar,
     role: user?.role || "user",
     isVerified:
       user?.isVerified !== false,
@@ -4811,11 +4814,11 @@ router.get(
 
       const bookings = await Booking.find(filter)
         .select("-paymentSignature -internalNotes")
-        .sort({ createdAt: -1 })
+        .sort({ _id: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean()
-        .maxTimeMS(5000);
+        .maxTimeMS(15000);
 
       const cleanedBookings = (bookings || []).map(b => ({
         ...b,

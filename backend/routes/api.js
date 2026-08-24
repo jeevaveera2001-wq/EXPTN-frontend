@@ -3208,22 +3208,32 @@ router.post(
 // DATABASE AVAILABILITY MIDDLEWARE
 // -------------------------------------------------------
 
-const requireDatabase = (
+const requireDatabase = async (
   req,
   res,
   next
 ) => {
-  if (
-    mongoose.connection.readyState !== 1
-  ) {
-    return res.status(503).json({
-      success: false,
-      message:
-        "Database is temporarily unavailable.",
-    });
+  if (mongoose.connection.readyState === 1) {
+    return next();
   }
 
-  next();
+  try {
+    const conn = await connectDB();
+    if (conn && mongoose.connection.readyState === 1) {
+      return next();
+    }
+  } catch (err) {
+    console.error("requireDatabase reconnect error:", err.message);
+  }
+
+  if (mongoose.connection.readyState === 1) {
+    return next();
+  }
+
+  return res.status(503).json({
+    success: false,
+    message: "Database is temporarily reconnecting. Please retry.",
+  });
 };
 
 // -------------------------------------------------------
@@ -3256,20 +3266,20 @@ router.get(
         recentStaff,
         recentTickets,
       ] = await Promise.all([
-        User.countDocuments({}).maxTimeMS(3000).catch(() => 0),
-        Booking.countDocuments({}).maxTimeMS(3000).catch(() => 0),
-        Booking.countDocuments({ status: { $in: ["Pending", "Pending Approval"] } }).maxTimeMS(3000).catch(() => 0),
-        Booking.countDocuments({ status: { $in: ["Confirmed", "In Progress", "Completed"] } }).maxTimeMS(3000).catch(() => 0),
-        Booking.countDocuments({ status: "Cancelled" }).maxTimeMS(3000).catch(() => 0),
-        Property.countDocuments({}).maxTimeMS(3000).catch(() => 0),
-        Vehicle.countDocuments({}).maxTimeMS(3000).catch(() => 0),
-        Ticket.countDocuments({}).maxTimeMS(3000).catch(() => 0),
-        User.find({}).select("_id name email phone role isVerified createdAt").sort({ _id: -1 }).limit(100).lean().maxTimeMS(4000).catch(() => []),
-        Booking.find({}).sort({ _id: -1 }).limit(200).lean().maxTimeMS(4000).catch(() => []),
-        Property.find({}).sort({ _id: -1 }).limit(200).lean().maxTimeMS(4000).catch(() => []),
-        Vehicle.find({}).sort({ _id: -1 }).limit(200).lean().maxTimeMS(4000).catch(() => []),
-        User.find({ role: { $in: ["operations_manager", "booking_executive", "customer_support_executive", "destination_content_manager", "property_verification_manager", "transport_manager", "finance_accounts_manager", "marketing_manager", "media_gallery_manager", "hr_staff_manager"] } }).select("_id name email phone role createdAt").sort({ _id: -1 }).limit(50).lean().maxTimeMS(3000).catch(() => []),
-        Ticket.find({}).select("_id ticketId senderName senderEmail senderRole subject category priority status message createdAt").sort({ _id: -1 }).limit(100).lean().maxTimeMS(3000).catch(() => [])
+        User.countDocuments({}).maxTimeMS(15000).catch(() => 0),
+        Booking.countDocuments({}).maxTimeMS(15000).catch(() => 0),
+        Booking.countDocuments({ status: { $in: ["Pending", "Pending Approval"] } }).maxTimeMS(15000).catch(() => 0),
+        Booking.countDocuments({ status: { $in: ["Confirmed", "In Progress", "Completed"] } }).maxTimeMS(15000).catch(() => 0),
+        Booking.countDocuments({ status: "Cancelled" }).maxTimeMS(15000).catch(() => 0),
+        Property.countDocuments({}).maxTimeMS(15000).catch(() => 0),
+        Vehicle.countDocuments({}).maxTimeMS(15000).catch(() => 0),
+        Ticket.countDocuments({}).maxTimeMS(15000).catch(() => 0),
+        User.find({}).select("_id name email phone role isVerified createdAt").sort({ _id: -1 }).limit(100).lean().maxTimeMS(15000).catch(() => []),
+        Booking.find({}).select("_id bookingId type itemType bookingType propertyTitle itemTitle vehicleTitle vehicleRegNo customerName userName customerEmail userEmail ownerEmail vendorEmail totalAmount amount status paymentStatus checkIn checkOut pickupDate pickupTime pickupLocation dropLocation days nights guests passengers driverName driverPhone createdAt").sort({ _id: -1 }).limit(200).lean().maxTimeMS(15000).catch(() => []),
+        Property.find({}).select("_id title district location type price pricePerNight status ownerName ownerEmail ownerPhone images image coordinates createdAt").sort({ _id: -1 }).limit(200).lean().maxTimeMS(15000).catch(() => []),
+        Vehicle.find({}).select("_id title type registrationNumber regNo numberPlate providerName providerPhone providerEmail ownerEmail ownerName location district seatingCapacity fuelType acType price pricePerDay perKmRate status images image exteriorImage interiorImage rcBookImage numberPlateImage driverName driverPhone createdAt").sort({ _id: -1 }).limit(200).lean().maxTimeMS(15000).catch(() => []),
+        User.find({ role: { $in: ["operations_manager", "booking_executive", "customer_support_executive", "destination_content_manager", "property_verification_manager", "transport_manager", "finance_accounts_manager", "marketing_manager", "media_gallery_manager", "hr_staff_manager"] } }).select("_id name email phone role createdAt").sort({ _id: -1 }).limit(50).lean().maxTimeMS(15000).catch(() => []),
+        Ticket.find({}).select("_id ticketId senderName senderEmail senderRole subject category priority status message createdAt").sort({ _id: -1 }).limit(100).lean().maxTimeMS(15000).catch(() => [])
       ]);
 
       const cleanedProperties = (recentProperties || []).map(p => {
@@ -3860,30 +3870,12 @@ router.post(
         body.images
       )
         ? body.images
-        : [];
-
-      const containsBase64 =
-        imageValues.some((image) => {
-          const value =
-            typeof image === "string"
-              ? image
-              : image?.url;
-
-          return String(value || "")
-            .startsWith("data:image/");
-        });
-
-      if (containsBase64) {
-        return res.status(400).json({
-          message:
-            "Upload images to Cloudinary " +
-            "and submit image URLs.",
-        });
-      }
+        : (body.image ? [body.image] : []);
 
       const property =
         await Property.create({
           ...body,
+          images: imageValues.length > 0 ? imageValues : getPropertyImages(body),
 
           pricePerNight: Number(
             body.pricePerNight ||
